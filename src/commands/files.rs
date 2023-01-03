@@ -2,7 +2,8 @@ use std::{path::Path, process::exit};
 
 use clap::{Command, parser::ValuesRef};
 use colorful::{Colorful, core::StrMarker};
-use lento_core::{parse_file, interpret_file, ParseSuccess, ParseFail};
+use lento_core::parser::parser::{parse_file, ParseSuccess, ParseFail};
+use lento_core::interpreter::interpreter::interpret_file;
 
 use rayon::prelude::*;
 
