@@ -7,7 +7,7 @@ use std::process::exit;
 
 use args::{lento_args, lento_command};
 
-use crate::error::error_usage;
+use error::error_usage;
 use commands::files::handle_command_files;
 
 fn main() {

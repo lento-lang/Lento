@@ -1,4 +1,3 @@
-
 use std::{path::Path, process::exit};
 
 use clap::{Command, parser::ValuesRef};
