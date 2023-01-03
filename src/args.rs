@@ -4,7 +4,6 @@ use clap::{Command, arg};
 use lento_core::LANG_VERSION;
 
 pub fn lento_args() -> Command {
-    const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
     let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}\nA command line interface tool for the Lento programming language.",
         CLI_TITLE = "Lento CLI".bold(),

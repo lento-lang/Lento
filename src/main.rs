@@ -1,3 +1,4 @@
+mod conf;
 mod args;
 
 use colorful::{Colorful};
@@ -5,7 +6,6 @@ use args::lento_args;
 use lento_core::LANG_VERSION;
 
 fn _help() {
-    const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
     println!("
 {VL} {CLI_TITLE} version {CLI_VERSION}.
 {VL} {LANG_TITLE} version {LANG_VERSION}.
