@@ -26,7 +26,9 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
 
 fn parse_files<'a>(files: &'a Vec<&'a Path>) -> Vec<Result<ParseSuccess<'a>, ParseFail<'a>>> {
     // Parallelize this parse-map operation to optimize detecting errors in multiple files (pre-execution)
-    let parse_results: Vec<Result<_, _>> = files.par_iter().map(|f| parse_file(*f)).collect();
+    let parse_results: Vec<Result<_, _>> = files.par_iter()
+        .map(|f| parse_file(*f))
+        .collect();
     let mut errors = false;
     for parse_result in &parse_results {
         if let Err(fail) = parse_result {
