@@ -1,10 +1,23 @@
 use colorful::Colorful;
 use clap::{Command, arg};
 
-use lento_core::LANG_VERSION;
+use crate::conf::CLI_VERSION;
+use lento_core::conf::LANG_VERSION;
+
+pub mod lento_command {
+    pub const BUILD: &'static str = "build";
+    pub const COMPILE: &'static str = "compile";
+    pub const DOC: &'static str = "doc";
+    pub const EVAL: &'static str = "eval";
+    pub const FMT: &'static str = "fmt";
+    pub const LINT: &'static str = "lint";
+    pub const REPL: &'static str = "repl";
+    pub const RUN: &'static str = "run";
+    pub const NEW: &'static str = "new";
+    pub const TEST: &'static str = "test";
+}
 
 pub fn lento_args() -> Command {
-
     let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}\nA command line interface tool for the Lento programming language.",
         CLI_TITLE = "Lento CLI".bold(),
         V = "v".yellow(),
@@ -22,18 +35,15 @@ pub fn lento_args() -> Command {
         LINK = "https://lento-lang.org".underlined().light_blue());
 
     let examples = format!("{EXAMPLES}
-  {LT} {FILE1} {FILE2}              Interpret {FILE1} and {FILE2} in order
-  {LT} {EVAL} \"1 + 1\"                   Evaluate the expression 1 + 1
-  {LT} {REPL}                           Start the REPL
-  {LT} {COMP} {FILE1}               Compile {FILE1} to a standalone executable
-  {LT} {COMP} --target js {FILE1}   Cross compile {FILE1} to JavaScript
-  {LT} {C} --target asm {FILE1}        Cross compile {FILE1} to x86 assembly",
+  {LT} file1.lt file2.lt              Interpret file1.lt and file2.lt in order
+  {LT} {C} file1.lt                     Compile file1.lt to a standalone executable
+  {LT} {COMP} --target js file1.lt   Cross compile file1.lt to JavaScript
+  {LT} {EVAL} \"1 + 1\"                      Evaluate the expression 1 + 1
+  {LT} {REPL}                              Start the REPL",
         EXAMPLES = "Examples:".bold().underlined(),
         LT = "lt".bold(),
-        FILE1 = "file1.lt".light_yellow(),
-        FILE2 = "file2.lt".light_yellow(),
-        EVAL = "eval".bold(),
-        REPL = "repl".bold(),
+        EVAL = "e".bold(),
+        REPL = "r".bold(),
         COMP = "compile".bold(),
         C = "c".bold());
 
@@ -86,7 +96,7 @@ pub fn lento_args() -> Command {
     ])
     // .subcommand_help_heading("\x1B[38;5;6mCommands\x1B[0m: ")
     .subcommand(
-        Command::new("build")
+        Command::new(lento_command::BUILD)
         .alias("b")
         .about("Build project")
         .long_about("Builds a project to a standalone executable, a dynamically linked library,\nor cross compile to a target language or platform.")
@@ -101,7 +111,7 @@ pub fn lento_args() -> Command {
         .after_help(compile_targets.clone())
     )
     .subcommand(
-        Command::new("compile")
+        Command::new(lento_command::COMPILE)
         .alias("c")
         .about("Compile file")
         .long_about("Compiles a file to a standalone executable, a dynamically linked library,\nor cross compile to a target language or platform.")
@@ -117,7 +127,7 @@ pub fn lento_args() -> Command {
         .after_help(compile_targets.clone())
     )
     .subcommand(
-        Command::new("doc")
+    Command::new(lento_command::DOC)
         .alias("d")
         .about("Generate documentation")
         .long_about("Generates documentation for a project or a file.\nSupports Markdown, HTML, and LaTeX.")
@@ -133,7 +143,7 @@ pub fn lento_args() -> Command {
         .after_help(doc_targets)
     )
     .subcommand(
-        Command::new("eval")
+        Command::new(lento_command::EVAL)
         .alias("e")
         .about("Evaluate an expression")
         .long_about("Evaluates an expression and prints the result.\nThis feature is useful for quick testing and debugging.\nUse the REPL for interactive development.")
@@ -145,7 +155,7 @@ pub fn lento_args() -> Command {
         ])
     )
     .subcommand(
-        Command::new("fmt")
+        Command::new(lento_command::FMT)
         .alias("f")
         .about("Format a file or project")
         .long_about("Formats a file or a all files in the current project.\nThis command is useful for keeping code consistent and readable.")
@@ -158,7 +168,7 @@ pub fn lento_args() -> Command {
         ])
     )
     .subcommand(
-        Command::new("lint")
+        Command::new(lento_command::LINT)
         .alias("l")
         .about("Lints one or more files")
         .long_about("Lints one or more files and prints any warnings or errors.\nPassing no files will lint all files in the current directory.")
@@ -171,29 +181,7 @@ pub fn lento_args() -> Command {
         ])
     )
     .subcommand(
-        Command::new("repl")
-        .alias("r")
-        .about("Start the interactive REPL")
-        .long_about("Starts the REPL, which is an interactive development environment.\nUse this command to quickly test and debug your code.")
-        .version("1.0")
-        .override_usage(format!("{} {}", "lt repl".bold(), "(options)".dim()))
-        .args([
-            arg!(-d --debug "Turns on additional debugging information"),
-        ])
-    )
-    .subcommand(
-        Command::new("run")
-        .about("Run project")
-        .long_about("Runs a project in debug mode, which means that the program will be compiled and executed.\nUse this command for quick testing and debugging.")
-        .version("1.0")
-        .override_usage(format!("{} {}", "lt run".bold(), "(options)".dim()))
-        .args([
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
-        ])
-    )
-    .subcommand(
-        Command::new("new")
+        Command::new(lento_command::NEW)
         .alias("n")
         .about("Create a new project")
         .long_about("Creates a new project with the given name.\nUse the --template option to specify a template to use.\nUse the --license option to specify a license to use.\nUse the --author option to specify the author of the project.\nUse the --description option to specify a description of the project.\nUse the --git option to initialize a git repository.")
@@ -210,7 +198,29 @@ pub fn lento_args() -> Command {
         ])
     )
     .subcommand(
-        Command::new("test")
+        Command::new(lento_command::REPL)
+        .alias("r")
+        .about("Start the interactive REPL")
+        .long_about("Starts the REPL, which is an interactive development environment.\nUse this command to quickly test and debug your code.")
+        .version("1.0")
+        .override_usage(format!("{} {}", "lt repl".bold(), "(options)".dim()))
+        .args([
+            arg!(-d --debug "Turns on additional debugging information"),
+        ])
+    )
+    .subcommand(
+        Command::new(lento_command::RUN)
+        .about("Run project")
+        .long_about("Runs a project in debug mode, which means that the program will be compiled and executed.\nUse this command for quick testing and debugging.")
+        .version("1.0")
+        .override_usage(format!("{} {}", "lt run".bold(), "(options)".dim()))
+        .args([
+            arg!(-v --verbose "turns on verbose information"),
+            arg!(-d --debug "Turns on additional debugging information"),
+        ])
+    )
+    .subcommand(
+        Command::new(lento_command::TEST)
         .alias("t")
         .about("Run unit tests")
         .long_about("Runs unit tests in the current project.\nPassing no files will run all tests in the current directory.")
@@ -226,3 +236,55 @@ pub fn lento_args() -> Command {
 
 }
 
+
+// Previous help design
+pub fn _help() {
+    println!("
+{VL} {CLI_TITLE} version {CLI_VERSION}.
+{VL} {LANG_TITLE} version {LANG_VERSION}.
+{VL} A command line interface tool for the Lento programming language.
+{VL} See {LINK} for more information.
+
+{USAGE}: {CMD} {ARGS}
+
+{OPTIONS}:
+    -h, --help                      Prints this help message.
+    -v, --version                   Prints the version of the program.
+    -e, --evaluate [expr]           Evaluate one or more expressions.
+    -r, --repl (verbose)            Starts the REPL mode.
+    -l, --lint [files]              Lints the given files.
+    -c, --compile (target) [file]   Compiles the given file. (Not implemented)
+
+{COMPILE_TARGETS}:                    Cross compile to a target language or platform.
+    js                              JavaScript (Web)
+    node                            JavaScript (Node.js)
+    llvm                            LLVM IR assembly
+    asm                             x86 assembly
+    dll                             Dynamically linked library
+    exe                             Standalone executable
+
+{EXAMPLES}:
+    lt file1.lt file2.lt            Interpret file1.lt and file2.lt in order.
+    lt -e \"1 + 1\"                   Evaluate the expression 1 + 1.
+    lt -r                           Start the REPL.
+    lt -c file1.lt                  Compile file1.lt to a standalone executable.
+    lt -c js file1.lt               Cross compile file1.lt to JavaScript.
+    lt -c asm file1.lt              Cross compile file1.lt to x86 assembly.
+
+{COPY}
+    ",
+        VL = "|".dark_gray(),
+        CLI_TITLE = "Lento CLI".bold(),
+        CLI_VERSION = CLI_VERSION.yellow(),
+        LANG_TITLE = "Lento lang".bold(),
+        LANG_VERSION = LANG_VERSION.yellow(),
+        LINK = "https://lento-lang.org".underlined().light_blue(),
+        USAGE = "Usage".cyan(),
+        CMD = "lt".bold(),
+        ARGS = "(options) (files)".dim(),
+        OPTIONS = "Options".cyan().underlined(),
+        COMPILE_TARGETS = "Compile targets".cyan().underlined(),
+        EXAMPLES = "Examples".cyan().underlined(),
+        COPY = "Lento is free and open source software under the MIT license.\nCopyright ©️ 2021 William Rågstad, the Lento team and contributors.".dark_gray()
+    );
+}
