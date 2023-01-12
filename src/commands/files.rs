@@ -1,9 +1,9 @@
 use std::{path::Path, process::exit};
 
 use clap::{Command, parser::ValuesRef};
-use colorful::{Colorful, core::StrMarker};
+use colorful::Colorful;
 use lento_core::parser::ast::Ast;
-use lento_core::parser::parser::{ParseFail, ParserInput, parse_from_path};
+use lento_core::parser::parser::{ParseFail, parse_from_path};
 use lento_core::interpreter::interpreter::interpret_ast;
 
 use rayon::prelude::*;
@@ -20,8 +20,11 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
     for f in files {
         let has_ext = f.extension().is_some();
         if f.exists() { is_first = false; continue; }
-        else if is_first && !has_ext { error_usage(format!("invalid command '{}' provided", f.to_str().unwrap().yellow()), arg_parser); }
-        else { error_usage(format!("{}{}{}", "input file '", f.to_str().unwrap().underlined(), "' does not exist!"), arg_parser); }
+        else if is_first && !has_ext {
+            print_error_usage(format!("invalid command '{}' provided", f.to_str().unwrap().yellow()), arg_parser);
+        } else {
+            print_error_usage(format!("{}{}{}", "input file '", f.to_str().unwrap().underlined(), "' does not exist!"), arg_parser);
+        }
         exit(1);
     }
 }
@@ -32,28 +35,27 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Result<Ast, ParseFai
         .map(|f| (*f, parse_from_path(*f)))
         .collect();
     let mut errors = false;
+    let mut parse_fail = |path: &Path, msg: &String| {
+        print_error(format!("failed to parse '{}': {}", path.display(), msg));
+        errors = true;
+    };
     for (file_path, parse_result) in &parse_results {
         match parse_result {
-            Ok(result) => {
-                match result.as_ref() {
-                    Err(fail) => {
-                        error(format!("failed to parse '{}': {}", file_path.display(), fail.msg));
-                        errors = true;
-                    },
-                    _ => ()
-                }
+            Ok(result) => match result.as_ref() {
+                Err(fail) => parse_fail(file_path, &fail.msg),
+                _ => ()
             },
-            Err(err) => {
-                error(format!("failed to parse '{}': {}", file_path.display(), err.to_string()));
-                errors = true;
-            }
+            Err(err) => parse_fail(file_path, &err.to_string())
         }
     }
     if errors {
-        error("One or more errors occured during parsing!".to_str());
+        print_error("One or more errors occured during parsing!".to_string());
         exit(1);
     }
-    return parse_results.into_iter().map(|(p, r)| (p, r.unwrap())).collect();
+    return parse_results
+        .into_iter()
+        .map(|(p, r)| (p, r.unwrap()))
+        .collect();
 }
 
 /**
@@ -62,11 +64,10 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Result<Ast, ParseFai
 fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Result<Ast, ParseFail>)>) {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     for (file_path, parse_result) in parse_results {
-        let result_root = parse_result.unwrap();
         println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
-        match interpret_ast(&result_root) {
+        match interpret_ast(&parse_result.unwrap()) {
             Ok(()) => println!("{} executed program!", "Successfully".light_green()),
-            Err((code, msg)) => error(format!("program exited with error code: {}. message: {}", code, msg))
+            Err((code, msg)) => print_error(format!("program exited with error code: {}. message: {}", code, msg))
         }
     }
 }
