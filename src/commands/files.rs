@@ -2,6 +2,7 @@ use std::{path::Path, process::exit};
 
 use clap::{Command, parser::ValuesRef};
 use colorful::Colorful;
+use lento_core::interpreter::value::Value;
 use lento_core::parser::ast::Ast;
 use lento_core::parser::parser::{ParseFail, parse_from_path};
 use lento_core::interpreter::interpreter::interpret_ast;
@@ -66,9 +67,14 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Result<Ast, ParseFa
     for (file_path, parse_result) in parse_results {
         println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
         match interpret_ast(&parse_result.unwrap()) {
-            Ok(()) => println!("{} executed program!", "Successfully".light_green()),
-            Err((code, msg)) => print_error(format!("program exited with error code: {}. message: {}", code, msg))
-        }
+            Ok(val) => {
+                println!("{} executed program!", "Successfully".light_green());
+                if val != Value::Unit {
+                    println!("{} {}", "Result:".light_green(), val);
+                }
+            },
+            Err(err) => print_error(err.message),
+        };
     }
 }
 
