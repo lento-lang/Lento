@@ -26,13 +26,6 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
     }
 }
 
-fn display_input(input: &ParserInput) -> String {
-    match input {
-        ParserInput::File(f) => f.file_name().unwrap().to_str().unwrap().to_string(),
-        ParserInput::Other(s) => s.to_string()
-    }
-}
-
 fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Result<Ast, ParseFail>)> {
     // Parallelize this parse-map operation to optimize detecting errors in multiple files (pre-execution)
     let parse_results: Vec<(&Path, Result<_, _>)> = files.par_iter()
