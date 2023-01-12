@@ -7,7 +7,7 @@ use std::process::exit;
 
 use args::{lento_args, lento_command};
 
-use error::error_usage;
+use error::print_error_usage;
 use commands::files::handle_command_files;
 
 fn main() {
@@ -27,7 +27,7 @@ fn main() {
         _ => match args.get_many::<String>("files") {
             Some(raw_files) => handle_command_files(raw_files, &mut arg_parser),
             _ => {
-                error_usage("No command provided".to_string(), &mut arg_parser);
+                print_error_usage("No command provided".to_string(), &mut arg_parser);
                 println!("{:#?}", args);
                 exit(1);
             }

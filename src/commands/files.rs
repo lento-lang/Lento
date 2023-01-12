@@ -8,7 +8,7 @@ use lento_core::interpreter::interpreter::interpret_ast;
 
 use rayon::prelude::*;
 
-use crate::error::{error, error_usage};
+use crate::error::{print_error, print_error_usage};
 
 /**
  * Check that all input files exists.
