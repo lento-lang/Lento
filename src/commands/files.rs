@@ -1,7 +1,9 @@
 use std::{path::Path, process::exit};
 
+use lento_core::util::str::Str;
 use clap::{Command, parser::ValuesRef};
 use colorful::Colorful;
+use lento_core::interpreter::environment::Environment;
 use lento_core::interpreter::value::Value;
 use lento_core::parser::ast::Ast;
 use lento_core::parser::parser::{ParseFail, parse_from_path};
@@ -66,7 +68,7 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Result<Ast, ParseFa
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     for (file_path, parse_result) in parse_results {
         println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
-        match interpret_ast(&parse_result.unwrap()) {
+        match interpret_ast(&parse_result.unwrap(), &Environment::new(Str::from("global"))) {
             Ok(val) => {
                 println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
