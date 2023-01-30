@@ -47,7 +47,7 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
         match parse_result {
             Ok(result) => match result.as_ref() {
                 Ok(ast) => results.push((*file_path, ast.to_owned())),
-                Err(fail) => parse_fail(file_path, &fail.msg),
+                Err(fail) => parse_fail(file_path, &fail.message),
             },
             Err(err) => parse_fail(file_path, &err.to_string())
         }
