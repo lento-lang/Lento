@@ -233,6 +233,7 @@ pub fn lento_args() -> Command {
         ])
     )
     .after_long_help(format!("{examples}\n\n{copy}"))
+    .arg_required_else_help(true)
 
 }
 
