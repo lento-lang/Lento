@@ -1,6 +1,6 @@
 use std::{path::Path, process::exit};
 
-use lento_core::util::str::Str;
+use lento_core::{util::{str::Str, failable::Failable}, stdlib::init::init_environment, interpreter::error::{RuntimeError, runtime_error}};
 use clap::{Command, parser::ValuesRef};
 use colorful::Colorful;
 use lento_core::interpreter::environment::Environment;
@@ -67,7 +67,9 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) -> Failable<
     let mut errors: Vec<RuntimeError> = vec![];
     for (file_path, ast) in parse_results {
         println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
-        match interpret_ast(&ast, &Environment::new(Str::from("global"))) {
+        let mut global_env = Environment::new(Str::from("global"));
+        if let Err(env_err) = init_environment(&mut global_env) { errors.push(env_err); }
+        match interpret_ast(&ast, &global_env) {
             Ok(val) => {
                 println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
