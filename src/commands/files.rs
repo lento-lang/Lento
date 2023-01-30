@@ -62,8 +62,9 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
 /**
  * Interpret all files in order and exit the program if any runtime error occured.
  */
-fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) {
+fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) -> Failable<Vec<RuntimeError>> {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
+    let mut errors: Vec<RuntimeError> = vec![];
     for (file_path, ast) in parse_results {
         println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
         match interpret_ast(&ast, &Environment::new(Str::from("global"))) {
@@ -73,13 +74,23 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) {
                     println!("{} {}", "Result:".light_green(), val);
                 }
             },
-            Err(err) => print_error(err.message),
+            Err(err) => errors.push(err)
         };
     }
+    if errors.len() > 0 {
+        errors.push(runtime_error("One or more errors occured during interpretation!".to_string()));
+        return Err(errors);
+    }
+    Ok(())
 }
 
 pub fn handle_command_files(args: ValuesRef<String>, arg_parser: &mut Command) {
     let files = args.map(Path::new).collect();
     validate_files(&files, arg_parser);
-    interpret_parse_results(parse_files(&files));
+    if let Err(err) = interpret_parse_results(parse_files(&files)) {
+        // use print_error for each error
+        for e in err { print_error(e.message); }
+    } else {
+        println!("{} interpreted all files!", "Successfully".light_green());
+    }
 }
