@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use clap::{ArgMatches, Command};
-use lento_core::{interpreter::{environment::Environment, interpreter::interpret_ast}, util::str::Str, lexer::{readers::{stdin::StdinReader}, lexer::Lexer}, parser::parser::Parser, stdlib::init::init_environment};
+use lento_core::{interpreter::{environment::Environment, interpreter::interpret_ast, value::Value}, util::str::Str, lexer::{readers::{stdin::StdinReader}, lexer::Lexer}, parser::parser::Parser, stdlib::init::init_environment};
 
 use crate::error::print_error;
 
@@ -13,11 +13,14 @@ pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
         print!("> "); std::io::stdout().flush().unwrap();
         match parser.parse() {
             Ok(ast) => match interpret_ast(&ast, &global_env) {
-                Ok(value) => println!("{}", value),
+                Ok(value) => {
+                    if value != Value::Unit { println!("{}", value); }
+                },
                 Err(err) => print_error(err.message),
             },
             Err(err) => print_error(err.message),
         }
-        parser.reset();
+        parser.get_lexer().get_reader().reset_reader();
+        parser.get_lexer().reset();
     }
 }
