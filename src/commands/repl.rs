@@ -20,6 +20,7 @@ pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
             },
             Err(err) => print_error(err.message),
         }
+        // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
         parser.get_lexer().get_reader().reset_reader();
         parser.get_lexer().reset();
     }
