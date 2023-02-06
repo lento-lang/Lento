@@ -1,20 +1,23 @@
 use std::io::Write;
 
 use clap::{ArgMatches, Command};
-use lento_core::{interpreter::{environment::Environment, interpreter::interpret_ast, value::Value}, util::str::Str, lexer::{readers::{stdin::StdinReader}, lexer::Lexer}, parser::parser::Parser, stdlib::init::init_environment};
+use colorful::Colorful;
+use lento_core::{interpreter::{environment::global_env, interpreter::interpret_ast, value::Value}, parser::parser::from_stdin, type_checker::types::GetType};
 
 use crate::error::print_error;
 
 pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
-    let mut parser = Parser::new(Lexer::new(StdinReader::new(std::io::stdin())));
-    let mut global_env = Environment::new(Str::from("global"));
-    if let Err(err) = init_environment(&mut global_env) { print_error(err.message); return; }
+    let mut parser = from_stdin();
+    let env = global_env();
     loop {
         print!("> "); std::io::stdout().flush().unwrap();
         match parser.parse() {
-            Ok(ast) => match interpret_ast(&ast, &global_env) {
+            Ok(ast) => match interpret_ast(&ast, &env) {
                 Ok(value) => {
-                    if value != Value::Unit { println!("{}", value); }
+                    if value != Value::Unit {
+                        println!("{}", value);
+                        println!("{}{}{}", "(type: ".dark_gray(), value.get_type().to_string().dark_gray(), ")".dark_gray());
+                    }
                 },
                 Err(err) => print_error(err.message),
             },
