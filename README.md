@@ -11,7 +11,6 @@
     <br/>
     <img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen">
     <img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
-    <img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/Lento-lang/Lento?style=flat-square">
     <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
 </div>
 
