@@ -1,7 +1,7 @@
 #!/bin/bash
-FILE_URL="https://api.github.com/repos/lento-lang/lento/releases/latest"
+# Linux or macOS installer for the Lento toolchain.
 
-# Install the latest Lento toolchain on Linux or macOS.
+FILE_URL="https://api.github.com/repos/lento-lang/lento/releases/latest"
 
 echo "Installing Lento toolchain..."
 
