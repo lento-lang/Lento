@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lento_core = { path = "../lento_core" }
+lento_core = { path = "../lento-core" }
 colorful = "0.2.2" # Alternative: https://crates.io/crates/colored/2.0.0
 clap = { version = "4.0.32", features = ["string"] }
 rayon = "1.6.1"
