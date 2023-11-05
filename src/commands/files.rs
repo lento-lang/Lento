@@ -1,13 +1,20 @@
 use std::{path::Path, process::exit};
 
-use lento_core::{util::{str::Str, failable::Failable}, stdlib::init::init_environment, interpreter::{error::{RuntimeError, runtime_error}, environment::global_env}};
-use clap::{Command, parser::ValuesRef};
+use clap::{parser::ValuesRef, Command};
 use colorful::Colorful;
 use lento_core::interpreter::environment::Environment;
+use lento_core::interpreter::interpreter::interpret_ast;
 use lento_core::interpreter::value::Value;
 use lento_core::parser::ast::Ast;
 use lento_core::parser::parser::parse_from_path;
-use lento_core::interpreter::interpreter::interpret_ast;
+use lento_core::{
+    interpreter::{
+        environment::global_env,
+        error::{runtime_error, RuntimeError},
+    },
+    stdlib::init::init_environment,
+    util::{failable::Failable, str::Str},
+};
 
 use rayon::prelude::*;
 
@@ -22,11 +29,27 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
     let mut is_first = true;
     for f in files {
         let has_ext = f.extension().is_some();
-        if f.exists() { is_first = false; continue; }
-        else if is_first && !has_ext {
-            print_error_usage(format!("invalid command '{}' provided", f.to_str().unwrap().yellow()), arg_parser);
+        if f.exists() {
+            is_first = false;
+            continue;
+        } else if is_first && !has_ext {
+            print_error_usage(
+                format!(
+                    "invalid command '{}' provided",
+                    f.to_str().unwrap().yellow()
+                ),
+                arg_parser,
+            );
         } else {
-            print_error_usage(format!("{}{}{}", "input file '", f.to_str().unwrap().underlined(), "' does not exist!"), arg_parser);
+            print_error_usage(
+                format!(
+                    "{}{}{}",
+                    "input file '",
+                    f.to_str().unwrap().underlined(),
+                    "' does not exist!"
+                ),
+                arg_parser,
+            );
         }
         exit(1);
     }
@@ -34,7 +57,8 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
 
 fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
     // Parallelize this parse-map operation to optimize detecting errors in multiple files (pre-execution)
-    let parse_results: Vec<(&Path, Result<_, _>)> = files.par_iter()
+    let parse_results: Vec<(&Path, Result<_, _>)> = files
+        .par_iter()
         .map(|f| (*f, parse_from_path(*f)))
         .collect();
     let mut errors = false;
@@ -49,7 +73,7 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
                 Ok(ast) => results.push((*file_path, ast.to_owned())),
                 Err(fail) => parse_fail(file_path, &fail.message),
             },
-            Err(err) => parse_fail(file_path, &err.to_string())
+            Err(err) => parse_fail(file_path, &err.to_string()),
         }
     }
     if errors {
@@ -66,19 +90,25 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) -> Failable<
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     let mut errors: Vec<RuntimeError> = vec![];
     for (file_path, ast) in parse_results {
-        println!("{} '{}'...", "Interpreting".light_cyan(), file_path.display());
-        match interpret_ast(&ast, &global_env()) {
+        println!(
+            "{} '{}'...",
+            "Interpreting".light_cyan(),
+            file_path.display()
+        );
+        match interpret_ast(&ast, &mut global_env()) {
             Ok(val) => {
                 println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
                     println!("{} {}", "Result:".light_green(), val);
                 }
-            },
-            Err(err) => errors.push(err)
+            }
+            Err(err) => errors.push(err),
         };
     }
     if errors.len() > 0 {
-        errors.push(runtime_error("One or more errors occured during interpretation!".to_string()));
+        errors.push(runtime_error(
+            "One or more errors occured during interpretation!".to_string(),
+        ));
         return Err(errors);
     }
     Ok(())
@@ -89,7 +119,9 @@ pub fn handle_command_files(args: ValuesRef<String>, arg_parser: &mut Command) {
     validate_files(&files, arg_parser);
     if let Err(err) = interpret_parse_results(parse_files(&files)) {
         // use print_error for each error
-        for e in err { print_error(e.message); }
+        for e in err {
+            print_error(e.message);
+        }
     } else {
         println!("{} interpreted all files!", "Successfully".light_green());
     }

@@ -1,5 +1,5 @@
+use clap::{arg, Command};
 use colorful::Colorful;
-use clap::{Command, arg};
 
 use crate::conf::CLI_VERSION;
 use lento_core::conf::LANG_VERSION;
@@ -23,7 +23,8 @@ pub fn lento_args() -> Command {
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow());
 
-    let title_long = format!("\n\
+    let title_long = format!(
+        "\n\
 {VL} {CLI_TITLE} version {CLI_VERSION} and {LANG_TITLE} version {LANG_VERSION}.
 {VL} A command line interface tool for the Lento programming language.
 {VL} See {LINK} for more information.",
@@ -32,9 +33,11 @@ pub fn lento_args() -> Command {
         CLI_VERSION = CLI_VERSION.yellow(),
         LANG_TITLE = "Lento Lang".bold(),
         LANG_VERSION = LANG_VERSION.yellow(),
-        LINK = "https://lento-lang.org".underlined().light_blue());
+        LINK = "https://lento-lang.org".underlined().light_blue()
+    );
 
-    let examples = format!("{EXAMPLES}
+    let examples = format!(
+        "{EXAMPLES}
   {LT} file1.lt file2.lt              Interpret file1.lt and file2.lt in order
   {LT} {C} file1.lt                     Compile file1.lt to a standalone executable
   {LT} {COMP} --target js file1.lt   Cross compile file1.lt to JavaScript
@@ -45,9 +48,11 @@ pub fn lento_args() -> Command {
         EVAL = "e".bold(),
         REPL = "r".bold(),
         COMP = "compile".bold(),
-        C = "c".bold());
+        C = "c".bold()
+    );
 
-    let compile_targets = format!("{COMPILE_TARG}
+    let compile_targets = format!(
+        "{COMPILE_TARG}
   {EXE}         Native standalone executable binary
   {DLL}         Dynamically linked library/shared object
   {ASM}         x86 assembly (Intel syntax/AT&T syntax)
@@ -64,9 +69,11 @@ pub fn lento_args() -> Command {
         LLBC = "llvm-bc".bold(),
         JS = "js".bold(),
         NODE = "node".bold(),
-        WASM = "wasm".bold());
+        WASM = "wasm".bold()
+    );
 
-    let doc_targets = format!("{DOC_TARG}
+    let doc_targets = format!(
+        "{DOC_TARG}
   {HTML}        HTML documentation
   {MD}          Markdown documentation
   {LAT}       LaTeX documentation
@@ -77,7 +84,8 @@ pub fn lento_args() -> Command {
         MD = "md".bold(),
         LAT = "latex".bold(),
         PDF = "pdf".bold(),
-        DOCX = "docx".bold());
+        DOCX = "docx".bold()
+    );
 
     let copy = "Lento is free and open source software under the MIT license.\nCopyright ©️ 2021 William Rågstad, the Lento team and contributors.\n".dark_gray().to_string();
 
@@ -234,9 +242,7 @@ pub fn lento_args() -> Command {
     )
     .after_long_help(format!("{examples}\n\n{copy}"))
     .arg_required_else_help(true)
-
 }
-
 
 // Previous help design
 pub fn _help() {

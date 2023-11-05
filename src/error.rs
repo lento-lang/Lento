@@ -1,7 +1,6 @@
 use clap::Command;
 use colorful::Colorful;
 
-
 pub fn print_error(msg: String) {
     println!("{}: {}\n", "error".light_red(), msg);
 }

@@ -11,9 +11,9 @@ use crate::error::print_error;
 pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
     let expr = args.get_one::<String>("expr").unwrap();
     let mut parser = from_string(expr);
-    let env = global_env();
+    let mut env = global_env();
     match parser.parse() {
-        Ok(ast) => match interpret_ast(&ast, &env) {
+        Ok(ast) => match interpret_ast(&ast, &mut env) {
             Ok(value) => {
                 if value != Value::Unit {
                     println!("{}", value);
