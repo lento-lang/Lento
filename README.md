@@ -24,7 +24,7 @@ Lento is an open-source, strongly typed and lazy evaluated programming language 
 Types provide a way to describe the shape of an object, providing better documentation, and allowing Lento to validate that your code is working correctly.
 This project provides a helpful command line interface tool for the Lento programming language.
 
-> [Learn more about Lento here](http://lento-lang.org/)!
+> Learn more about Lento at http://lento-lang.org.
 
 
 <br/>
