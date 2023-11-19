@@ -1,33 +1,47 @@
 use clap::{arg, Command};
-use colorful::Colorful;
+use colorful::{core::StrMarker, Color, Colorful};
 
 use crate::conf::CLI_VERSION;
 use lento_core::conf::LANG_VERSION;
 
+const MASCOT: &str = r#"
+       _...-----..._
+       '----._.----'
+          O  _  O  
+      / \    V    /|
+     /   '--...--' |
+    /     .       /
+   /     /|     .'
+  /    .' \  .-' \
+ /__.-'    \__\\__\
+"#;
+
 pub mod lento_command {
-    pub const BUILD: &'static str = "build";
-    pub const COMPILE: &'static str = "compile";
-    pub const DOC: &'static str = "doc";
-    pub const EVAL: &'static str = "eval";
-    pub const FMT: &'static str = "fmt";
-    pub const LINT: &'static str = "lint";
-    pub const REPL: &'static str = "repl";
-    pub const RUN: &'static str = "run";
-    pub const NEW: &'static str = "new";
-    pub const TEST: &'static str = "test";
+    pub const BUILD: &str = "build";
+    pub const COMPILE: &str = "compile";
+    pub const DOC: &str = "doc";
+    pub const EVAL: &str = "eval";
+    pub const FMT: &str = "fmt";
+    pub const LINT: &str = "lint";
+    pub const REPL: &str = "repl";
+    pub const RUN: &str = "run";
+    pub const NEW: &str = "new";
+    pub const TEST: &str = "test";
 }
 
 pub fn lento_args() -> Command {
-    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}\nA command line interface tool for the Lento programming language.",
+    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}\nA command line interface tool for\nthe Lento programming language.",
         CLI_TITLE = "Lento CLI".bold(),
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow());
 
     let title_long = format!(
         "\n\
+{MASCOT}
 {VL} {CLI_TITLE} version {CLI_VERSION} and {LANG_TITLE} version {LANG_VERSION}.
 {VL} A command line interface tool for the Lento programming language.
 {VL} See {LINK} for more information.",
+        MASCOT = MASCOT.color(Color::RoyalBlue1).bold(),
         VL = "|".dark_gray(),
         CLI_TITLE = "Lento CLI".bold(),
         CLI_VERSION = CLI_VERSION.yellow(),
@@ -99,9 +113,9 @@ pub fn lento_args() -> Command {
     .help_template("{before-help}{usage-heading} {usage}\n\n{all-args}{after-help}")
     .override_usage(format!("{} {}", "lt".bold(), "[command] (options) (files)".dim()))
     // .next_help_heading("\x1B[38;5;6mOptions\x1B[0m:\x1B[8m")
-    .args([
-        arg!([files] "Interprets the given files in order").help_heading("Interpreter")
-    ])
+    // .args([
+    //     arg!([files] "Interprets the given files in order").help_heading("Interpreter")
+    // ])
     // .subcommand_help_heading("\x1B[38;5;6mCommands\x1B[0m: ")
     .subcommand(
         Command::new(lento_command::BUILD)
@@ -247,6 +261,7 @@ pub fn lento_args() -> Command {
 // Previous help design
 pub fn _help() {
     println!("
+{MASCOT}
 {VL} {CLI_TITLE} version {CLI_VERSION}.
 {VL} {LANG_TITLE} version {LANG_VERSION}.
 {VL} A command line interface tool for the Lento programming language.
@@ -280,6 +295,7 @@ pub fn _help() {
 
 {COPY}
     ",
+        MASCOT = MASCOT.color(Color::RoyalBlue1).bold(),
         VL = "|".dark_gray(),
         CLI_TITLE = "Lento CLI".bold(),
         CLI_VERSION = CLI_VERSION.yellow(),
