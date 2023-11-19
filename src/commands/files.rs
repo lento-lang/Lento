@@ -2,7 +2,7 @@ use std::{path::Path, process::exit};
 
 use clap::{parser::ValuesRef, Command};
 use colorful::Colorful;
-use lento_core::interpreter::environment::Environment;
+
 use lento_core::interpreter::interpreter::interpret_ast;
 use lento_core::interpreter::value::Value;
 use lento_core::parser::ast::Ast;
@@ -12,8 +12,7 @@ use lento_core::{
         environment::global_env,
         error::{runtime_error, RuntimeError},
     },
-    stdlib::init::init_environment,
-    util::{failable::Failable, str::Str},
+    util::failable::Failable,
 };
 
 use rayon::prelude::*;
@@ -57,10 +56,8 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
 
 fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
     // Parallelize this parse-map operation to optimize detecting errors in multiple files (pre-execution)
-    let parse_results: Vec<(&Path, Result<_, _>)> = files
-        .par_iter()
-        .map(|f| (*f, parse_from_path(*f)))
-        .collect();
+    let parse_results: Vec<(&Path, Result<_, _>)> =
+        files.par_iter().map(|f| (*f, parse_from_path(f))).collect();
     let mut errors = false;
     let mut parse_fail = |path: &Path, msg: &String| {
         print_error(format!("failed to parse '{}': {}", path.display(), msg));
@@ -80,13 +77,13 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Ast)> {
         print_error("One or more errors occured during parsing!".to_string());
         exit(1);
     }
-    return results;
+    results
 }
 
 /**
  * Interpret all files in order and exit the program if any runtime error occured.
  */
-fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) -> Failable<Vec<RuntimeError>> {
+fn interpret_parse_results(parse_results: Vec<(&Path, Ast)>) -> Failable<Vec<RuntimeError>> {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     let mut errors: Vec<RuntimeError> = vec![];
     for (file_path, ast) in parse_results {
@@ -105,7 +102,7 @@ fn interpret_parse_results<'a>(parse_results: Vec<(&'a Path, Ast)>) -> Failable<
             Err(err) => errors.push(err),
         };
     }
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         errors.push(runtime_error(
             "One or more errors occured during interpretation!".to_string(),
         ));
