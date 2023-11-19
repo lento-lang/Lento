@@ -1,5 +1,5 @@
 use clap::{arg, Command};
-use colorful::{core::StrMarker, Color, Colorful};
+use colorful::{Color, Colorful};
 
 use crate::conf::CLI_VERSION;
 use lento_core::conf::LANG_VERSION;
