@@ -54,6 +54,7 @@ Alternatively, you can download the latest version of the Lento CLI toolchain fr
 Learn more about the Lento programming language by visiting the links below. A good tip is to download the CLI toolchain and start playing around with the examples yourself!
 
 * #### [Code examples](https://github.com/lento-lang/Lento-Core/tree/main/examples)
+* #### [Language Specification](docs/language_specification_v1.pdf)
 
 <!--* #### [Project euler solutions](doc/PROJECT_EULER.md)-->
 
