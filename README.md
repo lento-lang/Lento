@@ -3,8 +3,8 @@
     <img src="assets/logo_white.png" height=250px/>
     <h1>The Lento Programming Language</h1>
     <em>
-        A functional programming language to purify<br>
-        the object-oriented paradigm
+        A high-level functional programming language<br>
+        designed to purify the object-oriented paradigm
     </em>
     <br/>
     <br/>
