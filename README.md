@@ -31,7 +31,7 @@ This project provides a helpful command line interface tool for the Lento progra
 
 ## Installation 📦
 
-The Lento CLI toolchain is available for Windows, Linux and macOS.
+The Lento `CLI` toolchain is available for Windows, Linux and macOS.
 You can install the latest version using the following commands:
 
 ### Windows
