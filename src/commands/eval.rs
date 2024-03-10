@@ -12,7 +12,7 @@ pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
     let expr = args.get_one::<String>("expr").unwrap();
     let mut parser = from_string(expr);
     let mut env = global_env();
-    match parser.parse() {
+    match parser.parse_one() {
         Ok(ast) => match interpret_ast(&ast, &mut env) {
             Ok(value) => {
                 if value != Value::Unit {
