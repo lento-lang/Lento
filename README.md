@@ -31,7 +31,7 @@ This project provides a helpful command line interface tool for the Lento progra
 
 ## Installation 📦
 
-The Lento CLI toolchain is available for Windows, Linux and macOS.
+The Lento `CLI` toolchain is available for Windows, Linux and macOS.
 You can install the latest version using the following commands:
 
 ### Windows
@@ -45,7 +45,7 @@ $ curl -sSL "https://raw.githubusercontent.com/Lento-lang/Lento/main/install.sh"
 ```
 
 ### Manual installation
-Alternatively, you can download the latest version of the Lento CLI toolchain from the [releases page](https://github.com/lento-lang/Lento/releases) and install it manually on your system.
+Alternatively, you can download the latest version of the Lento `CLI` toolchain from the [releases page](https://github.com/lento-lang/Lento/releases) and install it manually on your system.
 
 <br>
 
