@@ -9,7 +9,7 @@ use lento_core::{
 use crate::error::print_error;
 
 pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
-    let expr = args.get_one::<String>("expr").unwrap();
+    let expr = args.get_one::<String>("expr").unwrap().to_owned();
     let mut parser = from_string(expr);
     let mut env = global_env();
     match parser.parse_one() {
