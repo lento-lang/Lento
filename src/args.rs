@@ -1,3 +1,5 @@
+use chrono;
+use chrono::Datelike;
 use clap::{arg, Command};
 use colorful::{Color, Colorful};
 
@@ -101,7 +103,9 @@ pub fn lento_args() -> Command {
         DOCX = "docx".bold()
     );
 
-    let copy = "Lento is free and open source software under the MIT license.\nCopyright ©️ 2021 William Rågstad, the Lento team and contributors.\n".dark_gray().to_string();
+    // Current year
+    let copy = format!("Lento is free and open source software under the MIT license.\nCopyright ©️{:?} William Rågstad, the Lento team and contributors.\n",
+		chrono::Local::now().year()).dark_gray();
 
     Command::new("Lento CLI")
     .bin_name("lt")
@@ -308,6 +312,7 @@ pub fn _help() {
         OPTIONS = "Options".cyan().underlined(),
         COMPILE_TARGETS = "Compile targets".cyan().underlined(),
         EXAMPLES = "Examples".cyan().underlined(),
-        COPY = "Lento is free and open source software under the MIT license.\nCopyright ©️ 2021 William Rågstad, the Lento team and contributors.".dark_gray()
+        COPY = format!("Lento is free and open source software under the MIT license.\nCopyright ©️{:?} William Rågstad, the Lento team and contributors.\n",
+			chrono::Local::now().year()).dark_gray()
     );
 }
