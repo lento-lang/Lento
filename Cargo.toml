@@ -10,3 +10,4 @@ lento_core = { git = "https://github.com/lento-lang/Lento-Core", branch = "main"
 colorful = "0.2.2"                                   # Alternative: https://crates.io/crates/colored/2.0.0
 clap = { version = "4.0.32", features = ["string"] }
 rayon = "1.6.1"
+chrono = "0.4.37"
