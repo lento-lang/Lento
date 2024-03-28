@@ -5,15 +5,15 @@ use crate::conf::CLI_VERSION;
 use lento_core::conf::LANG_VERSION;
 
 const MASCOT: &str = r#"
-       _...-----..._
-       '----._.----'
-          O  _  O  
-      / \    V    /|
-     /   '--...--' |
-    /     .       /
-   /     /|     .'
-  /    .' \  .-' \
- /__.-'    \__\\__\
+       _...---..._
+       '---._.---'
+         () _ ()
+      / \   V   /|
+     /   '--.--' |
+    /    .       /
+   /     |     .'
+  /    .'\  .-' \
+ /__.-'   \__\\__\
 "#;
 
 pub mod lento_command {
