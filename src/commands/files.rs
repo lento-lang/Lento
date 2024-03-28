@@ -5,7 +5,7 @@ use colorful::Colorful;
 
 use lento_core::interpreter::interpreter::interpret_module;
 use lento_core::interpreter::value::Value;
-use lento_core::parser::ast::{Ast, Module};
+use lento_core::parser::ast::Module;
 use lento_core::parser::parser::parse_path_all;
 use lento_core::{
     interpreter::{
