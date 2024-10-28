@@ -1,10 +1,10 @@
-use chrono;
 use chrono::Datelike;
 use clap::{arg, Command};
 use colorful::{Color, Colorful};
 
-use crate::conf::CLI_VERSION;
-use lento_core::conf::LANG_VERSION;
+use lento_core::LANG_VERSION;
+
+use crate::CLI_VERSION;
 
 const MASCOT: &str = r#"
        _...---..._

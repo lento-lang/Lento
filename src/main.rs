@@ -1,6 +1,5 @@
 mod args;
 mod commands;
-mod conf;
 mod error;
 
 use std::process::exit;
@@ -9,6 +8,8 @@ use args::{lento_args, lento_command};
 
 use commands::{eval::handle_command_eval, files::handle_command_files, repl::handle_command_repl};
 use error::print_error_usage;
+
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let mut arg_parser = lento_args();

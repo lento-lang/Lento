@@ -22,7 +22,7 @@ use crate::error::{print_error, print_error_usage};
 /**
  * Check that all input files exists.
  * If the first file doesn't have a file extension and also does not exist, throw an error for invalid subcommand.
- * Will exit the program if any error occured.
+ * Will exit the program if any error occurred.
  */
 fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
     let mut is_first = true;
@@ -72,14 +72,14 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Module)> {
         })
         .collect();
     if results.len() < files.len() {
-        print_error("One or more errors occured during parsing!".to_string());
+        print_error("One or more errors occurred during parsing!".to_string());
         exit(1);
     }
     results
 }
 
 /**
- * Interpret all files in order and exit the program if any runtime error occured.
+ * Interpret all files in order and exit the program if any runtime error occurred.
  */
 fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<RuntimeError>> {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
@@ -102,7 +102,7 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
     }
     if !errors.is_empty() {
         errors.push(runtime_error(
-            "One or more errors occured during interpretation!".to_string(),
+            "One or more errors occurred during interpretation!".to_string(),
         ));
         return Err(errors);
     }
