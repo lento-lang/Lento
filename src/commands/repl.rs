@@ -9,7 +9,7 @@ use lento_core::{
     type_checker::types::GetType,
 };
 
-use crate::error::print_error;
+use crate::{error::print_error, CLI_VERSION};
 
 pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
     println!(
@@ -23,6 +23,7 @@ Exit using Ctrl+C",
         LANG_VERSION = lento_core::LANG_VERSION.yellow()
     );
     let mut parser = parser::from_stdin();
+    parser.lexer().set_buffer_size(1);
     let mut env = global_env();
     loop {
         print!("> ");
@@ -45,6 +46,6 @@ Exit using Ctrl+C",
             Err(err) => print_error(err.message),
         }
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
-        parser.reset(StdinReader::default());
+        parser.lexer().reset(StdinReader::default());
     }
 }
