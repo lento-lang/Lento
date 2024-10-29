@@ -11,3 +11,4 @@ colorful = "0.2.2"                                   # Alternative: https://crat
 clap = { version = "4.0.32", features = ["string"] }
 rayon = "1.6.1"
 chrono = "0.4.37"
+ctrlc = "3.4.5"
