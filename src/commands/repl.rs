@@ -12,6 +12,16 @@ use lento_core::{
 use crate::error::print_error;
 
 pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
+    println!(
+        "{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}
+Interactive mode. Type in expressions to evaluate them.
+Exit using Ctrl+C",
+        CLI_TITLE = "Lento CLI".bold(),
+        V = "v".yellow(),
+        CLI_VERSION = CLI_VERSION.yellow(),
+        LANG_TITLE = "language".bold(),
+        LANG_VERSION = lento_core::LANG_VERSION.yellow()
+    );
     let mut parser = parser::from_stdin();
     let mut env = global_env();
     loop {
