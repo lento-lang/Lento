@@ -4,14 +4,15 @@ use clap::{ArgMatches, Command};
 use colorful::Colorful;
 use lento_core::{
     interpreter::{environment::global_env, interpreter::interpret_ast, value::Value},
-    parser::parser::from_stdin,
+    lexer::readers::stdin::StdinReader,
+    parser::parser,
     type_checker::types::GetType,
 };
 
 use crate::error::print_error;
 
 pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
-    let mut parser = from_stdin();
+    let mut parser = parser::from_stdin();
     let mut env = global_env();
     loop {
         print!("> ");
@@ -34,7 +35,6 @@ pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
             Err(err) => print_error(err.message),
         }
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
-        parser.get_lexer().get_reader().reset_reader();
-        parser.get_lexer().reset();
+        parser.reset(StdinReader::default());
     }
 }
