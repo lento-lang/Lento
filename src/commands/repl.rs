@@ -10,17 +10,29 @@ use lento_core::{
 
 use crate::{error::print_error, CLI_VERSION};
 
-pub fn handle_command_repl(_args: &ArgMatches, _arg_parser: &mut Command) {
+pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
+    // Set the Ctrl-C handler to exit the program
     ctrlc::set_handler(|| std::process::exit(0)).expect("Error setting Ctrl-C handler");
+
+    // Get the flag for REPL
+    let print_types = args.get_flag("types");
+
+    // Print the version of the CLI and the language
     println!(
-        "{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}
-Interactive mode, exit using Ctrl+C",
+        "{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}\n{SUBTEXT}",
         CLI_TITLE = "Lento CLI".bold(),
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow(),
         LANG_TITLE = "language".bold(),
-        LANG_VERSION = lento_core::LANG_VERSION.yellow()
+        LANG_VERSION = lento_core::LANG_VERSION.yellow(),
+        SUBTEXT = format!(
+            "Interactive mode, exit using Ctrl+C, show types: {}",
+            print_types
+        )
+        .dark_gray()
     );
+
+    // Create a parser that reads from stdin
     let mut parser = parser::from_stream(StdinLinesReader::default(), "stdin");
     // Force the parsing to stop after the first EOF token
     // and not try to read more tokens from the reader,
@@ -40,12 +52,14 @@ Interactive mode, exit using Ctrl+C",
                     match interpret_ast(ast, &mut env) {
                         Ok(value) => {
                             if i == asts.len() - 1 && value != Value::Unit {
-                                println!("{}", value.print_color());
-                                println!(
-                                    "{} {}",
-                                    "type:".dark_gray(),
-                                    value.get_type().to_string().dark_gray()
-                                );
+                                println!("{}", value.pretty_print_color());
+                                if print_types {
+                                    println!(
+                                        "{} {}",
+                                        "type:".dark_gray(),
+                                        value.get_type().to_string().dark_gray()
+                                    );
+                                }
                             }
                         }
                         Err(err) => {

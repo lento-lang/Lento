@@ -234,6 +234,7 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt repl".bold(), "(options)".dim()))
         .args([
             arg!(-d --debug "Turns on additional debugging information"),
+			arg!(-t --types "Print the types of values"),
         ])
     )
     .subcommand(
