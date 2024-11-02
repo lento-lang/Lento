@@ -8,7 +8,10 @@ use lento_core::{
     type_checker::types::GetType,
 };
 
-use crate::{error::print_error, CLI_VERSION};
+use crate::{
+    error::{print_parse_error, print_runtime_error},
+    CLI_VERSION,
+};
 
 pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // Set the Ctrl-C handler to exit the program
@@ -63,13 +66,13 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
                             }
                         }
                         Err(err) => {
-                            print_error(err.message);
+                            print_runtime_error(err.message);
                             break 'exprs; // Stop on error
                         }
                     }
                 }
             }
-            Err(err) => print_error(err.message),
+            Err(err) => print_parse_error(err.message),
         }
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
         parser.lexer().reset();
