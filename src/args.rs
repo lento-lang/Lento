@@ -32,7 +32,7 @@ pub mod lento_command {
 }
 
 pub fn lento_args() -> Command {
-    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}\nA command line interface tool for\nthe Lento programming language.",
+    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION} {LANG_TITLE} {V}{LANG_VERSION}\nA command line interface tool for\nthe Lento programming language.",
         CLI_TITLE = "Lento CLI".bold(),
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow(),

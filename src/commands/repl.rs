@@ -22,17 +22,13 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
 
     // Print the version of the CLI and the language
     println!(
-        "{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}\n{SUBTEXT}",
+        "{CLI_TITLE} {V}{CLI_VERSION} {LANG_TITLE} {V}{LANG_VERSION}\n{SUBTEXT}",
         CLI_TITLE = "Lento CLI".bold(),
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow(),
         LANG_TITLE = "language".bold(),
         LANG_VERSION = lento_core::LANG_VERSION.yellow(),
-        SUBTEXT = format!(
-            "Interactive mode, exit using Ctrl+C, show types: {}",
-            print_types
-        )
-        .dark_gray()
+        SUBTEXT = "Interactive mode, exit using Ctrl+C".dark_gray()
     );
 
     // Create a parser that reads from stdin
