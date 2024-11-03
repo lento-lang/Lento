@@ -5,11 +5,11 @@ use colorful::Colorful;
 use lento_core::{
     interpreter::{environment::global_env, interpreter::interpret_ast, value::Value},
     parser::parser,
-    type_checker::types::GetType,
+    type_checker::{checker::type_checker_with_stdlib, types::GetType},
 };
 
 use crate::{
-    error::{print_parse_error, print_runtime_error},
+    error::{print_parse_error, print_runtime_error, print_type_error},
     CLI_VERSION,
 };
 
@@ -41,6 +41,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // this prevents another prompt appearing after the
     // user has entered an expression.
     parser.lexer().set_read_only_once(true);
+    let mut checker = type_checker_with_stdlib();
     let mut env = global_env();
     loop {
         print!("> ");
@@ -48,7 +49,14 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
         match parser.parse_all() {
             Ok(asts) => {
                 'exprs: for (i, ast) in asts.iter().enumerate() {
-                    match interpret_ast(ast, &mut env) {
+                    let checked_ast = match checker.check_expr(ast) {
+                        Ok(ast) => ast,
+                        Err(err) => {
+                            print_type_error(err.message);
+                            break 'exprs; // Stop on error
+                        }
+                    };
+                    match interpret_ast(&checked_ast, &mut env) {
                         Ok(value) => {
                             if i == asts.len() - 1 && value != Value::Unit {
                                 println!("{}", value.pretty_print_color());

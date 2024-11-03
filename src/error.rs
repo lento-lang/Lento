@@ -9,6 +9,10 @@ pub fn print_runtime_error(msg: String) {
     println!("{}: {}\n", "runtime error".light_red(), msg);
 }
 
+pub fn print_type_error(msg: String) {
+    println!("{}: {}\n", "type error".light_red(), msg);
+}
+
 pub fn print_error(msg: String) {
     println!("{}: {}\n", "error".light_red(), msg);
 }

@@ -3,15 +3,15 @@ use std::{path::Path, process::exit};
 use clap::{parser::ValuesRef, Command};
 use colorful::Colorful;
 
-use lento_core::interpreter::interpreter::interpret_module;
-use lento_core::interpreter::value::Value;
-use lento_core::parser::ast::Module;
-use lento_core::parser::parser::parse_path_all;
 use lento_core::{
     interpreter::{
         environment::global_env,
         error::{runtime_error, RuntimeError},
+        interpreter::interpret_module,
+        value::Value,
     },
+    parser::{ast::Module, parser::parse_path_all},
+    type_checker::checker::TypeChecker,
     util::failable::Failable,
 };
 
@@ -84,13 +84,21 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Module)> {
 fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<RuntimeError>> {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     let mut errors: Vec<RuntimeError> = vec![];
+    let mut checker = TypeChecker::default();
     for (file_path, module) in parse_results {
         println!(
             "{} '{}'...",
             "Interpreting".light_cyan(),
             file_path.display()
         );
-        match interpret_module(&module, &mut global_env()) {
+        let checked_module = match checker.check_module(&module) {
+            Ok(module) => module,
+            Err(err) => {
+                errors.push(runtime_error(err.message));
+                continue;
+            }
+        };
+        match interpret_module(&checked_module, &mut global_env()) {
             Ok(val) => {
                 println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
