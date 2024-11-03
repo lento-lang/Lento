@@ -35,16 +35,19 @@ The Lento `CLI` toolchain is available for Windows, Linux and macOS.
 You can install the latest version using the following commands:
 
 ### Windows
+
 ```powershell
 > iwr "https://raw.githubusercontent.com/lento-lang/Lento/main/install.ps1" -useb | iex
 ```
 
 ### Linux and macOS
+
 ```bash
 $ curl -sSL "https://raw.githubusercontent.com/Lento-lang/Lento/main/install.sh" | bash
 ```
 
 ### Manual installation
+
 Alternatively, you can download the latest version of the Lento `CLI` toolchain from the [releases page](https://github.com/lento-lang/Lento/releases) and install it manually on your system.
 
 <br>
@@ -58,18 +61,14 @@ Learn more about the Lento programming language by visiting the links below. A g
 
 <!--* #### [Project euler solutions](doc/PROJECT_EULER.md)-->
 
-
-
-##  The Team 👨‍💼
-
+## The Team 👨‍💼
 
 Lento is being developed by a driven team that works hard to create a user environment as good as possible for all of you developers.
 
->  [Meet the team 🙋‍](https://lento-lang.org/doc/team.php)
+> [Meet the team 🙋‍](https://lento-lang.org/team)
 
 Do you want to join the project team? Maybe even get your own testimonial on the official language website?<br/>
 Then consider contributing to the project and become a member with magical powers 🧙‍♂️! Read more in the section below.
-
 
 ## Contribute 🌟
 
@@ -78,3 +77,27 @@ Lento is truly a community effort, and we welcome contribution from hobbyists an
 **Get started** by pulling the main branch and start fiddling around.<br/>
 When you feel confident enough, take a look at the **[good first issues](https://github.com/Lento-lang/Lento/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)**.
 Any maybe your code will be used by thousands of developers around the world! 💪🎉🎊
+
+## Development 🛠️
+
+The Lento project is divided into several repositories, each with its own purpose.
+The main repository is the [Lento-Core](https://github.com/Lento-lang/Lento-Core) repository, which contains the core language implementation.
+The [Lento-CLI](httpes://github.com/Lento-lang/Lento) repository contains the command line interface toolchain for the Lento programming language.
+
+I suggest running the following command to start the REPL in test mode, which will provide you with a full backtrace in case of an error:
+
+```powershell
+$env:RUST_BACKTRACE='full'; cargo run -q -- repl -t
+```
+
+Also remember to always run the tests before pushing your code:
+
+```bash
+cargo test
+```
+
+Currently lots of tests are failing, so don't worry if you see a lot of red text. We are working on it! 🚧
+
+## License 📜
+
+Lento is licensed under the [MIT License](LICENSE).
