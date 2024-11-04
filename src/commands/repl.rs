@@ -5,7 +5,8 @@ use colorful::Colorful;
 use lento_core::{
     interpreter::{environment::global_env, interpreter::interpret_ast, value::Value},
     parser::parser,
-    type_checker::{checker::type_checker_with_stdlib, types::GetType},
+    stdlib::init::stdlib,
+    type_checker::{checker::TypeChecker, types::GetType},
 };
 
 use crate::{
@@ -31,8 +32,12 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
         SUBTEXT = "Interactive mode, exit using Ctrl+C".dark_gray()
     );
 
+    // Load the standard library initializer
+    let std = stdlib();
+
     // Create a parser that reads from stdin
     let mut parser = parser::from_stream(StdinLinesReader::default(), "stdin");
+    std.init_parser(&mut parser);
     // Force the parsing to stop after the first EOF token
     // and not try to read more tokens from the reader,
     // this prevents the parser to infinitely wait for more input.
@@ -41,7 +46,8 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // this prevents another prompt appearing after the
     // user has entered an expression.
     parser.lexer().set_read_only_once(true);
-    let mut checker = type_checker_with_stdlib();
+    let mut checker = TypeChecker::default();
+    std.init_type_checker(&mut checker);
     let mut env = global_env();
     loop {
         print!("> ");
