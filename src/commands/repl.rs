@@ -70,7 +70,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
                                     println!(
                                         "{} {}",
                                         "type:".dark_gray(),
-                                        value.get_type().to_string().dark_gray()
+                                        value.get_type().pretty_print_color()
                                     );
                                 }
                             }
