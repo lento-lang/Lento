@@ -179,7 +179,9 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt eval".bold(), "(options) [expr]".dim()))
         .args([
             arg!(<expr> "Sets the expression to evaluate"),
-            arg!(-d --debug "Turns on additional debugging information"),
+			arg!(-d --debug [level] "Turns on additional debugging information")
+			.value_parser(["trace", "debug", "info", "warn", "error"])
+			.default_missing_value("debug"),
         ])
     )
     .subcommand(

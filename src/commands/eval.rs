@@ -9,6 +9,10 @@ use lento_core::{
 use crate::error::{print_error, print_type_error};
 
 pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
+    // Get the flag for REPL
+    if let Some(debug_level) = args.get_one::<String>("debug") {
+        init_logger_str(debug_level);
+    }
     let expr = args.get_one::<String>("expr").unwrap().to_owned();
     let mut parser = from_string(expr);
     let mut checker = TypeChecker::default();
