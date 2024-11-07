@@ -9,6 +9,7 @@ use lento_core::{
         value::Value,
     },
     parser::parser::{from_string, Parser},
+    stdlib::init::stdlib,
     type_checker::{checker::TypeChecker, types::GetType},
 };
 
@@ -24,9 +25,13 @@ pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
     }
     let expr = args.get_one::<String>("expr").unwrap().to_owned();
 
+    let std = stdlib();
     let mut parser = from_string(expr);
+    std.init_parser(&mut parser);
     let mut checker = TypeChecker::default();
+    std.init_type_checker(&mut checker);
     let mut env = global_env();
+    std.init_environment(&mut env);
     eval_all(&mut parser, &mut checker, &mut env, false, false);
 }
 

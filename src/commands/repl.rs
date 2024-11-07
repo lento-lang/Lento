@@ -47,6 +47,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     let mut checker = TypeChecker::default();
     std.init_type_checker(&mut checker);
     let mut env = global_env();
+    std.init_environment(&mut env);
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();

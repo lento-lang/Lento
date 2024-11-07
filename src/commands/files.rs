@@ -11,6 +11,7 @@ use lento_core::{
         value::Value,
     },
     parser::{ast::Module, parser::parse_path_all},
+    stdlib::init::stdlib,
     type_checker::checker::TypeChecker,
     util::failable::Failable,
 };
@@ -57,9 +58,10 @@ fn validate_files(files: &Vec<&Path>, arg_parser: &mut Command) {
 fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Module)> {
     // Parallelize this parse-map operation to optimize detecting errors in multiple files (pre-execution)
 
+    let std = stdlib();
     let results: Vec<(&'a Path, Module)> = files
         .par_iter()
-        .filter_map(|f| match parse_path_all(f) {
+        .filter_map(|f| match parse_path_all(f, Some(&std)) {
             Ok(module) => Some((*f, module)),
             Err(err) => {
                 print_error(format!(
@@ -84,7 +86,11 @@ fn parse_files<'a>(files: &Vec<&'a Path>) -> Vec<(&'a Path, Module)> {
 fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<RuntimeError>> {
     // Interpret all files in order. Unwrap is safe because we already checked for errors in the parse_results function
     let mut errors: Vec<RuntimeError> = vec![];
+    let std = stdlib();
     let mut checker = TypeChecker::default();
+    std.init_type_checker(&mut checker);
+    let mut env = global_env();
+    std.init_environment(&mut env);
     for (file_path, module) in parse_results {
         println!(
             "{} '{}'...",
@@ -98,7 +104,7 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
                 continue;
             }
         };
-        match interpret_module(&checked_module, &mut global_env()) {
+        match interpret_module(&checked_module, &mut env) {
             Ok(val) => {
                 println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
