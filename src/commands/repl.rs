@@ -3,23 +3,17 @@ use std::io::{Read, Write};
 use clap::{ArgMatches, Command};
 use colorful::Colorful;
 use lento_core::{
-    interpreter::{environment::global_env, interpreter::interpret_ast, value::Value},
-    parser::parser,
-    stdlib::init::stdlib,
-    type_checker::{checker::TypeChecker, types::GetType},
+    interpreter::environment::global_env, parser::parser, stdlib::init::stdlib,
+    type_checker::checker::TypeChecker,
 };
 
-use crate::{
-    error::{print_parse_error, print_runtime_error, print_type_error},
-    logger::init_logger_str,
-    CLI_VERSION,
-};
+use crate::{commands::eval::eval_all, logger::init_logger_str, CLI_VERSION};
 
 pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // Set the Ctrl-C handler to exit the program
     ctrlc::set_handler(|| std::process::exit(0)).expect("Error setting Ctrl-C handler");
 
-    // Get the flag for REPL
+    // Get flags
     let print_types = args.get_flag("types");
     if let Some(debug_level) = args.get_one::<String>("debug") {
         init_logger_str(debug_level);
@@ -56,38 +50,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
-        match parser.parse_all() {
-            Ok(asts) => {
-                'exprs: for (i, ast) in asts.iter().enumerate() {
-                    let checked_ast = match checker.check_expr(ast) {
-                        Ok(ast) => ast,
-                        Err(err) => {
-                            print_type_error(err.message);
-                            break 'exprs; // Stop on error
-                        }
-                    };
-                    match interpret_ast(&checked_ast, &mut env) {
-                        Ok(value) => {
-                            if i == asts.len() - 1 && value != Value::Unit {
-                                println!("{}", value.pretty_print_color());
-                                if print_types {
-                                    println!(
-                                        "{} {}",
-                                        "type:".dark_gray(),
-                                        value.get_type().pretty_print_color()
-                                    );
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            print_runtime_error(err.message);
-                            break 'exprs; // Stop on error
-                        }
-                    }
-                }
-            }
-            Err(err) => print_parse_error(err.message),
-        }
+        eval_all(&mut parser, &mut checker, &mut env, print_types, true);
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
         parser.lexer().reset();
     }
