@@ -11,6 +11,7 @@ use lento_core::{
 
 use crate::{
     error::{print_parse_error, print_runtime_error, print_type_error},
+    logger::init_logger_str,
     CLI_VERSION,
 };
 
@@ -20,6 +21,9 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
 
     // Get the flag for REPL
     let print_types = args.get_flag("types");
+    if let Some(debug_level) = args.get_one::<String>("debug") {
+        init_logger_str(debug_level);
+    }
 
     // Print the version of the CLI and the language
     println!(

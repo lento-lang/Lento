@@ -232,10 +232,12 @@ pub fn lento_args() -> Command {
         .long_about("Starts the REPL, which is an interactive development environment.\nUse this command to quickly test and debug your code.")
         .version("1.0")
         .override_usage(format!("{} {}", "lt repl".bold(), "(options)".dim()))
-        .args([
-            arg!(-d --debug "Turns on additional debugging information"),
+		.args([
+			arg!(-d --debug [level] "Turns on additional debugging information")
+			.value_parser(["trace", "debug", "info", "warn", "error"])
+			.default_missing_value("debug"),
 			arg!(-t --types "Print the types of values"),
-        ])
+		])
     )
     .subcommand(
         Command::new(lento_command::RUN)

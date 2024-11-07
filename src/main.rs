@@ -1,6 +1,7 @@
 mod args;
 mod commands;
 mod error;
+mod logger;
 
 use std::process::exit;
 
