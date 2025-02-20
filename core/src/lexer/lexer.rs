@@ -19,7 +19,7 @@ use crate::{
 use super::{
     error::LexerError,
     readers::{bytes_reader::BytesReader, stdin::StdinReader},
-    token::{LineInfoSpan, TokenInfo, TokenKind},
+    token::{LineInfo, TokenInfo, TokenKind},
 };
 
 /// The source type of the program input. \
@@ -107,7 +107,7 @@ where
     /// Everything successfully read from the source code.
     content: Vec<u8>,
     index: usize,
-    line_info: LineInfoSpan,
+    line_info: LineInfo,
     pub operators: HashSet<String>,
     peeked_tokens: Vec<LexResult>, // Queue of peeked tokens (FIFO)
     /// The buffer size of the lexer. \
@@ -134,7 +134,7 @@ impl<R: Read> Lexer<R> {
             reader,
             content: Vec::new(),
             index: 0,
-            line_info: LineInfoSpan::new(),
+            line_info: LineInfo::new(),
             operators: HashSet::new(),
             peeked_tokens: Vec::new(),
             buffer_size: 512,
@@ -155,7 +155,7 @@ impl<R: Read> Lexer<R> {
             reader,
             content: Vec::new(),
             index: 0,
-            line_info: LineInfoSpan::new(),
+            line_info: LineInfo::new(),
             operators: HashSet::new(),
             peeked_tokens: Vec::new(),
             buffer_size: 512,
@@ -204,7 +204,7 @@ impl<R: Read> Lexer<R> {
     pub fn reset(&mut self) {
         self.content.clear();
         self.index = 0;
-        self.line_info = LineInfoSpan::new();
+        self.line_info = LineInfo::new();
         self.peeked_tokens.clear();
         self.eof = false;
         self.has_read_once = false;

@@ -122,13 +122,13 @@ impl Display for TokenKind {
 }
 
 #[derive(Clone)]
-pub struct LineInfo {
+pub struct LocationInfo {
     pub index: usize,
     pub line: usize,
     pub column: usize,
 }
 
-impl Debug for LineInfo {
+impl Debug for LocationInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -139,26 +139,26 @@ impl Debug for LineInfo {
 }
 
 #[derive(Clone)]
-pub struct LineInfoSpan {
-    pub start: LineInfo,
-    pub end: LineInfo,
+pub struct LineInfo {
+    pub start: LocationInfo,
+    pub end: LocationInfo,
 }
 
-impl Debug for LineInfoSpan {
+impl Debug for LineInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?}) to ({:?})", self.start, self.end)
     }
 }
 
-impl Default for LineInfoSpan {
+impl Default for LineInfo {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LineInfoSpan {
+impl LineInfo {
     pub fn new() -> Self {
-        let empty = LineInfo {
+        let empty = LocationInfo {
             index: 0,
             line: 1,
             column: 1,
@@ -178,7 +178,7 @@ pub struct TokenInfo {
     /// The token itself
     pub token: TokenKind,
     /// The line and column of the token
-    pub info: LineInfoSpan,
+    pub info: LineInfo,
 }
 
 impl Debug for TokenInfo {

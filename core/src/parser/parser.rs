@@ -10,7 +10,7 @@ use crate::{
     lexer::{
         lexer::{self, InputSource, LexResult},
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
-        token::{LineInfoSpan, TokenInfo, TokenKind},
+        token::{LineInfo, TokenInfo, TokenKind},
     },
     parser::ast::{ParamAst, TypeAst},
     stdlib::init::Initializer,
@@ -175,7 +175,7 @@ impl<R: Read> Parser<R> {
         self.parse_top_expr()
     }
 
-    fn parse_literal(&mut self, token: &TokenKind, info: LineInfoSpan) -> ParseResult {
+    fn parse_literal(&mut self, token: &TokenKind, info: LineInfo) -> ParseResult {
         Ok(Ast::Literal(match token {
             TokenKind::Number(n) => Value::Number(n.clone()),
             TokenKind::String(s) => Value::String(s.clone()),
