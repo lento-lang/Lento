@@ -103,7 +103,7 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
         };
         match interpret_module(&checked_module, &mut env) {
             Ok(val) => {
-                if val != Value::Unit {
+                if !val.get_type().equals(&std_types::UNIT) {
                     println!("{} {}", "Result:".light_green(), val);
                     println!("{} {}", "Type:".light_green(), val.get_type());
                 }
