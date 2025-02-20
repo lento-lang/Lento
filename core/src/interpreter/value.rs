@@ -232,6 +232,7 @@ impl Display for Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::Unit, Self::Unit) => true,
             (Self::Number(l0), Self::Number(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::Char(l0), Self::Char(r0)) => l0 == r0,

@@ -8,13 +8,11 @@ use lento_core::{
         environment::global_env,
         error::{runtime_error, RuntimeError},
         interpreter::interpret_module,
+        value::Value,
     },
     parser::{ast::Module, parser::parse_path_all},
     stdlib::init::stdlib,
-    type_checker::{
-        checker::TypeChecker,
-        types::{std_types, GetType, TypeTrait},
-    },
+    type_checker::{checker::TypeChecker, types::GetType},
     util::failable::Failable,
 };
 
@@ -103,7 +101,7 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
         };
         match interpret_module(&checked_module, &mut env) {
             Ok(val) => {
-                if !val.get_type().equals(&std_types::UNIT) {
+                if val != Value::Unit {
                     println!("{} {}", "Result:".light_green(), val);
                     println!("{} {}", "Type:".light_green(), val.get_type());
                 }
