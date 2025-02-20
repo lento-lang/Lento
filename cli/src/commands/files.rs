@@ -8,11 +8,13 @@ use lento_core::{
         environment::global_env,
         error::{runtime_error, RuntimeError},
         interpreter::interpret_module,
-        value::Value,
     },
     parser::{ast::Module, parser::parse_path_all},
     stdlib::init::stdlib,
-    type_checker::checker::TypeChecker,
+    type_checker::{
+        checker::TypeChecker,
+        types::{std_types, GetType, TypeTrait},
+    },
     util::failable::Failable,
 };
 
@@ -91,12 +93,7 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
     std.init_type_checker(&mut checker);
     let mut env = global_env();
     std.init_environment(&mut env);
-    for (file_path, module) in parse_results {
-        println!(
-            "{} '{}'...",
-            "Interpreting".light_cyan(),
-            file_path.display()
-        );
+    for (_, module) in parse_results {
         let checked_module = match checker.check_module(&module) {
             Ok(module) => module,
             Err(err) => {
@@ -106,9 +103,9 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
         };
         match interpret_module(&checked_module, &mut env) {
             Ok(val) => {
-                println!("{} executed program!", "Successfully".light_green());
                 if val != Value::Unit {
                     println!("{} {}", "Result:".light_green(), val);
+                    println!("{} {}", "Type:".light_green(), val.get_type());
                 }
             }
             Err(err) => errors.push(err),
@@ -128,7 +125,7 @@ pub fn handle_command_files(args: ValuesRef<String>, arg_parser: &mut Command) {
         for e in err {
             print_error(e.message);
         }
-    } else {
-        println!("{} interpreted all files!", "Successfully".light_green());
+        exit(1);
     }
+    exit(0)
 }
