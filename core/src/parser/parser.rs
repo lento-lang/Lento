@@ -493,6 +493,7 @@ impl<R: Read> Parser<R> {
     ///     println!("Not a record.");
     /// }
     /// ```
+    #[allow(clippy::type_complexity)]
     fn parse_record_fields(
         &mut self,
         first_info: &LineInfo,
