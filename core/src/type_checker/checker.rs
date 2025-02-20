@@ -2,6 +2,7 @@ use std::{borrow::Borrow, collections::HashMap};
 
 use crate::{
     interpreter::value::{RecordKey, Value},
+    lexer::token::LineInfo,
     parser::{
         ast::{Ast, Module, ParamAst, TypeAst},
         op::{
@@ -189,8 +190,8 @@ impl<'a> TypeChecker<'a> {
 
     fn scan_forward(&mut self, expr: &[Ast]) -> TypeResult<()> {
         for e in expr {
-            if let Ast::Assignment(target, expr) = e {
-                let Ast::Identifier(name) = target.borrow() else {
+            if let Ast::Assignment(target, expr, _) = e {
+                let Ast::Identifier(name, _) = target.borrow() else {
                     continue;
                 };
                 match expr.borrow() {
@@ -198,6 +199,7 @@ impl<'a> TypeChecker<'a> {
                         param,
                         body,
                         return_type,
+                        info,
                     } => {
                         let checked_param = self.check_param(param)?;
                         let checked =
@@ -245,26 +247,27 @@ impl<'a> TypeChecker<'a> {
                 param,
                 body,
                 return_type,
+                info,
             } => self.check_function(self.check_param(param)?, body, return_type)?,
-            Ast::Literal(v) => CheckedAst::Literal(v.clone()),
-            Ast::Tuple(elems) => self.check_tuple(elems)?,
-            Ast::List(elems) => self.check_list(elems)?,
-            Ast::Record(pairs) => self.check_record(pairs)?,
-            Ast::Identifier(i) => self.check_identifier(i)?,
-            Ast::Call(expr, args) => self.check_call(expr, args)?,
-            Ast::Accumulate(info, operands) => self.check_accumulate(info, operands)?,
-            Ast::Binary(lhs, info, rhs) => self.check_binary(lhs, info, rhs)?,
-            Ast::Unary(info, operand) => self.check_unary(info, operand)?,
-            Ast::Assignment(target, expr) => self.check_assignment(target, expr)?,
-            Ast::Block(exprs) => self.check_block(exprs)?,
+            Ast::Literal(v, info) => CheckedAst::Literal(v.clone()),
+            Ast::Tuple(elems, info) => self.check_tuple(elems)?,
+            Ast::List(elems, info) => self.check_list(elems)?,
+            Ast::Record(pairs, info) => self.check_record(pairs)?,
+            Ast::Identifier(i, info) => self.check_identifier(i, info)?,
+            Ast::Call(expr, args, info) => self.check_call(expr, args)?,
+            Ast::Accumulate(op, operands, info) => self.check_accumulate(op, operands)?,
+            Ast::Binary(lhs, op, rhs, info) => self.check_binary(lhs, op, rhs)?,
+            Ast::Unary(op, operand, info) => self.check_unary(op, operand)?,
+            Ast::Assignment(target, expr, info) => self.check_assignment(target, expr)?,
+            Ast::Block(exprs, info) => self.check_block(exprs)?,
         })
     }
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier(name) => {
+            TypeAst::Identifier(name, info) => {
                 self.lookup_type(name).cloned().ok_or_else(|| TypeError {
-                    message: format!("Unknown type: {}", name),
+                    message: format!("Unknown type: {} at {}", name, info.start),
                 })?
             }
         })
@@ -369,7 +372,7 @@ impl<'a> TypeChecker<'a> {
         Ok(CheckedAst::Record(pairs, record_type))
     }
 
-    fn check_identifier(&self, name: &str) -> TypeResult<CheckedAst> {
+    fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
             Some(IdentifierType::Variable(ty)) => {
                 CheckedAst::Identifier(name.to_string(), ty.clone())
@@ -393,7 +396,7 @@ impl<'a> TypeChecker<'a> {
             }
             None => {
                 return Err(TypeError {
-                    message: format!("Unknown variable: {}", name),
+                    message: format!("Unknown variable: {} at {}", name, info.start),
                 })
             }
         })
@@ -401,7 +404,7 @@ impl<'a> TypeChecker<'a> {
 
     fn check_assignment(&mut self, target: &Ast, expr: &Ast) -> TypeResult<CheckedAst> {
         let target = match target {
-            Ast::Identifier(name) => name,
+            Ast::Identifier(name, _) => name,
             _ => {
                 return Err(TypeError {
                     message: "Assignment expects an identifier".to_string(),
@@ -500,11 +503,13 @@ impl<'a> TypeChecker<'a> {
                     // Construct a function call expression
                     let mut operands = operands.iter();
                     let mut call = Ast::Call(
-                        Box::new(Ast::Identifier(function_name.clone())),
+                        Box::new(Ast::Identifier(function_name.clone(), LineInfo::default())),
                         Box::new(operands.next().unwrap().clone()),
+                        LineInfo::default(),
                     );
                     for arg in operands {
-                        call = Ast::Call(Box::new(call), Box::new(arg.clone()));
+                        call =
+                            Ast::Call(Box::new(call), Box::new(arg.clone()), LineInfo::default());
                     }
                     self.check_expr(&call)
                 }
@@ -645,8 +650,9 @@ impl<'a> TypeChecker<'a> {
             match &op.handler {
                 OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
                     let call = Ast::Call(
-                        Box::new(Ast::Identifier(function_name.clone())),
+                        Box::new(Ast::Identifier(function_name.clone(), LineInfo::default())),
                         Box::new(operand.clone()),
+                        LineInfo::default(),
                     );
                     return self.check_expr(&call);
                 }

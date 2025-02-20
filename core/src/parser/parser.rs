@@ -169,29 +169,32 @@ impl<R: Read> Parser<R> {
         // Check if the next token is an EOF, then return an empty unit top-level expression
         if let Ok(t) = self.lexer.peek_token_not(pred::ignored) {
             if pred::eof(&t.token) {
-                return Ok(Ast::Tuple(vec![]));
+                return Ok(Ast::Literal(Value::Unit, t.info));
             }
         }
         self.parse_top_expr()
     }
 
     fn parse_literal(&mut self, token: &TokenKind, info: LineInfo) -> ParseResult {
-        Ok(Ast::Literal(match token {
-            TokenKind::Number(n) => Value::Number(n.clone()),
-            TokenKind::String(s) => Value::String(s.clone()),
-            TokenKind::Char(c) => Value::Char(*c),
-            TokenKind::Boolean(b) => Value::Boolean(*b),
-            _ => {
-                log::error!("Expected literal, but found {:?}", token);
-                return Err(ParseError {
-                    message: format!("Expected literal, but found {:?}", token),
-                    span: (info.start.index, info.end.index),
-                });
-            }
-        }))
+        Ok(Ast::Literal(
+            match token {
+                TokenKind::Number(n) => Value::Number(n.clone()),
+                TokenKind::String(s) => Value::String(s.clone()),
+                TokenKind::Char(c) => Value::Char(*c),
+                TokenKind::Boolean(b) => Value::Boolean(*b),
+                _ => {
+                    log::error!("Expected literal, but found {:?}", token);
+                    return Err(ParseError {
+                        message: format!("Expected literal, but found {:?}", token),
+                        span: (info.start.index, info.end.index),
+                    });
+                }
+            },
+            info,
+        ))
     }
 
-    fn parse_paren_call(&mut self, id: String) -> ParseResult {
+    fn parse_paren_call(&mut self, id: String, info: LineInfo) -> ParseResult {
         log::trace!("Parsing parenthesized function call: {}", id);
         let mut args = Vec::new();
         while let Ok(end) = self.lexer.peek_token(0) {
@@ -208,8 +211,8 @@ impl<R: Read> Parser<R> {
                 } else if let TokenKind::Identifier(param_name) = nt.token {
                     // Found (..., ty id) in an argument list.
                     // Check if `ty` is an identifier
-                    if args.iter().all(|arg| matches!(arg, Ast::Identifier(_))) {
-                        let Ast::Identifier(param_type) = args.pop().unwrap() else {
+                    if args.iter().all(|arg| matches!(arg, Ast::Identifier(_, _))) {
+                        let Ast::Identifier(param_type, param_info) = args.pop().unwrap() else {
                             unreachable!("All arguments should be identifiers");
                         };
                         // Found a type identifier in a function call.
@@ -237,18 +240,21 @@ impl<R: Read> Parser<R> {
                         return self.parse_func_def(
                             None,
                             id,
+                            info,
                             args.iter()
                                 .map(|arg| match arg {
-                                    Ast::Identifier(id) => ParamAst {
+                                    Ast::Identifier(id, info) => ParamAst {
                                         name: id.clone(),
                                         ty: None,
+                                        info: info.clone(),
                                     },
                                     _ => unreachable!(),
                                 })
                                 // Also add the current parameter
                                 .chain([ParamAst {
                                     name: param_name,
-                                    ty: Some(TypeAst::Identifier(param_type)),
+                                    ty: Some(TypeAst::Identifier(param_type, param_info.clone())),
+                                    info: param_info,
                                 }])
                                 .collect(),
                         );
@@ -269,12 +275,12 @@ impl<R: Read> Parser<R> {
         }
         self.parse_expected(TokenKind::RightParen, ")")?;
 
-        if let Some(func_def) = self.try_parse_func_def_no_types(&id, &args) {
+        if let Some(func_def) = self.try_parse_func_def_no_types(&id, &info, &args) {
             return func_def;
         }
 
         log::trace!("Parsed function call: {}({:?})", id, args);
-        Ok(syntax_sugar::roll_function_call(id, args))
+        Ok(syntax_sugar::roll_function_call(id, args, info))
         // Ok(Ast::Call(id, args))
     }
 
@@ -290,13 +296,14 @@ impl<R: Read> Parser<R> {
     fn try_parse_func_def_no_types(
         &mut self,
         func_name: &str,
+        info: &LineInfo,
         args: &[Ast],
     ) -> Option<ParseResult> {
         if let Ok(ref nt) = self.lexer.peek_token(0) {
             if let TokenKind::Op(ref op) = nt.token {
                 if op == "=" {
                     // If all arguments are identifiers, then this is a function definition
-                    if args.iter().all(|arg| matches!(arg, Ast::Identifier(_))) {
+                    if args.iter().all(|arg| matches!(arg, Ast::Identifier(_, _))) {
                         log::trace!(
                             "Parsed function definition: {}({:?}) -> {:?}",
                             func_name,
@@ -314,18 +321,21 @@ impl<R: Read> Parser<R> {
                         let params = args
                             .iter()
                             .map(|arg| match arg {
-                                Ast::Identifier(id) => ParamAst {
+                                Ast::Identifier(id, info) => ParamAst {
                                     name: id.clone(),
                                     ty: None,
+                                    info: info.clone(),
                                 },
                                 _ => unreachable!(),
                             })
                             .collect::<Vec<_>>();
                         // Roll functions into single param definitions
                         let function = syntax_sugar::roll_function_definition(params, body);
+                        let assign_info = info.join(function.info());
                         return Some(Ok(Ast::Assignment(
-                            Box::new(Ast::Identifier(func_name.to_string())),
+                            Box::new(Ast::Identifier(func_name.to_string(), info.clone())),
                             Box::new(function),
+                            assign_info,
                         )));
                     }
                 }
@@ -354,6 +364,7 @@ impl<R: Read> Parser<R> {
         &mut self,
         ret_type: Option<String>,
         name: String,
+        info: LineInfo,
         parsed_params: Vec<ParamAst>,
     ) -> ParseResult {
         log::trace!("Parsing function definition: {} -> {:?}", name, ret_type);
@@ -379,9 +390,9 @@ impl<R: Read> Parser<R> {
                     });
                 }
             };
-            let name = match self.lexer.next_token() {
+            let (param_name, param_info) = match self.lexer.next_token() {
                 Ok(t) => match t.token {
-                    TokenKind::Identifier(id) => id,
+                    TokenKind::Identifier(id) => (id, t.info),
                     _ => {
                         log::error!("Expected parameter name, but found {:?}", t.token);
                         return Err(ParseError {
@@ -398,7 +409,11 @@ impl<R: Read> Parser<R> {
                     });
                 }
             };
-            params.push(ParamAst { name, ty: Some(ty) });
+            params.push(ParamAst {
+                name: param_name,
+                ty: Some(ty),
+                info: param_info,
+            });
             if let Ok(nt) = self.lexer.peek_token(0) {
                 if nt.token == TokenKind::Comma {
                     self.lexer.next_token().unwrap();
@@ -429,9 +444,11 @@ impl<R: Read> Parser<R> {
             body
         );
         let function = syntax_sugar::roll_function_definition(params, body);
+        let assign_info = info.join(function.info());
         Ok(Ast::Assignment(
-            Box::new(Ast::Identifier(name)),
+            Box::new(Ast::Identifier(name, info)),
             Box::new(function),
+            assign_info,
         ))
     }
 
@@ -440,7 +457,7 @@ impl<R: Read> Parser<R> {
             match t.token {
                 TokenKind::Identifier(id) => {
                     self.lexer.next_token().unwrap();
-                    Some(Ok(TypeAst::Identifier(id)))
+                    Some(Ok(TypeAst::Identifier(id, t.info)))
                 }
                 _ => None,
             }
@@ -476,7 +493,10 @@ impl<R: Read> Parser<R> {
     ///     println!("Not a record.");
     /// }
     /// ```
-    fn parse_record_fields(&mut self) -> Option<Result<Vec<(RecordKey, Ast)>, ParseError>> {
+    fn parse_record_fields(
+        &mut self,
+        first_info: &LineInfo,
+    ) -> Option<Result<(Vec<(RecordKey, Ast)>, LineInfo), ParseError>> {
         let mut fields = Vec::new();
         // Initial soft parse to check if the record is empty
         // Or if it is a block
@@ -484,7 +504,7 @@ impl<R: Read> Parser<R> {
             let key = match t.token {
                 TokenKind::RightBrace => {
                     self.lexer.next_token().unwrap();
-                    return Some(Ok(fields)); // Empty record
+                    return Some(Ok((fields, t.info))); // Empty record
                 }
                 TokenKind::Identifier(id) => RecordKey::String(id),
                 TokenKind::Number(n) => RecordKey::Number(n),
@@ -504,8 +524,8 @@ impl<R: Read> Parser<R> {
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Comma => (),                           // Continue parsing
-                    TokenKind::RightBrace => return Some(Ok(fields)), // Just a single field
+                    TokenKind::Comma => (), // Continue parsing
+                    TokenKind::RightBrace => return Some(Ok((fields, t.info))), // Just a single field
                     _ => {
                         log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError {
@@ -516,9 +536,11 @@ impl<R: Read> Parser<R> {
                 }
             }
         }
+        let mut last_info = LineInfo::default();
         // Parse the rest of the fields more strictly
         while let Ok(t) = self.lexer.next_token() {
             if t.token == TokenKind::RightBrace {
+                last_info = t.info;
                 break;
             }
             let key = match t.token {
@@ -543,7 +565,10 @@ impl<R: Read> Parser<R> {
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
                     TokenKind::Comma => continue,
-                    TokenKind::RightBrace => break,
+                    TokenKind::RightBrace => {
+                        last_info = t.info;
+                        break;
+                    }
                     _ => {
                         log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError {
@@ -554,7 +579,7 @@ impl<R: Read> Parser<R> {
                 }
             }
         }
-        Some(Ok(fields))
+        Some(Ok((fields, first_info.join(&last_info))))
     }
 
     fn parse_primary(&mut self) -> ParseResult {
@@ -571,7 +596,7 @@ impl<R: Read> Parser<R> {
                                 })
                             {
                                 self.lexer.next_token().unwrap(); // Consume the left paren
-                                return self.parse_paren_call(id);
+                                return self.parse_paren_call(id, t.info);
                             }
                         }
                         // Check if function definition
@@ -586,19 +611,19 @@ impl<R: Read> Parser<R> {
                                         self.lexer.next_token().unwrap(); // Consume the name identifier
                                         self.lexer.next_token().unwrap(); // Consume the left paren
                                                                           // Start parsing the params and body of the function
-                                        return self.parse_func_def(Some(id), name, vec![]);
+                                        return self.parse_func_def(Some(id), name, t.info, vec![]);
                                     }
                                 }
                             }
                         }
-                        Ast::Identifier(id)
+                        Ast::Identifier(id, t.info)
                     }
                     TokenKind::Op(op) => {
                         // TODO: Don't lookup operators in the parser, do this in the type checker!
                         if let Some(op) = self.find_operator_pos(&op, OperatorPosition::Prefix) {
                             let op = op.clone();
                             let rhs = self.parse_primary()?;
-                            Ast::Unary(op.clone(), Box::new(rhs))
+                            Ast::Unary(op.clone(), Box::new(rhs), t.info)
                         } else {
                             log::error!("Expected prefix operator, but found {:?}", op);
                             return Err(ParseError {
@@ -650,18 +675,19 @@ impl<R: Read> Parser<R> {
                                         ),
                                     });
                                 }
-                                self.parse_expected(TokenKind::RightParen, ")")?;
+                                let end = self.parse_expected(TokenKind::RightParen, ")")?;
                                 if exprs.len() == 1 && !explicit_single {
                                     exprs.pop().unwrap()
                                 } else {
-                                    Ast::Tuple(exprs)
+                                    Ast::Tuple(exprs, t.info.join(&end.info))
                                 }
                             }
                             // Records and Blocks: {}
                             TokenKind::LeftBrace => {
                                 // Try to parse as record
-                                if let Some(res) = self.parse_record_fields() {
-                                    Ast::Record(res?)
+                                if let Some(res) = self.parse_record_fields(&t.info) {
+                                    let (fields, info) = res?;
+                                    Ast::Record(fields, info)
                                 } else {
                                     // Parse as block
                                     let mut exprs = Vec::new();
@@ -671,8 +697,8 @@ impl<R: Read> Parser<R> {
                                         }
                                         exprs.push(self.parse_top_expr()?);
                                     }
-                                    self.parse_expected(TokenKind::RightBrace, "}")?;
-                                    Ast::Block(exprs)
+                                    let last = self.parse_expected(TokenKind::RightBrace, "}")?;
+                                    Ast::Block(exprs, t.info.join(&last.info))
                                 }
                             }
                             // Lists: []
@@ -706,8 +732,8 @@ impl<R: Read> Parser<R> {
                                         ),
                                     });
                                 }
-                                self.parse_expected(TokenKind::RightBracket, "]")?;
-                                Ast::List(exprs)
+                                let last = self.parse_expected(TokenKind::RightBracket, "]")?;
+                                Ast::List(exprs, t.info.join(&last.info))
                             }
                             _ => unreachable!(),
                         }
@@ -797,9 +823,9 @@ impl<R: Read> Parser<R> {
             let nt = self.lexer.peek_token(0);
             self.check_op(&nt, min_prec, false)
         } {
-            self.lexer.next_token().unwrap(); // Consume the operator token
+            let curr_info = self.lexer.next_token().unwrap().info; // Consume the operator token
             if curr_op.position.is_accumulate() {
-                expr = self.parse_expr_accum(&curr_op, expr)?;
+                expr = self.parse_expr_accum(&curr_op, expr, curr_info)?;
                 continue;
             }
             let mut rhs = self.parse_primary()?;
@@ -812,7 +838,8 @@ impl<R: Read> Parser<R> {
             if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op, &rhs) {
                 expr = desugar;
             } else {
-                expr = Ast::Binary(Box::new(expr), curr_op.clone(), Box::new(rhs));
+                let info = expr.info().join(rhs.info());
+                expr = Ast::Binary(Box::new(expr), curr_op.clone(), Box::new(rhs), info);
             }
         }
         Ok(expr)
@@ -820,7 +847,7 @@ impl<R: Read> Parser<R> {
 
     /// Expect the parser state to be at the end of [expr, op] sequence.
     /// Next token should be a new expression or a terminator.
-    fn parse_expr_accum(&mut self, op: &OperatorInfo, first: Ast) -> ParseResult {
+    fn parse_expr_accum(&mut self, op: &OperatorInfo, first: Ast, info: LineInfo) -> ParseResult {
         let mut exprs = vec![first];
         while let Ok(t) = self.lexer.peek_token_not(pred::ignored) {
             if op.allow_trailing && t.token.is_terminator() {
@@ -842,7 +869,8 @@ impl<R: Read> Parser<R> {
                 break;
             }
         }
-        Ok(Ast::Accumulate(op.clone(), exprs))
+        let info = info.join(&exprs.last().unwrap().info());
+        Ok(Ast::Accumulate(op.clone(), exprs, info))
     }
 
     /// Parse a top-level expression.
@@ -887,7 +915,7 @@ mod syntax_sugar {
 
     use super::*;
 
-    pub fn try_literal_fraction(lhs: &Number, rhs: &Number) -> Option<Ast> {
+    pub fn try_literal_fraction(lhs: &Number, rhs: &Number, info: LineInfo) -> Option<Ast> {
         let lhs = match lhs {
             Number::UnsignedInteger(lhs) => lhs.to_signed(),
             Number::SignedInteger(lhs) => lhs.clone(),
@@ -903,18 +931,21 @@ mod syntax_sugar {
         if rhs.cmp(&Integer::ZERO) == std::cmp::Ordering::Equal {
             return None;
         }
-        Some(Ast::Literal(Value::Number(Number::FloatingPoint(
-            FloatingPoint::FloatBig(Rational::from_integers(lhs, rhs)).optimize(),
-        ))))
+        Some(Ast::Literal(
+            Value::Number(Number::FloatingPoint(
+                FloatingPoint::FloatBig(Rational::from_integers(lhs, rhs)).optimize(),
+            )),
+            info,
+        ))
     }
 
     pub fn try_binary(lhs: &Ast, op: &OperatorInfo, rhs: &Ast) -> Option<Ast> {
         match (lhs, op, rhs) {
             (
-                Ast::Literal(Value::Number(lhs)),
+                Ast::Literal(Value::Number(lhs), li),
                 OperatorInfo { name, symbol, .. },
-                Ast::Literal(Value::Number(rhs)),
-            ) if name == "div" && symbol == "/" => try_literal_fraction(lhs, rhs),
+                Ast::Literal(Value::Number(rhs), ri),
+            ) if name == "div" && symbol == "/" => try_literal_fraction(lhs, rhs, li.join(ri)),
             _ => None,
         }
     }
@@ -936,14 +967,17 @@ mod syntax_sugar {
     /// - `body` The body of the function
     pub fn roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
         assert!(!params.is_empty(), "Expected at least one parameter");
+        let info = body.info().join(params.last().map(|p| &p.info).unwrap());
         let mut params = params.iter().rev();
         let mut function = Ast::Function {
             param: params.next().unwrap().clone(),
             body: Box::new(body),
             return_type: None,
+            info,
         };
         for param in params {
             function = Ast::Function {
+                info: function.info().join(&param.info),
                 param: param.clone(),
                 body: Box::new(function),
                 return_type: None,
@@ -952,14 +986,21 @@ mod syntax_sugar {
         function
     }
 
-    pub fn roll_function_call(name: String, args: Vec<Ast>) -> Ast {
+    pub fn roll_function_call(name: String, args: Vec<Ast>, start_info: LineInfo) -> Ast {
+        let last_info = args
+            .last()
+            .map(|a| a.info().clone())
+            .unwrap_or(start_info.clone());
+        let call_info = start_info.join(&last_info);
         let mut args = args.into_iter();
         let mut call = Ast::Call(
-            Box::new(Ast::Identifier(name)),
+            Box::new(Ast::Identifier(name, start_info)),
             Box::new(args.next().unwrap()),
+            call_info.clone(),
         );
         for arg in args {
-            call = Ast::Call(Box::new(call), Box::new(arg));
+            let arg_info = call_info.join(&arg.info());
+            call = Ast::Call(Box::new(call), Box::new(arg), arg_info);
         }
         call
     }

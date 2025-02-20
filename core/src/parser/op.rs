@@ -1,4 +1,5 @@
 use crate::{
+    lexer::token::LineInfo,
     parser::ast::Ast,
     type_checker::{
         checked_ast::CheckedParam,

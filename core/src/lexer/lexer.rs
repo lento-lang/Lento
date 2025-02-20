@@ -134,7 +134,7 @@ impl<R: Read> Lexer<R> {
             reader,
             content: Vec::new(),
             index: 0,
-            line_info: LineInfo::new(),
+            line_info: LineInfo::default(),
             operators: HashSet::new(),
             peeked_tokens: Vec::new(),
             buffer_size: 512,
@@ -155,7 +155,7 @@ impl<R: Read> Lexer<R> {
             reader,
             content: Vec::new(),
             index: 0,
-            line_info: LineInfo::new(),
+            line_info: LineInfo::default(),
             operators: HashSet::new(),
             peeked_tokens: Vec::new(),
             buffer_size: 512,
@@ -204,7 +204,7 @@ impl<R: Read> Lexer<R> {
     pub fn reset(&mut self) {
         self.content.clear();
         self.index = 0;
-        self.line_info = LineInfo::new();
+        self.line_info = LineInfo::default();
         self.peeked_tokens.clear();
         self.eof = false;
         self.has_read_once = false;

@@ -138,35 +138,48 @@ impl Debug for LocationInfo {
     }
 }
 
-#[derive(Clone)]
+impl Display for LocationInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}, column {}", self.line, self.column)
+    }
+}
+
+impl Default for LocationInfo {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            line: 1,
+            column: 1,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct LineInfo {
     pub start: LocationInfo,
     pub end: LocationInfo,
 }
 
+impl LineInfo {
+    pub fn join(&self, other: &LineInfo) -> LineInfo {
+        let start = if self.start.index < other.start.index {
+            self.start.clone()
+        } else {
+            other.start.clone()
+        };
+        let end = if self.end.index > other.end.index {
+            self.end.clone()
+        } else {
+            other.end.clone()
+        };
+
+        LineInfo { start, end }
+    }
+}
+
 impl Debug for LineInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?}) to ({:?})", self.start, self.end)
-    }
-}
-
-impl Default for LineInfo {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LineInfo {
-    pub fn new() -> Self {
-        let empty = LocationInfo {
-            index: 0,
-            line: 1,
-            column: 1,
-        };
-        Self {
-            start: empty.clone(),
-            end: empty,
-        }
     }
 }
 
