@@ -1,5 +1,4 @@
 use crate::{
-    lexer::token::LineInfo,
     parser::ast::Ast,
     type_checker::{
         checked_ast::CheckedParam,
@@ -241,6 +240,7 @@ impl Operator {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_static(
         name: String,
         symbol: String,

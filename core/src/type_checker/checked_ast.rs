@@ -1,6 +1,6 @@
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
-    lexer::lexer::InputSource,
+    lexer::{lexer::InputSource, token::LineInfo},
     type_checker::types::Type,
 };
 
@@ -62,63 +62,78 @@ impl GetType for CheckedFunction {
 pub enum CheckedAst {
     /// A literal is a constant value that is directly represented in the source code.
     /// 1. Value of the literal
-    Literal(Value),
+    Literal(Value, LineInfo),
     /// A tuple is a fixed-size collection of elements of possibly different types.
     /// 1. List of elements
     /// 2. Type of the tuple, made up of the types of the elements and the number of elements
-    Tuple(Vec<CheckedAst>, Type),
+    Tuple(Vec<CheckedAst>, Type, LineInfo),
     /// A dynamic list of elements.
     /// 1. List of elements
     /// 2. Type of every element in the list (all elements must **be a subtype**)
-    List(Vec<CheckedAst>, Type),
+    List(Vec<CheckedAst>, Type, LineInfo),
     /// A record is a collection of key-value pairs
     /// 1. List of key-value pairs
     /// 2. Type of the record, made up of the types of the keys and values
-    Record(Vec<(RecordKey, CheckedAst)>, Type),
+    Record(Vec<(RecordKey, CheckedAst)>, Type, LineInfo),
     /// An identifier is a named reference to a value in the environment
     /// 1. Name of the identifier
     /// 2. Type of the identifier (the type of the value it refers to)
-    Identifier(String, Type),
+    Identifier(String, Type, LineInfo),
     /// A function variation call is an invocation of a function variation with a list of arguments
     Call {
         function: Box<CheckedAst>,
         arg: Box<CheckedAst>,
         return_type: Type,
+        info: LineInfo,
     },
     /// A function declaration is a named function with a list of parameters and a body expression
-    Function(Box<CheckedFunction>),
+    Function(Box<CheckedFunction>, LineInfo),
     /// An assignment expression assigns a value to a variable
     /// 1. Matching pattern (identifier, destructuring of a tuple, record, etc.)
     /// 2. Value
     /// 3. Type of the value
-    Assignment(Box<CheckedAst>, Box<CheckedAst>, Type),
+    Assignment(Box<CheckedAst>, Box<CheckedAst>, Type, LineInfo),
     /// Block expression evaluates all expressions in the block and returns the value of the last expression.
     /// 1. List of expressions
     /// 2. Type of the last expression
-    Block(Vec<CheckedAst>, Type),
+    Block(Vec<CheckedAst>, Type, LineInfo),
 }
 
 impl GetType for CheckedAst {
     fn get_type(&self) -> &Type {
         match self {
-            CheckedAst::Literal(v) => v.get_type(),
-            CheckedAst::Tuple(_, ty) => ty,
-            CheckedAst::List(_, ty) => ty,
-            CheckedAst::Record(_, ty) => ty,
-            CheckedAst::Identifier(_, ty) => ty,
+            CheckedAst::Literal(v, _) => v.get_type(),
+            CheckedAst::Tuple(_, ty, _) => ty,
+            CheckedAst::List(_, ty, _) => ty,
+            CheckedAst::Record(_, ty, _) => ty,
+            CheckedAst::Identifier(_, ty, _) => ty,
             CheckedAst::Call { return_type, .. } => return_type,
-            CheckedAst::Function(func) => func.get_type(),
-            CheckedAst::Assignment(_, _, ty) => ty,
-            CheckedAst::Block(_, ty) => ty,
+            CheckedAst::Function(func, _) => func.get_type(),
+            CheckedAst::Assignment(_, _, ty, _) => ty,
+            CheckedAst::Block(_, ty, _) => ty,
         }
     }
 }
 
 impl CheckedAst {
+    pub fn info(&self) -> &LineInfo {
+        match self {
+            CheckedAst::Literal(_, info) => info,
+            CheckedAst::Tuple(_, _, info) => info,
+            CheckedAst::List(_, _, info) => info,
+            CheckedAst::Record(_, _, info) => info,
+            CheckedAst::Identifier(_, _, info) => info,
+            CheckedAst::Call { info, .. } => info,
+            CheckedAst::Function(_, info) => info,
+            CheckedAst::Assignment(_, _, _, info) => info,
+            CheckedAst::Block(_, _, info) => info,
+        }
+    }
+
     pub fn print_sexpr(&self) -> String {
         match self {
-            CheckedAst::Literal(value) => value.to_string(),
-            CheckedAst::Tuple(elements, _) => format!(
+            CheckedAst::Literal(value, _) => value.to_string(),
+            CheckedAst::Tuple(elements, _, _) => format!(
                 "({})",
                 elements
                     .iter()
@@ -126,7 +141,7 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
-            CheckedAst::List(elements, _) => format!(
+            CheckedAst::List(elements, _, _) => format!(
                 "[{}]",
                 elements
                     .iter()
@@ -134,8 +149,8 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
-            CheckedAst::Record(_elements, _) => todo!(),
-            CheckedAst::Identifier(name, _) => name.clone(),
+            CheckedAst::Record(_elements, _, _) => todo!(),
+            CheckedAst::Identifier(name, _, _) => name.clone(),
             CheckedAst::Call { function, arg, .. } => {
                 // format!("{}({})", function.print_sexpr(), arg.print_sexpr())
 
@@ -161,7 +176,7 @@ impl CheckedAst {
                         .join(", ")
                 )
             }
-            CheckedAst::Function(func) => {
+            CheckedAst::Function(func, _) => {
                 format!(
                     "({} {} -> {})",
                     func.param.ty,
@@ -169,10 +184,10 @@ impl CheckedAst {
                     func.body.print_sexpr()
                 )
             }
-            CheckedAst::Assignment(lhs, rhs, _) => {
+            CheckedAst::Assignment(lhs, rhs, _, _) => {
                 format!("({} = {})", lhs.print_sexpr(), rhs.print_sexpr())
             }
-            CheckedAst::Block(expressions, _) => format!(
+            CheckedAst::Block(expressions, _, _) => format!(
                 "{{{}}}",
                 expressions
                     .iter()

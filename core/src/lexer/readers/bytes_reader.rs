@@ -21,7 +21,7 @@ impl<'a> BytesReader<'a> {
     }
 }
 
-impl<'a> Read for BytesReader<'a> {
+impl Read for BytesReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let len = std::cmp::min(buf.len(), self.data.len() - self.pos);
         buf[..len].copy_from_slice(&self.data[self.pos..self.pos + len]);
@@ -30,7 +30,7 @@ impl<'a> Read for BytesReader<'a> {
     }
 }
 
-impl<'a> BufRead for BytesReader<'a> {
+impl BufRead for BytesReader<'_> {
     fn fill_buf(&mut self) -> Result<&[u8]> {
         Ok(&self.data[self.pos..])
     }
@@ -40,7 +40,7 @@ impl<'a> BufRead for BytesReader<'a> {
     }
 }
 
-impl<'a> Seek for BytesReader<'a> {
+impl Seek for BytesReader<'_> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
         match pos {
             std::io::SeekFrom::Start(pos) => {

@@ -34,9 +34,9 @@ pub fn interpret_module(module: &CheckedModule, env: &mut Environment) -> Interp
 pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     let result = match ast {
         CheckedAst::Call { function, arg, .. } => eval_call(function, arg, env)?,
-        CheckedAst::Tuple(v, _) => eval_tuple(v, env)?,
-        CheckedAst::Literal(l) => l.clone(),
-        CheckedAst::Identifier(id, _) => match env.lookup_identifier(id) {
+        CheckedAst::Tuple(v, _, _) => eval_tuple(v, env)?,
+        CheckedAst::Literal(l, _) => l.clone(),
+        CheckedAst::Identifier(id, _, _) => match env.lookup_identifier(id) {
             (Some(_), Some(_)) => {
                 return Err(runtime_error(format!("Ambiguous identifier '{}'", id)))
             }
@@ -44,9 +44,9 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
             (None, None) => return Err(runtime_error(format!("Unknown identifier '{}'", id))),
         },
-        CheckedAst::Assignment(lhs, rhs, _) => {
+        CheckedAst::Assignment(lhs, rhs, _, _) => {
             let lhs = match *lhs.to_owned() {
-                CheckedAst::Identifier(id, _) => id,
+                CheckedAst::Identifier(id, _, _) => id,
                 _ => {
                     return Err(runtime_error(
                         "Assignment expects an identifier".to_string(),
@@ -57,14 +57,14 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
             env.add_value(Str::String(lhs), rhs.clone())?;
             rhs
         }
-        CheckedAst::List(elems, ty) => {
+        CheckedAst::List(elems, ty, _) => {
             let values = elems
                 .iter()
                 .map(|e| interpret_ast(e, env))
                 .collect::<Result<Vec<Value>, _>>()?;
             Value::List(values, ty.clone())
         }
-        CheckedAst::Record(expr, ty) => {
+        CheckedAst::Record(expr, ty, _) => {
             let mut record = Vec::new();
             for (key, value) in expr {
                 let value = interpret_ast(value, env)?;
@@ -72,13 +72,13 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
             }
             Value::Record(record, ty.clone())
         }
-        CheckedAst::Function(func) => Value::Function(Box::new(Function::new_user(
+        CheckedAst::Function(func, _) => Value::Function(Box::new(Function::new_user(
             func.param.clone(),
             func.body.clone(),
             env.deep_clone(),
             func.return_type.clone(),
         ))),
-        CheckedAst::Block(exprs, _) => {
+        CheckedAst::Block(exprs, _, _) => {
             let mut result = Value::Unit;
             let mut scope = env.new_child(Str::Str("<block>"));
             for expr in exprs {
@@ -87,7 +87,7 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
             result
         }
     };
-    if !matches!(ast, CheckedAst::Literal(_)) {
+    if !matches!(ast, CheckedAst::Literal(_, _)) {
         log::trace!(
             "Eval: {} -> {}",
             ast.print_sexpr(),
@@ -113,7 +113,7 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
         env: &'a mut Environment,
     ) -> Option<(&'a NativeFunction, Vec<&'b CheckedAst>)> {
         match expr {
-            CheckedAst::Identifier(id, _) => match env.lookup_function(id) {
+            CheckedAst::Identifier(id, _, _) => match env.lookup_function(id) {
                 Some(Function::Native(native)) => Some((native, args)),
                 _ => None,
             },

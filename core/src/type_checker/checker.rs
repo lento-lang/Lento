@@ -91,7 +91,7 @@ pub struct TypeChecker<'a> {
     parent: Option<&'a TypeChecker<'a>>,
 }
 
-impl<'a> TypeChecker<'a> {
+impl TypeChecker<'_> {
     // ================== Type environment functions ==================
 
     pub fn reset(&mut self) {
@@ -203,7 +203,7 @@ impl<'a> TypeChecker<'a> {
                     } => {
                         let checked_param = self.check_param(param)?;
                         let checked =
-                            self.check_function(checked_param.clone(), body, return_type)?;
+                            self.check_function(checked_param.clone(), body, return_type, info)?;
                         let variation = FunctionType {
                             param: checked_param,
                             ret: checked.get_type().clone(),
@@ -248,18 +248,18 @@ impl<'a> TypeChecker<'a> {
                 body,
                 return_type,
                 info,
-            } => self.check_function(self.check_param(param)?, body, return_type)?,
-            Ast::Literal(v, info) => CheckedAst::Literal(v.clone()),
-            Ast::Tuple(elems, info) => self.check_tuple(elems)?,
-            Ast::List(elems, info) => self.check_list(elems)?,
-            Ast::Record(pairs, info) => self.check_record(pairs)?,
+            } => self.check_function(self.check_param(param)?, body, return_type, info)?,
+            Ast::Literal(v, info) => CheckedAst::Literal(v.clone(), info.clone()),
+            Ast::Tuple(elems, info) => self.check_tuple(elems, info)?,
+            Ast::List(elems, info) => self.check_list(elems, info)?,
+            Ast::Record(pairs, info) => self.check_record(pairs, info)?,
             Ast::Identifier(i, info) => self.check_identifier(i, info)?,
-            Ast::Call(expr, args, info) => self.check_call(expr, args)?,
-            Ast::Accumulate(op, operands, info) => self.check_accumulate(op, operands)?,
-            Ast::Binary(lhs, op, rhs, info) => self.check_binary(lhs, op, rhs)?,
-            Ast::Unary(op, operand, info) => self.check_unary(op, operand)?,
-            Ast::Assignment(target, expr, info) => self.check_assignment(target, expr)?,
-            Ast::Block(exprs, info) => self.check_block(exprs)?,
+            Ast::Call(expr, args, info) => self.check_call(expr, args, info)?,
+            Ast::Accumulate(op, operands, info) => self.check_accumulate(op, operands, info)?,
+            Ast::Binary(lhs, op, rhs, info) => self.check_binary(lhs, op, rhs, info)?,
+            Ast::Unary(op, operand, info) => self.check_unary(op, operand, info)?,
+            Ast::Assignment(target, expr, info) => self.check_assignment(target, expr, info)?,
+            Ast::Block(exprs, info) => self.check_block(exprs, info)?,
         })
     }
 
@@ -267,7 +267,7 @@ impl<'a> TypeChecker<'a> {
         Ok(match expr {
             TypeAst::Identifier(name, info) => {
                 self.lookup_type(name).cloned().ok_or_else(|| TypeError {
-                    message: format!("Unknown type: {} at {}", name, info.start),
+                    message: format!("Unknown type '{}' at {}", name, info.start),
                 })?
             }
         })
@@ -278,7 +278,10 @@ impl<'a> TypeChecker<'a> {
             self.check_type_expr(ty)?
         } else {
             return Err(TypeError {
-                message: "Function parameter type is required".to_string(),
+                message: format!(
+                    "Parameter type for '{}' is missing at {}",
+                    param.name, param.info.start
+                ),
             });
         };
         let param = CheckedParam {
@@ -293,7 +296,9 @@ impl<'a> TypeChecker<'a> {
         param: CheckedParam,
         body: &Ast,
         return_type: &Option<TypeAst>,
+        info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
+        let body_info = body.info();
         let body = self.new_scope().check_expr(body)?;
         let body_type = body.get_type().clone();
         let return_type = if let Some(ty) = &return_type {
@@ -301,8 +306,8 @@ impl<'a> TypeChecker<'a> {
             if !ty.subtype(&body_type) {
                 return Err(TypeError {
                     message: format!(
-                        "Function body type does not match the return type. Expected '{}', found '{}'",
-                        ty, &body_type
+                        "Function body type does not match the return type. Expected '{}', found '{}' at {}",
+                        ty, &body_type, body_info.start
                     ),
                 });
             }
@@ -312,16 +317,15 @@ impl<'a> TypeChecker<'a> {
             body_type
         };
 
-        Ok(CheckedAst::Function(Box::new(CheckedFunction::new(
-            param,
-            body,
-            return_type,
-        ))))
+        Ok(CheckedAst::Function(
+            Box::new(CheckedFunction::new(param, body, return_type)),
+            info.clone(),
+        ))
     }
 
-    fn check_tuple(&mut self, elems: &[Ast]) -> TypeResult<CheckedAst> {
+    fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
         if elems.is_empty() {
-            return Ok(CheckedAst::Tuple(vec![], std_types::UNIT));
+            return Ok(CheckedAst::Tuple(vec![], std_types::UNIT, info.clone()));
         }
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
@@ -329,10 +333,14 @@ impl<'a> TypeChecker<'a> {
             .map(|e| e.get_type())
             .cloned()
             .collect::<Vec<_>>();
-        Ok(CheckedAst::Tuple(checked_elems, Type::Tuple(elem_types)))
+        Ok(CheckedAst::Tuple(
+            checked_elems,
+            Type::Tuple(elem_types),
+            info.clone(),
+        ))
     }
 
-    fn check_list(&mut self, elems: &[Ast]) -> TypeResult<CheckedAst> {
+    fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
             .iter()
@@ -355,10 +363,15 @@ impl<'a> TypeChecker<'a> {
         Ok(CheckedAst::List(
             checked_elems,
             Type::List(Box::new(list_type)),
+            info.clone(),
         ))
     }
 
-    fn check_record(&mut self, pairs: &[(RecordKey, Ast)]) -> TypeResult<CheckedAst> {
+    fn check_record(
+        &mut self,
+        pairs: &[(RecordKey, Ast)],
+        info: &LineInfo,
+    ) -> TypeResult<CheckedAst> {
         let pairs = pairs
             .iter()
             .map(|(k, v)| Ok((k.clone(), self.check_expr(v)?)))
@@ -369,15 +382,17 @@ impl<'a> TypeChecker<'a> {
                 .map(|(k, v)| (k.clone(), v.get_type().clone()))
                 .collect(),
         );
-        Ok(CheckedAst::Record(pairs, record_type))
+        Ok(CheckedAst::Record(pairs, record_type, info.clone()))
     }
 
     fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
             Some(IdentifierType::Variable(ty)) => {
-                CheckedAst::Identifier(name.to_string(), ty.clone())
+                CheckedAst::Identifier(name.to_string(), ty.clone(), info.clone())
             }
-            Some(IdentifierType::Type(ty)) => CheckedAst::Literal(Value::Type(ty.clone())),
+            Some(IdentifierType::Type(ty)) => {
+                CheckedAst::Literal(Value::Type(ty.clone()), info.clone())
+            }
             Some(IdentifierType::Function(variants)) => {
                 // TODO: Do not select the first variant!!!
                 // Instead, select the variant that matches the arguments types
@@ -387,22 +402,28 @@ impl<'a> TypeChecker<'a> {
                     CheckedAst::Identifier(
                         name.to_string(),
                         Type::Function(Box::new(variant.clone())),
+                        info.clone(),
                     )
                 } else {
                     return Err(TypeError {
-                        message: format!("Function '{}' has no variants", name),
+                        message: format!("Function '{}' has no variants at {}", name, info.start),
                     });
                 }
             }
             None => {
                 return Err(TypeError {
-                    message: format!("Unknown variable: {} at {}", name, info.start),
+                    message: format!("Unknown variable '{}' at {}", name, info.start),
                 })
             }
         })
     }
 
-    fn check_assignment(&mut self, target: &Ast, expr: &Ast) -> TypeResult<CheckedAst> {
+    fn check_assignment(
+        &mut self,
+        target: &Ast,
+        expr: &Ast,
+        info: &LineInfo,
+    ) -> TypeResult<CheckedAst> {
         let target = match target {
             Ast::Identifier(name, _) => name,
             _ => {
@@ -423,15 +444,21 @@ impl<'a> TypeChecker<'a> {
         }
         let expr = self.check_expr(expr)?;
         let ty = expr.get_type().clone();
+        let assign_info = info.join(expr.info());
         self.env.add_variable(target, ty.clone());
         Ok(CheckedAst::Assignment(
-            Box::new(CheckedAst::Identifier(target.to_string(), ty.clone())),
+            Box::new(CheckedAst::Identifier(
+                target.to_string(),
+                ty.clone(),
+                info.clone(),
+            )),
             Box::new(expr),
             ty,
+            assign_info,
         ))
     }
 
-    fn check_block(&mut self, exprs: &[Ast]) -> TypeResult<CheckedAst> {
+    fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
         let mut scope = self.new_scope();
         let exprs = scope.check_top_exprs(exprs)?;
         let ty = if let Some(expr) = exprs.last() {
@@ -439,10 +466,10 @@ impl<'a> TypeChecker<'a> {
         } else {
             std_types::UNIT
         };
-        Ok(CheckedAst::Block(exprs, ty))
+        Ok(CheckedAst::Block(exprs, ty, info.clone()))
     }
 
-    fn check_call(&mut self, expr: &Ast, arg: &Ast) -> TypeResult<CheckedAst> {
+    fn check_call(&mut self, expr: &Ast, arg: &Ast, info: &LineInfo) -> TypeResult<CheckedAst> {
         // TODO: Add support for multiple function variants
         // TODO: This job should be done in the type checker
         // TODO: so that the interpreter can just call the function
@@ -464,6 +491,7 @@ impl<'a> TypeChecker<'a> {
                     return_type: ret.clone(),
                     function: Box::new(expr),
                     arg: Box::new(arg),
+                    info: info.clone(),
                 })
             } else {
                 Err(TypeError {
@@ -485,31 +513,35 @@ impl<'a> TypeChecker<'a> {
     /// An accumulate expression results in a function variation-specific call.
     fn check_accumulate(
         &mut self,
-        info: &OperatorInfo,
+        op_info: &OperatorInfo,
         operands: &[Ast],
+        info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
         let checked_operands = operands
             .iter()
             .map(|a| self.check_expr(a))
             .collect::<TypeResult<Vec<_>>>()?;
-        if let Some(op) = self.lookup_operator(&info.symbol).into_iter().find(|op| {
-            checked_operands
-                .iter()
-                .zip(op.signature().params.iter())
-                .all(|(operand, param)| operand.get_type().subtype(&param.ty))
-        }) {
+        if let Some(op) = self
+            .lookup_operator(&op_info.symbol)
+            .into_iter()
+            .find(|op| {
+                checked_operands
+                    .iter()
+                    .zip(op.signature().params.iter())
+                    .all(|(operand, param)| operand.get_type().subtype(&param.ty))
+            })
+        {
             match &op.handler {
                 OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
                     // Construct a function call expression
                     let mut operands = operands.iter();
                     let mut call = Ast::Call(
-                        Box::new(Ast::Identifier(function_name.clone(), LineInfo::default())),
+                        Box::new(Ast::Identifier(function_name.clone(), info.clone())),
                         Box::new(operands.next().unwrap().clone()),
-                        LineInfo::default(),
+                        info.clone(),
                     );
                     for arg in operands {
-                        call =
-                            Ast::Call(Box::new(call), Box::new(arg.clone()), LineInfo::default());
+                        call = Ast::Call(Box::new(call), Box::new(arg.clone()), info.clone());
                     }
                     self.check_expr(&call)
                 }
@@ -521,7 +553,7 @@ impl<'a> TypeChecker<'a> {
             }
         } else {
             Err(TypeError {
-                message: format!("Unknown accumulate operator: '{}'", info.symbol),
+                message: format!("Unknown accumulate operator '{}'", op_info.symbol),
             })
         }
     }
@@ -542,11 +574,12 @@ impl<'a> TypeChecker<'a> {
     fn check_binary(
         &mut self,
         lhs: &Ast,
-        info: &OperatorInfo,
+        op_info: &OperatorInfo,
         rhs: &Ast,
+        info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        if let Some(op) = self.lookup_static_operator(&info.symbol) {
-            log::trace!("Found static operator: {}", info.symbol);
+        if let Some(op) = self.lookup_static_operator(&op_info.symbol) {
+            log::trace!("Found static operator: {}", op_info.symbol);
             return self.check_expr(&(op.handler)(StaticOperatorAst::Infix(
                 lhs.clone(),
                 rhs.clone(),
@@ -556,7 +589,7 @@ impl<'a> TypeChecker<'a> {
         let checked_rhs = self.check_expr(rhs)?;
         let lhs_type = checked_lhs.get_type();
         let rhs_type = checked_rhs.get_type();
-        for op in self.lookup_operator(&info.symbol) {
+        for op in self.lookup_operator(&op_info.symbol) {
             if !lhs_type.subtype(&op.signature().params[0].ty) {
                 log::trace!(
                     "Skipping operator: {} because lhs type {} is not a subtype of {}",
@@ -589,11 +622,17 @@ impl<'a> TypeChecker<'a> {
                     let function_ty = self
                         .lookup_function(function_name)
                         .ok_or_else(|| TypeError {
-                            message: format!("Unknown function: '{}'", function_name),
+                            message: format!(
+                                "Unknown function '{}' at {}",
+                                function_name, info.start
+                            ),
                         })?
                         .first()
                         .ok_or_else(|| TypeError {
-                            message: format!("Function '{}' has no variants", function_name),
+                            message: format!(
+                                "Function '{}' has no variants at {}",
+                                function_name, info.start
+                            ),
                         })?
                         .clone();
 
@@ -611,12 +650,15 @@ impl<'a> TypeChecker<'a> {
                             function: Box::new(CheckedAst::Identifier(
                                 function_name.clone(),
                                 Type::Function(Box::new(function_ty.clone())),
+                                info.clone(),
                             )),
                             arg: Box::new(checked_lhs),
                             return_type: inner_ret.clone(),
+                            info: info.clone(),
                         }),
                         arg: Box::new(checked_rhs),
                         return_type: outer_ret.clone(),
+                        info: info.clone(),
                     };
 
                     log::trace!(
@@ -628,7 +670,7 @@ impl<'a> TypeChecker<'a> {
                     return Ok(result);
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
-                    log::trace!("Static operator: {}", info.symbol);
+                    log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
                     let ast = handler(StaticOperatorAst::Infix(lhs.clone(), rhs.clone()));
                     return self.check_expr(&ast);
@@ -636,23 +678,31 @@ impl<'a> TypeChecker<'a> {
             }
         }
         Err(TypeError {
-            message: format!("Unknown binary operator: '{}'", info.symbol),
+            message: format!(
+                "Unknown binary operator '{}' at {}",
+                op_info.symbol, info.start
+            ),
         })
     }
 
-    fn check_unary(&mut self, info: &OperatorInfo, operand: &Ast) -> TypeResult<CheckedAst> {
+    fn check_unary(
+        &mut self,
+        op_info: &OperatorInfo,
+        operand: &Ast,
+        info: &LineInfo,
+    ) -> TypeResult<CheckedAst> {
         let checked_operand = self.check_expr(operand)?;
         let operand_type = checked_operand.get_type();
-        for op in self.lookup_operator(&info.symbol) {
+        for op in self.lookup_operator(&op_info.symbol) {
             if !op.signature().params[0].ty.subtype(operand_type) {
                 continue;
             }
             match &op.handler {
                 OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
                     let call = Ast::Call(
-                        Box::new(Ast::Identifier(function_name.clone(), LineInfo::default())),
+                        Box::new(Ast::Identifier(function_name.clone(), info.clone())),
                         Box::new(operand.clone()),
-                        LineInfo::default(),
+                        info.clone(),
                     );
                     return self.check_expr(&call);
                 }
@@ -664,7 +714,10 @@ impl<'a> TypeChecker<'a> {
             }
         }
         Err(TypeError {
-            message: format!("Unknown unary operator: '{}'", info.symbol),
+            message: format!(
+                "Unknown unary operator '{}' at {}",
+                op_info.symbol, info.start
+            ),
         })
     }
 
