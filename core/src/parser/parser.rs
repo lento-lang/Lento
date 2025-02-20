@@ -870,7 +870,7 @@ impl<R: Read> Parser<R> {
                 break;
             }
         }
-        let info = info.join(&exprs.last().unwrap().info());
+        let info = info.join(exprs.last().unwrap().info());
         Ok(Ast::Accumulate(op.clone(), exprs, info))
     }
 
@@ -1000,7 +1000,7 @@ mod syntax_sugar {
             call_info.clone(),
         );
         for arg in args {
-            let arg_info = call_info.join(&arg.info());
+            let arg_info = call_info.join(arg.info());
             call = Ast::Call(Box::new(call), Box::new(arg), arg_info);
         }
         call

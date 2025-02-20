@@ -140,7 +140,7 @@ impl Debug for LocationInfo {
 
 impl Display for LocationInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "line {}, column {}", self.line, self.column)
+        write!(f, "line {} column {}", self.line, self.column)
     }
 }
 
