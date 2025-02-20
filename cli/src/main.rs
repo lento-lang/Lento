@@ -7,7 +7,7 @@ use std::process::exit;
 
 use args::{lento_args, lento_command};
 
-use commands::{eval::handle_command_eval, files::handle_command_files, repl::handle_command_repl};
+use commands::{eval::handle_command_eval, files::handle_command_file, repl::handle_command_repl};
 use error::print_error_usage;
 
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -28,8 +28,8 @@ fn main() {
         Some((lento_command::RUN, _)) => println!("The run command is not yet implemented!"),
         Some((lento_command::NEW, _)) => println!("The new command is not yet implemented!"),
         Some((lento_command::TEST, _)) => println!("The test command is not yet implemented!"),
-        _ => match args.get_many::<String>("file") {
-            Some(raw_files) => handle_command_files(raw_files, &mut arg_parser),
+        _ => match args.get_one::<String>("file") {
+            Some(raw_file) => handle_command_file(raw_file),
             _ => {
                 print_error_usage("No command provided".to_string(), &mut arg_parser);
                 println!("{:#?}", args);
