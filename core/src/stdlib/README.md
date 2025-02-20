@@ -1,6 +1,6 @@
 <div align=center>
     <br>
-    <img src="../../assets/logo_white.png" height=100px alt="Lento logo">
+    <img src="../../../assets/logo_white.png" height=100px alt="Lento logo">
     <h1>Lento <code>Std</code></h1>
     <p>
 		<!-- portable to different platforms, interoperable languages, environments, etc. -->
