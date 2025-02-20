@@ -1,0 +1,16 @@
+[package]
+name = "lento_cli"
+version = "2.3.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lento_core = { path = "../core" }
+colorful = "0.2.2"                                   # Alternative: https://crates.io/crates/colored/2.0.0
+clap = { version = "4.0.32", features = ["string"] }
+rayon = "1.6.1"
+chrono = "0.4.37"
+ctrlc = "3.4.5"
+env_logger = "0.11.5"
+log = "0.4.22"

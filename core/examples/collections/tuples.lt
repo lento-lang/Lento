@@ -1,0 +1,16 @@
+
+valueTuple = (1, "hello", true)
+println(valueTuple.1) // Accessing the first element
+
+// Named tuples
+namedTuple = (number: 1, greeting: "hello", flag: true)
+println(namedTuple.greeting) // Accessing by name
+
+myVar = (value: 10, status: Status.Succeeded)
+// Inferred type (implicit): (value: int, status: Status)
+
+// Explicit
+myVar : (status: Status, value: int)
+myVar = (value: 10, status: Status.Succeeded)
+
+

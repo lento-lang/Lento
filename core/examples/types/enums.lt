@@ -1,0 +1,14 @@
+enum Status = Succeeded | Failed
+myFunc : int, int -> (int, Status)
+myFunc a b = (a + b, Status.Succeeded) //This may be an error-prone operation
+
+enum Result<S, E> = Ok(S) | Error(E)
+
+someResult: Result(String, Int) = Ok("Hello")
+someError: Result(String, Int) = Error(404)
+
+if someResult is Ok(s) {
+  print("Success:", s)
+} else if someResult is Error(e) {
+  print("Error:", e)
+} // 

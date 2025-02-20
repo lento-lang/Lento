@@ -1,0 +1,8 @@
+// Primitive types have lowercase names
+type Index = usize
+
+// User-defined types and type classes have uppercase names
+type Age = Nat
+
+// Type variables have lowercase names
+type Strings = [string]

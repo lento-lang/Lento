@@ -1,0 +1,15 @@
+r = 1 + 2 * 3 / 4 - 5 // -2.5
+r = 2 ** 3 // 8
+r = 2 ^ 3  // xor operator (bitwise)
+r = 2 & 3  // and operator (bitwise)
+r = 2 | 3  // or operator (bitwise)
+r = 2 << 3 // shift left operator (bitwise)
+r = 2 >> 3 // shift right operator (bitwise)
+r = 2 >>> 3 // shift right operator (bitwise)
+r = 2 % 3  // 2
+r = 2 / 3 // 0.6666666666666666...
+
+use math.sqrt
+
+r = sqrt(16)
+print r

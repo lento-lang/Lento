@@ -1,0 +1,43 @@
+match 1..3 {
+    [4, 5, 6] => println("This clause won't match"),
+    [1, x, 3] when x > 10 => println("This clause won't match, x = " + x),
+    [1, x, 3] => println("This clause will match and bind x to " + x),
+    _ => println("This clause would match any value")
+}
+
+
+match user_input {
+    "start" => start_game(),
+    "load" => load_game(),
+    "quit" => quit_game(),
+    _ => println "Invalid command",
+}
+
+match user_data {
+    {name, age, "Sweden"} => "Swedish user named {name}, age {age}",
+    {name, age, country} => "User from {country} named {name}, age {age}",
+    _ => "Unknown user data format"
+}
+
+match shape {
+    Circle(radius) => "Circle with radius: " + radius,
+    Rectangle(width, height) => "Rectangle with dimensions: " + width + "x" + height,
+    _ => "Unknown shape"
+}
+
+match numbers {
+    {x, y} when x > y => "x is greater than y",
+    {x, y} when x < y => "x is less than y",
+    {x, y} => "x is equal to y"
+}
+
+match number_list {
+    [] => "The list is empty",
+    [head | tail] => "Head: " + head + ", Tail: " + tail
+}
+
+if [1, 2, 3] is [_, x, _] and x > 10 {
+    println "Pattern matches and x is greater than 10"
+} else {
+    println "Pattern did not match or x is not greater than 10"
+}
