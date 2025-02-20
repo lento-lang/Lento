@@ -32,8 +32,8 @@ pub mod lento_command {
 }
 
 pub fn lento_args() -> Command {
-    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION} {LANG_TITLE} {V}{LANG_VERSION}\nA command line interface tool for\nthe Lento programming language.",
-        CLI_TITLE = "Lento CLI".bold(),
+    let title_short = format!("{CLI_TITLE} {V}{CLI_VERSION}, {LANG_TITLE} {V}{LANG_VERSION}\nA command line utility for the Lento toolchain.",
+        CLI_TITLE = "Lento cli".bold(),
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow(),
 		LANG_TITLE = "language".bold(),
@@ -43,13 +43,13 @@ pub fn lento_args() -> Command {
         "\n\
 {MASCOT}
 {VL} {CLI_TITLE} version {CLI_VERSION} and {LANG_TITLE} version {LANG_VERSION}.
-{VL} A command line interface tool for the Lento programming language.
+{VL} A command line utility for the Lento toolchain and ecosystem.
 {VL} See {LINK} for more information.",
         MASCOT = MASCOT.color(Color::RoyalBlue1).bold(),
         VL = "|".dark_gray(),
-        CLI_TITLE = "Lento CLI".bold(),
+        CLI_TITLE = "Lento cli".bold(),
         CLI_VERSION = CLI_VERSION.yellow(),
-        LANG_TITLE = "Lento Lang".bold(),
+        LANG_TITLE = "language".bold(),
         LANG_VERSION = LANG_VERSION.yellow(),
         LINK = "https://lento-lang.org".underlined().light_blue()
     );
@@ -113,14 +113,15 @@ pub fn lento_args() -> Command {
     .bin_name("lt")
     .before_help(title_short.clone())
     .before_long_help(title_long.clone())
+	.arg(arg!([file] "Interprets the given file"))
     // .term_width(80)
     .version(CLI_VERSION)
     .long_version(title_long)
     .help_template("{before-help}{usage-heading} {usage}\n\n{all-args}{after-help}")
-    .override_usage(format!("{} {}", "lt".bold(), "[command] (options) (files)".dim()))
+    .override_usage(format!("{} {}", "lt".bold(), "[command] (options) (file)".dim()))
     // .next_help_heading("\x1B[38;5;6mOptions\x1B[0m:\x1B[8m")
     // .args([
-    //     arg!([files] "Interprets the given files in order").help_heading("Interpreter")
+    //     arg!([file] "Interprets the given file in order").help_heading("Interpreter")
     // ])
     // .subcommand_help_heading("\x1B[38;5;6mCommands\x1B[0m: ")
     .subcommand(
@@ -144,9 +145,9 @@ pub fn lento_args() -> Command {
         .about("Compile file")
         .long_about("Compiles a file to a standalone executable, a dynamically linked library,\nor cross compile to a target language or platform.")
         .version("1.0")
-        .override_usage(format!("{} {}", "lt compile".bold(), "(options) [files]".dim()))
+        .override_usage(format!("{} {}", "lt compile".bold(), "(options) [file]".dim()))
         .args([
-            arg!(<files> "Sets the input file(s) to use"),
+            arg!(<file> "Sets the input file(s) to use"),
             arg!(-t --target <target> "Sets the target to compile for"),
             arg!(-o --output <output> "Sets the output file to use").value_name("testing"),
             arg!(-v --verbose "turns on verbose information"),
@@ -160,9 +161,9 @@ pub fn lento_args() -> Command {
         .about("Generate documentation")
         .long_about("Generates documentation for a project or a file.\nSupports Markdown, HTML, and LaTeX.")
         .version("1.0")
-        .override_usage(format!("{} {}", "lt doc".bold(), "(options) (files)".dim()))
+        .override_usage(format!("{} {}", "lt doc".bold(), "(options) (file)".dim()))
         .args([
-            arg!([files] "Sets the input files to use (default: all files in the current directory)"),
+            arg!([file] "Sets the input file to use (default: main.lt file)").default_value("main.lt"),
             arg!(-o --output <output> "Sets the output file to use"),
             arg!(-t --target <target> "Sets the target to generate documentation for"),
             arg!(-v --verbose "turns on verbose information"),
@@ -188,11 +189,11 @@ pub fn lento_args() -> Command {
         Command::new(lento_command::FMT)
         .alias("f")
         .about("Format a file or project")
-        .long_about("Formats a file or a all files in the current project.\nThis command is useful for keeping code consistent and readable.")
+        .long_about("Formats a file or a all file in the current project.\nThis command is useful for keeping code consistent and readable.")
         .version("1.0")
-        .override_usage(format!("{} {}", "lt fmt".bold(), "(options) (files)".dim()))
+        .override_usage(format!("{} {}", "lt fmt".bold(), "(options) (file)".dim()))
         .args([
-            arg!([files] "Sets the input files to use (default: all files in the current directory)"),
+            arg!([file] "Sets the input file to use (default: all files in the current directory)"),
             arg!(-v --verbose "turns on verbose information"),
             arg!(-d --debug "Turns on additional debugging information"),
         ])
@@ -200,12 +201,12 @@ pub fn lento_args() -> Command {
     .subcommand(
         Command::new(lento_command::LINT)
         .alias("l")
-        .about("Lints one or more files")
-        .long_about("Lints one or more files and prints any warnings or errors.\nPassing no files will lint all files in the current directory.")
+        .about("Lints one or more file")
+        .long_about("Lints one or more file and prints any warnings or errors.\nPassing no file will lint all files in the current directory.")
         .version("1.0")
-        .override_usage(format!("{} {}", "lt lint".bold(), "(options) (files)".dim()))
+        .override_usage(format!("{} {}", "lt lint".bold(), "(options) (file)".dim()))
         .args([
-            arg!([files] "Sets the input files to use (default: all files in the current directory)"),
+            arg!([file] "Sets the input file to use (default: all files in the current directory)"),
             arg!(-v --verbose "turns on verbose information"),
             arg!(-d --debug "Turns on additional debugging information"),
         ])
@@ -256,11 +257,11 @@ pub fn lento_args() -> Command {
         Command::new(lento_command::TEST)
         .alias("t")
         .about("Run unit tests")
-        .long_about("Runs unit tests in the current project.\nPassing no files will run all tests in the current directory.")
+        .long_about("Runs unit tests in the current project.\nPassing no file will run all tests in the current directory.")
         .version("1.0")
-        .override_usage(format!("{} {}", "lt test".bold(), "(options) (files)".dim()))
+        .override_usage(format!("{} {}", "lt test".bold(), "(options) (file)".dim()))
         .args([
-            arg!([files] "Sets the input files to use (default: all files in the current directory)"),
+            arg!([file] "Sets the input file to use (default: all files in the current directory)"),
             arg!(-v --verbose "turns on verbose information"),
             arg!(-d --debug "Turns on additional debugging information"),
         ])
@@ -285,7 +286,7 @@ pub fn _help() {
     -v, --version                   Prints the version of the program.
     -e, --evaluate [expr]           Evaluate one or more expressions.
     -r, --repl (verbose)            Starts the REPL mode.
-    -l, --lint [files]              Lints the given files.
+    -l, --lint [file]               Lints the given file.
     -c, --compile (target) [file]   Compiles the given file. (Not implemented)
 
 {COMPILE_TARGETS}:                    Cross compile to a target language or platform.
@@ -315,7 +316,7 @@ pub fn _help() {
         LINK = "https://lento-lang.org".underlined().light_blue(),
         USAGE = "Usage".cyan(),
         CMD = "lt".bold(),
-        ARGS = "(options) (files)".dim(),
+        ARGS = "(options) (file)".dim(),
         OPTIONS = "Options".cyan().underlined(),
         COMPILE_TARGETS = "Compile targets".cyan().underlined(),
         EXAMPLES = "Examples".cyan().underlined(),

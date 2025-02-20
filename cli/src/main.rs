@@ -28,7 +28,7 @@ fn main() {
         Some((lento_command::RUN, _)) => println!("The run command is not yet implemented!"),
         Some((lento_command::NEW, _)) => println!("The new command is not yet implemented!"),
         Some((lento_command::TEST, _)) => println!("The test command is not yet implemented!"),
-        _ => match args.get_many::<String>("files") {
+        _ => match args.get_many::<String>("file") {
             Some(raw_files) => handle_command_files(raw_files, &mut arg_parser),
             _ => {
                 print_error_usage("No command provided".to_string(), &mut arg_parser);
