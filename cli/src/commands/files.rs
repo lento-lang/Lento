@@ -115,9 +115,6 @@ fn interpret_parse_results(parse_results: Vec<(&Path, Module)>) -> Failable<Vec<
         };
     }
     if !errors.is_empty() {
-        errors.push(runtime_error(
-            "One or more errors occurred during interpretation!".to_string(),
-        ));
         return Err(errors);
     }
     Ok(())
