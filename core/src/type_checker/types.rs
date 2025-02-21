@@ -70,6 +70,23 @@ impl TypeResult {
             other
         }
     }
+
+    pub fn pretty_print_color_judgements(&self) -> String {
+        let mut result = "{ ".to_string();
+        for (i, (name, ty)) in self.judgements.iter().enumerate() {
+            result.push_str(&format!(
+                "{}: {}",
+                name.to_string().yellow(),
+                ty.pretty_print_color()
+            ));
+            if i < self.judgements.len() - 1 {
+                result.push(',');
+            }
+            result.push(' ');
+        }
+        result.push('}');
+        result
+    }
 }
 
 impl From<bool> for TypeResult {

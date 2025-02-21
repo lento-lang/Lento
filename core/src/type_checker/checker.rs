@@ -480,17 +480,23 @@ impl TypeChecker<'_> {
 
         // Go through the expression and check if the type is a function
         let expr = self.check_expr(expr)?;
-        log::trace!(
-            "Checking call: {} ({}) with applied to {}",
-            expr.print_sexpr(),
-            expr.get_type().pretty_print_color(),
-            arg.print_sexpr()
-        );
         if let Type::Function(fn_ty) = expr.get_type() {
             let FunctionType { param, ret } = fn_ty.borrow();
             // Check the type of the argument
             let arg = self.check_expr(arg)?;
-            if arg.get_type().subtype(&param.ty).success {
+            let tr = arg.get_type().subtype(&param.ty);
+            if tr.success {
+                log::info!(
+                    "Function call: {} : {} -> {} with argument {} : {}",
+                    expr.print_sexpr(),
+                    param.ty.pretty_print_color(),
+                    ret.pretty_print_color(),
+                    arg.pretty_print(),
+                    arg.get_type().pretty_print_color()
+                );
+                if !tr.judgements.is_empty() {
+                    log::trace!("Judgements: {}", tr.pretty_print_color_judgements());
+                }
                 Ok(CheckedAst::Call {
                     return_type: ret.clone(),
                     function: Box::new(expr),
