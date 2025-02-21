@@ -9,12 +9,17 @@ use args::{lento_args, lento_command};
 
 use commands::{eval::handle_command_eval, files::handle_command_file, repl::handle_command_repl};
 use error::print_error_usage;
+use logger::init_logger_str;
 
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let mut arg_parser = lento_args();
     let args = arg_parser.get_matches_mut();
+    if let Some(debug_level) = args.get_one::<String>("debug") {
+        init_logger_str(debug_level);
+    }
+
     match args.subcommand() {
         Some((lento_command::BUILD, _)) => println!("The build command is not yet implemented!"),
         Some((lento_command::COMPILE, _)) => {

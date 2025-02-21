@@ -106,14 +106,19 @@ pub fn lento_args() -> Command {
     );
 
     // Current year
-    let copy = format!("Lento is free and open source software under the MIT license.\nCopyright ©️{:?} William Rågstad, the Lento team and contributors.\n",
+    let copy = format!("Lento is free and open source software under the MIT license.\nCopyright ©️2017-{:?} William Rågstad, the Lento team and contributors.\n",
 		chrono::Local::now().year()).dark_gray();
+
+    let debug_arg = arg!(-d --debug [level] "Turns on additional debugging information")
+        .value_parser(["trace", "debug", "info", "warn", "error"])
+        .default_missing_value("debug");
 
     Command::new("Lento CLI")
     .bin_name("lt")
     .before_help(title_short.clone())
     .before_long_help(title_long.clone())
 	.arg(arg!([file] "Interprets the given file"))
+	.arg(debug_arg.clone())
     // .term_width(80)
     .version(CLI_VERSION)
     .long_version(title_long)
@@ -134,8 +139,7 @@ pub fn lento_args() -> Command {
         .args([
             arg!(-r --release "Builds the project in release mode"),
             arg!(-t --target <target> "Overrides the target to build for specified in the project file"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
         .after_help(compile_targets.clone())
     )
@@ -148,10 +152,9 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt compile".bold(), "(options) [file]".dim()))
         .args([
             arg!(<file> "Sets the input file(s) to use"),
-            arg!(-t --target <target> "Sets the target to compile for"),
+            arg!(-t --target <target> "Sets the target arch triplet to compile for"),
             arg!(-o --output <output> "Sets the output file to use").value_name("testing"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
         .after_help(compile_targets.clone())
     )
@@ -165,9 +168,7 @@ pub fn lento_args() -> Command {
         .args([
             arg!([file] "Sets the input file to use (default: main.lt file)").default_value("main.lt"),
             arg!(-o --output <output> "Sets the output file to use"),
-            arg!(-t --target <target> "Sets the target to generate documentation for"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
         .after_help(doc_targets)
     )
@@ -180,9 +181,7 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt eval".bold(), "(options) [expr]".dim()))
         .args([
             arg!(<expr> "Sets the expression to evaluate"),
-			arg!(-d --debug [level] "Turns on additional debugging information")
-			.value_parser(["trace", "debug", "info", "warn", "error"])
-			.default_missing_value("debug"),
+            debug_arg.clone(),
         ])
     )
     .subcommand(
@@ -194,8 +193,7 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt fmt".bold(), "(options) (file)".dim()))
         .args([
             arg!([file] "Sets the input file to use (default: all files in the current directory)"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
     )
     .subcommand(
@@ -207,8 +205,7 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt lint".bold(), "(options) (file)".dim()))
         .args([
             arg!([file] "Sets the input file to use (default: all files in the current directory)"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
     )
     .subcommand(
@@ -220,12 +217,12 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt new".bold(), "(options) [name]".dim()))
         .args([
             arg!([name] "Sets the name of the project").required(true),
+            arg!(-l --lib "Creates a library project").conflicts_with("bin"),
+			arg!(-b --bin "Creates a binary project").conflicts_with("lib"),
             arg!(-t --template [template] "Sets the template to use"),
-            arg!(-l --license [license] "Sets the license to use"),
             arg!(-a --author [author] "Sets the author to use"),
             arg!(-d --description [description] "Sets the description to use"),
-            arg!(-g --git "Initializes a git repository"),
-            arg!(-v --verbose "turns on verbose information"),
+            debug_arg.clone(),
         ])
     )
     .subcommand(
@@ -236,10 +233,8 @@ pub fn lento_args() -> Command {
         .version("1.0")
         .override_usage(format!("{} {}", "lt repl".bold(), "(options)".dim()))
 		.args([
-			arg!(-d --debug [level] "Turns on additional debugging information")
-			.value_parser(["trace", "debug", "info", "warn", "error"])
-			.default_missing_value("debug"),
 			arg!(-t --types "Print the types of values"),
+            debug_arg.clone(),
 		])
     )
     .subcommand(
@@ -249,8 +244,8 @@ pub fn lento_args() -> Command {
         .version("1.0")
         .override_usage(format!("{} {}", "lt run".bold(), "(options)".dim()))
         .args([
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+			arg!([task] "Sets the project task to run").default_value("start"),
+            debug_arg.clone(),
         ])
     )
     .subcommand(
@@ -262,8 +257,7 @@ pub fn lento_args() -> Command {
         .override_usage(format!("{} {}", "lt test".bold(), "(options) (file)".dim()))
         .args([
             arg!([file] "Sets the input file to use (default: all files in the current directory)"),
-            arg!(-v --verbose "turns on verbose information"),
-            arg!(-d --debug "Turns on additional debugging information"),
+            debug_arg.clone(),
         ])
     )
     .after_long_help(format!("{examples}\n\n{copy}"))
