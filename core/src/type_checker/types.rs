@@ -465,14 +465,14 @@ impl Type {
             Type::List(t) => format!("[{}]", t.pretty_print()),
             Type::Record(fields) => {
                 let mut result = String::new();
-                result.push_str("{");
+                result.push('{');
                 for (i, (name, t)) in fields.iter().enumerate() {
                     if i > 0 {
                         result.push_str(", ");
                     }
                     result.push_str(&format!("{}: {}", name, t.pretty_print()));
                 }
-                result.push_str("}");
+                result.push('}');
                 result
             }
             Type::Sum(types) => {
@@ -480,14 +480,14 @@ impl Type {
                     "()".to_string()
                 } else {
                     let mut result = String::new();
-                    result.push_str("(");
+                    result.push('(');
                     for (i, t) in types.iter().enumerate() {
                         if i > 0 {
                             result.push_str(" | ");
                         }
                         result.push_str(&t.pretty_print());
                     }
-                    result.push_str(")");
+                    result.push(')');
                     result
                 }
             }
@@ -495,28 +495,28 @@ impl Type {
                 let mut result = String::new();
                 result.push_str(&s.to_string());
                 if !params.is_empty() {
-                    result.push_str("<");
+                    result.push('<');
                     for (i, param) in params.iter().enumerate() {
                         if i > 0 {
                             result.push_str(", ");
                         }
                         result.push_str(&param.pretty_print());
                     }
-                    result.push_str(">");
+                    result.push('>');
                 }
                 result
             }
             Type::Variant(_, name, fields) => {
                 let mut result = String::new();
                 result.push_str(&name.to_string());
-                result.push_str("(");
+                result.push('(');
                 for (i, t) in fields.iter().enumerate() {
                     if i > 0 {
                         result.push_str(", ");
                     }
                     result.push_str(&t.pretty_print());
                 }
-                result.push_str(")");
+                result.push(')');
                 result
             }
         }
