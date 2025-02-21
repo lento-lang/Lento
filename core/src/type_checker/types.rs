@@ -109,6 +109,12 @@ pub enum Type {
     /// But they can be used to give a user-friendly name to a complex type.
     Alias(Str, Box<Type>),
 
+    /// A type variable.
+    /// The first argument is the name of the type variable.
+    /// A type variable is a placeholder for a type that is not yet known, but
+    /// can be used in place of a type in a generic type or a polymorphic function.
+    Variable(Str),
+
     /// A function type.
     /// The first argument is the list of parameter types.
     /// The second argument is the return type.
@@ -222,6 +228,7 @@ impl TypeTrait for Type {
         match self {
             Type::Literal(_) => self,
             Type::Alias(name, ty) => Type::Alias(name, Box::new(ty.simplify())),
+            Type::Variable(s) => Type::Variable(s),
             Type::Generic(s, params, body) => Type::Generic(
                 s,
                 params.into_iter().map(Type::simplify).collect(),
@@ -261,6 +268,7 @@ impl Display for Type {
         match self.clone().simplify() {
             Type::Literal(t) => write!(f, "{}", t),
             Type::Alias(name, _) => write!(f, "{}", name),
+            Type::Variable(s) => write!(f, "{}", s),
             Type::Function(func) => {
                 write!(f, "{}", func.param.ty)?;
                 write!(f, " -> {}", func.ret)
@@ -327,6 +335,7 @@ impl Type {
         match self.clone().simplify() {
             Type::Literal(t) => t.to_string(),
             Type::Alias(name, _) => name.to_string(),
+            Type::Variable(s) => s.to_string(),
             Type::Function(f) => f.pretty_print(),
             Type::Tuple(types) => {
                 if types.is_empty() {
@@ -408,6 +417,7 @@ impl Type {
         match self.clone().simplify() {
             Type::Literal(t) => t.to_string().light_blue().to_string(),
             Type::Alias(name, _) => name.to_string().light_blue().to_string(),
+            Type::Variable(s) => s.to_string().yellow().to_string(),
             Type::Function(f) => f.pretty_print_color(),
             Type::Tuple(types) => {
                 if types.is_empty() {
