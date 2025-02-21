@@ -9,10 +9,10 @@ The Lento compiler is an open-source project, and contributions are highly appre
 Here are some ways you can contribute to the development of the Lento compiler:
 
 - [Contributing to the Lento compiler](#contributing-to-the-lento-compiler)
-	- [Reporting issues](#reporting-issues)
-	- [Contributing documentation](#contributing-documentation)
-	- [Contributing code](#contributing-code)
-	- [Contributing to the backends](#contributing-to-the-backends)
+  - [Reporting issues](#reporting-issues)
+  - [Contributing documentation](#contributing-documentation)
+  - [Contributing code](#contributing-code)
+  - [Contributing to the backends](#contributing-to-the-backends)
 
 ## Reporting issues
 

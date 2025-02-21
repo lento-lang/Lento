@@ -77,7 +77,7 @@ pub trait Backend<Out: Write> {
     /// The output type for the backend. \
     /// The output type is used to specify the output stream for the compiled module.
     /// For example, the output type could be a file, a buffer, or a stream.
-
+    ///
     /// Compiles a module using the specified backend and options. \
     /// The method returns a `CompileResult` indicating whether the module compiled successfully.
     fn compile_module(&mut self, module: &Module, options: CompileOptions<Out>) -> CompileResult
