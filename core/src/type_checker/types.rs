@@ -59,6 +59,23 @@ impl FunctionType {
     pub fn new(param: CheckedParam, ret: Type) -> Self {
         FunctionType { param, ret }
     }
+
+    pub fn pretty_print(&self) -> String {
+        format!(
+            "{} -> {}",
+            self.param.ty.pretty_print(),
+            self.ret.pretty_print()
+        )
+    }
+
+    pub fn pretty_print_color(&self) -> String {
+        format!(
+            "{} {} {}",
+            self.param.ty.pretty_print_color(),
+            "->".dark_gray(),
+            self.ret.pretty_print_color()
+        )
+    }
 }
 
 impl TypeTrait for FunctionType {
@@ -74,23 +91,6 @@ impl TypeTrait for FunctionType {
             },
             ret: self.ret.simplify(),
         }
-    }
-}
-
-impl Display for FunctionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} -> {}", self.param.ty, self.ret)
-    }
-}
-
-impl FunctionType {
-    pub fn pretty_print_color(&self) -> String {
-        format!(
-            "{} {} {}",
-            self.param.ty.pretty_print_color(),
-            "->".dark_gray(),
-            self.ret.pretty_print_color()
-        )
     }
 }
 
@@ -323,6 +323,87 @@ impl Display for Type {
 }
 
 impl Type {
+    pub fn pretty_print(&self) -> String {
+        match self.clone().simplify() {
+            Type::Literal(t) => t.to_string(),
+            Type::Alias(name, _) => name.to_string(),
+            Type::Function(f) => f.pretty_print(),
+            Type::Tuple(types) => {
+                if types.is_empty() {
+                    "()".to_string()
+                } else {
+                    let mut result = String::new();
+                    result.push_str("(");
+                    for (i, t) in types.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&t.pretty_print());
+                    }
+                    result.push_str(")");
+                    result
+                }
+            }
+            Type::List(t) => format!("[{}]", t.pretty_print()),
+            Type::Record(fields) => {
+                let mut result = String::new();
+                result.push_str("{");
+                for (i, (name, t)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&format!("{}: {}", name, t.pretty_print()));
+                }
+                result.push_str("}");
+                result
+            }
+            Type::Sum(types) => {
+                if types.is_empty() {
+                    "()".to_string()
+                } else {
+                    let mut result = String::new();
+                    result.push_str("(");
+                    for (i, t) in types.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(" | ");
+                        }
+                        result.push_str(&t.pretty_print());
+                    }
+                    result.push_str(")");
+                    result
+                }
+            }
+            Type::Generic(s, params, _) => {
+                let mut result = String::new();
+                result.push_str(&s.to_string());
+                if !params.is_empty() {
+                    result.push_str("<");
+                    for (i, param) in params.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&param.pretty_print());
+                    }
+                    result.push_str(">");
+                }
+                result
+            }
+            Type::Variant(_, name, fields) => {
+                let mut result = String::new();
+                result.push_str(&name.to_string());
+                result.push_str("(");
+                for (i, t) in fields.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&t.pretty_print());
+                }
+                result.push_str(")");
+                result
+            }
+        }
+    }
+
     pub fn pretty_print_color(&self) -> String {
         match self.clone().simplify() {
             Type::Literal(t) => t.to_string().light_blue().to_string(),

@@ -208,7 +208,11 @@ impl TypeChecker<'_> {
                             param: checked_param,
                             ret: checked.get_type().clone(),
                         };
-                        log::debug!("Adding function '{}' with variation: {}", name, variation);
+                        log::debug!(
+                            "Adding function '{}' with variation: {}",
+                            name,
+                            variation.pretty_print()
+                        );
                         self.env.add_function(name.clone(), variation);
                     }
                     _ => {

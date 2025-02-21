@@ -36,8 +36,12 @@ pub fn handle_command_file(file: &str) {
     match eval_module(&checked_module, &mut env) {
         Ok(val) => {
             if val != Value::Unit {
-                println!("{} {}", "Result:".light_green(), val);
-                println!("{} {}", "Type:".light_green(), val.get_type());
+                println!("{} {}", "Result:".light_green(), val.pretty_print_color());
+                println!(
+                    "{} {}",
+                    "Type:".light_green(),
+                    val.get_type().pretty_print_color()
+                );
             }
         }
         Err(err) => {

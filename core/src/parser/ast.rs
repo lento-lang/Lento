@@ -113,7 +113,7 @@ impl Ast {
 
     pub fn print_sexpr(&self) -> String {
         match self {
-            Ast::Literal(value, _) => value.to_string(),
+            Ast::Literal(value, _) => value.pretty_print(),
             Ast::Tuple(elements, _) => format!(
                 "({})",
                 elements

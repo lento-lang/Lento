@@ -118,8 +118,8 @@ impl Initializer {
                             panic!(
                                 "Function type mismatch for operator '{}': expected '{}', got '{}'",
                                 op.info.name,
-                                signature.function_type(),
-                                func.get_type()
+                                signature.function_type().pretty_print(),
+                                func.get_type().pretty_print()
                             );
                         }
                     }

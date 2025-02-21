@@ -47,6 +47,10 @@ impl CheckedFunction {
             ty: Type::Function(Box::new(ty)),
         }
     }
+
+    pub fn pretty_print(&self) -> String {
+        format!("{} -> {}", self.param.ty, self.return_type)
+    }
 }
 
 impl GetType for CheckedFunction {
@@ -132,7 +136,7 @@ impl CheckedAst {
 
     pub fn print_sexpr(&self) -> String {
         match self {
-            CheckedAst::Literal(value, _) => value.to_string(),
+            CheckedAst::Literal(value, _) => value.pretty_print(),
             CheckedAst::Tuple(elements, _, _) => format!(
                 "({})",
                 elements
@@ -195,6 +199,64 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        match self {
+            Self::Literal(l, _) => l.pretty_print(),
+            Self::Tuple(t, _, _) => {
+                let mut result = "(".to_string();
+                for (i, v) in t.iter().enumerate() {
+                    result.push_str(&v.pretty_print());
+                    if i < t.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push(')');
+                result
+            }
+            Self::List(l, _, _) => {
+                let mut result = "[".to_string();
+                for (i, v) in l.iter().enumerate() {
+                    result.push_str(&v.pretty_print());
+                    if i < l.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push(']');
+                result
+            }
+            Self::Record(r, _, _) => {
+                let mut result = "{ ".to_string();
+                for (i, (k, v)) in r.iter().enumerate() {
+                    result.push_str(&format!("{}: {}", k, v.pretty_print()));
+                    if i < r.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push_str(" }");
+                result
+            }
+            Self::Identifier(name, _, _) => name.clone(),
+            Self::Call { function, arg, .. } => {
+                format!("{}({})", function.pretty_print(), arg.pretty_print())
+            }
+            Self::Function(fun, _) => fun.pretty_print(),
+            Self::Assignment(lhs, rhs, _, _) => {
+                format!("{} = {}", lhs.pretty_print(), rhs.pretty_print())
+            }
+            Self::Block(expressions, _, _) => {
+                let mut result = "{".to_string();
+                for (i, e) in expressions.iter().enumerate() {
+                    result.push_str(&format!("    {}", e.pretty_print()));
+                    if i < expressions.len() - 1 {
+                        result.push_str("; ");
+                    }
+                }
+                result.push('}');
+                result
+            }
         }
     }
 }

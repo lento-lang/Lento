@@ -19,7 +19,7 @@ pub fn print() -> Function {
         "print".into(),
         |values| {
             for val in values {
-                println!("{}", val);
+                println!("{}", val.pretty_print());
             }
             Ok(Value::Unit)
         },

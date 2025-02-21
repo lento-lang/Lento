@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt::Display};
+use std::fmt::Display;
 
 use crate::type_checker::{
     checked_ast::{CheckedAst, CheckedParam},
@@ -166,69 +166,6 @@ impl GetType for Value {
     }
 }
 
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Unit => write!(f, "()"),
-            Value::Number(n) => n.fmt(f),
-            Value::String(s) => write!(f, "{}", s),
-            Value::Char(c) => write!(f, "{}", c),
-            Value::Boolean(b) => write!(f, "{}", b),
-            Value::Tuple(t, _) => {
-                write!(f, "(")?;
-                for (i, v) in t.iter().enumerate() {
-                    write!(f, "{}", v)?;
-                    if i < t.len() - 1 {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, ")")
-            }
-            Value::List(l, _) => {
-                write!(f, "[")?;
-                for (i, v) in l.iter().enumerate() {
-                    write!(f, "{}", v)?;
-                    if i < l.len() - 1 {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, "]")
-            }
-            Value::Record(r, _) => {
-                write!(f, "{{ ")?;
-                for (i, (k, v)) in r.iter().enumerate() {
-                    write!(f, "{}: {}", k, v)?;
-                    if i < r.len() - 1 {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, " }}")
-            }
-            Value::Function(fun) => match fun.borrow() {
-                Function::User(UserFunction {
-                    param,
-                    body: _,
-                    closure: _,
-                    ret,
-                }) => {
-                    writeln!(f, "{} -> {}", param.ty, ret)
-                }
-                Function::Native(NativeFunction { params, ret, .. }) => {
-                    write!(f, "(")?;
-                    for (i, p) in params.iter().enumerate() {
-                        write!(f, "{}", p.ty)?;
-                        if i < params.len() - 1 {
-                            write!(f, ", ")?;
-                        }
-                    }
-                    write!(f, ") -> {}", ret)
-                }
-            },
-            Value::Type(ty) => write!(f, "{}", ty),
-        }
-    }
-}
-
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -298,7 +235,7 @@ impl Value {
 
         match self {
             Value::Unit => format!("{}", "()".light_gray()),
-            Value::Number(_) => format!("{}", self).yellow().to_string(),
+            Value::Number(n) => format!("{}", n).yellow().to_string(),
             Value::String(s) => format!("\"{}\"", s).light_yellow().to_string(),
             Value::Char(c) => format!("'{}'", c).light_green().to_string(),
             Value::Boolean(b) => format!("{}", b.to_string().magenta()),
