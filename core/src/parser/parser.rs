@@ -194,6 +194,16 @@ impl<R: Read> Parser<R> {
         ))
     }
 
+    /// Parse a parenthesized function call.
+    /// This function is called when the parser encounters an identifier followed by a left parenthesis.
+    /// The parser will then attempt to parse the function call.
+    /// ```lento
+    /// func(a, b, c)
+    /// ```
+    /// If the next token is an assignment operator `=`, then the parser will attempt to parse a function definition.
+    /// ```lento
+    /// func(a, b, c) = expr
+    /// ```
     fn parse_paren_call(&mut self, id: String, info: LineInfo) -> ParseResult {
         log::trace!("Parsing parenthesized function call: {}", id);
         let mut args = Vec::new();
