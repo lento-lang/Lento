@@ -5,7 +5,7 @@ use crate::{
     },
     type_checker::{
         checked_ast::CheckedParam,
-        types::{std_types, GetType},
+        types::{std_types, GetType, Type},
     },
 };
 
@@ -25,9 +25,32 @@ pub fn print() -> Function {
         },
         vec![CheckedParam {
             name: "values".to_string(),
-            ty: std_types::ANY,
+            ty: Type::Variable("T".into()),
         }],
         std_types::UNIT,
+    )
+}
+
+pub fn dbg() -> Function {
+    Function::new_native(
+        "dbg".into(),
+        |values| {
+            if values.len() != 1 {
+                panic!("dbg() expects 1 argument");
+            }
+            let value = values.pop().unwrap();
+            println!(
+                "<{}:{}>",
+                value.get_type().pretty_print_color(),
+                value.pretty_print_color()
+            );
+            Ok(value)
+        },
+        vec![CheckedParam {
+            name: "values".to_string(),
+            ty: Type::Variable("T".into()),
+        }],
+        Type::Variable("T".into()),
     )
 }
 
