@@ -24,7 +24,7 @@ pub fn add() -> Function {
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
-            if lhs.get_type().subtype(&ty_num) && rhs.get_type().subtype(&ty_num) {
+            if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::add(&l, &r))),
                     _ => panic!("add expects 2 arguments of type '{}'", ty_num),
@@ -62,7 +62,7 @@ pub fn sub() -> Function {
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
-            if lhs.get_type().subtype(&ty_num) && rhs.get_type().subtype(&ty_num) {
+            if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::sub(&l, &r))),
                     _ => panic!("sub expects 2 arguments of type '{}'", ty_num),
@@ -100,7 +100,7 @@ pub fn mul() -> Function {
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
-            if lhs.get_type().subtype(&ty_num) && rhs.get_type().subtype(&ty_num) {
+            if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::mul(&l, &r))),
                     _ => panic!("mul expects 2 arguments of type '{}'", ty_num),
@@ -138,7 +138,7 @@ pub fn div() -> Function {
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
-            if lhs.get_type().subtype(&ty_num) && rhs.get_type().subtype(&ty_num) {
+            if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::div(&l, &r)?)),
                     _ => panic!("div expects 2 arguments of type '{}'", ty_num),

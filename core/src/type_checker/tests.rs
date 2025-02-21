@@ -37,16 +37,16 @@ mod tests {
     #[test]
     fn subtype_sum() {
         let sum = Type::Sum(vec![std_types::BOOL, std_types::UNIT]);
-        assert!(std_types::BOOL.subtype(&sum));
+        assert!(std_types::BOOL.subtype(&sum).success);
     }
 
     #[test]
     fn subtype_sum_sum() {
         let inner = Type::Sum(vec![std_types::BOOL, std_types::UNIT]);
         let outer = Type::Sum(vec![inner.clone(), std_types::CHAR]);
-        assert!(inner.subtype(&outer));
-        assert!(!outer.subtype(&inner));
-        assert!(std_types::CHAR.subtype(&outer));
-        assert!(std_types::BOOL.subtype(&outer));
+        assert!(inner.subtype(&outer).success);
+        assert!(!outer.subtype(&inner).success);
+        assert!(std_types::CHAR.subtype(&outer).success);
+        assert!(std_types::BOOL.subtype(&outer).success);
     }
 }

@@ -72,7 +72,7 @@ mod tests {
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.get_type().equals(&std_types::UINT8));
+        assert!(result.get_type().equals(&std_types::UINT8).success);
         assert_eq!(result, make_u8(3));
     }
 
@@ -90,9 +90,12 @@ mod tests {
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result
-            .get_type()
-            .equals(&Type::Tuple(vec![std_types::UINT8; 3])));
+        assert!(
+            result
+                .get_type()
+                .equals(&Type::Tuple(vec![std_types::UINT8; 3]))
+                .success
+        );
         assert_eq!(
             result,
             Value::Tuple(
@@ -111,7 +114,7 @@ mod tests {
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.get_type().equals(&std_types::UINT8));
+        assert!(result.get_type().equals(&std_types::UINT8).success);
         assert_eq!(result, make_u8(3));
     }
 
@@ -126,7 +129,7 @@ mod tests {
         let result = eval_ast(&ast, &mut global_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.get_type().equals(&std_types::UNIT));
+        assert!(result.get_type().equals(&std_types::UNIT).success);
         assert_eq!(result, Value::Unit);
     }
 
@@ -157,7 +160,7 @@ mod tests {
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.get_type().equals(&std_types::UINT8));
+        assert!(result.get_type().equals(&std_types::UINT8).success);
         assert_eq!(result, make_u8(1));
     }
 
@@ -181,8 +184,8 @@ mod tests {
         assert!(result2.is_ok());
         let result1 = result1.unwrap();
         let result2 = result2.unwrap();
-        assert!(result1.get_type().equals(&std_types::FLOAT32));
-        assert!(result2.get_type().equals(&std_types::FLOAT32));
+        assert!(result1.get_type().equals(&std_types::FLOAT32).success);
+        assert!(result2.get_type().equals(&std_types::FLOAT32).success);
         assert_eq!(result1, make_f32(8.0 / (1.0 / (3.0 * 3.0) - 1.0)));
         assert_eq!(result2, make_f32(8.0 / (1.0 / (3.0 * 3.0) - 1.0)));
     }
@@ -205,7 +208,7 @@ mod tests {
         let result = eval_module(&module, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.get_type().equals(&std_types::UINT8));
+        assert!(result.get_type().equals(&std_types::UINT8).success);
         assert_eq!(result, make_u8(3));
     }
 

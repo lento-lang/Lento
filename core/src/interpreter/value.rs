@@ -177,8 +177,10 @@ impl PartialEq for Value {
             (Self::Tuple(l0, _), Self::Tuple(r0, _)) => l0 == r0,
             (Self::List(l0, _), Self::List(r0, _)) => l0 == r0,
             (Self::Record(l0, _), Self::Record(r0, _)) => l0 == r0,
-            (Self::Function(l0), Self::Function(r0)) => l0.get_type().equals(&r0.get_type()),
-            (Self::Type(l0), Self::Type(r0)) => l0.equals(r0),
+            (Self::Function(l0), Self::Function(r0)) => {
+                l0.get_type().equals(&r0.get_type()).success
+            }
+            (Self::Type(l0), Self::Type(r0)) => l0.equals(r0).success,
             _ => false,
         }
     }

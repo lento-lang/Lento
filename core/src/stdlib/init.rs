@@ -114,7 +114,7 @@ impl Initializer {
                     // TODO: Implement support for function overloading (multiple variations)
                     // Assert that the function is already in the environment
                     if let Some(func) = env.lookup_function(function_name) {
-                        if !signature.function_type().equals(&func.get_type()) {
+                        if !signature.function_type().equals(&func.get_type()).success {
                             panic!(
                                 "Function type mismatch for operator '{}': expected '{}', got '{}'",
                                 op.info.name,
@@ -327,6 +327,7 @@ pub fn stdlib() -> Initializer {
             ("div", arithmetic::div()),
             ("eq", logical::eq()),
             ("print", system::print()),
+            ("dbg", system::dbg()),
             ("typeof", system::type_of()),
             ("exit", system::exit()),
         ],

@@ -307,7 +307,7 @@ impl TypeChecker<'_> {
         let body_type = body.get_type().clone();
         let return_type = if let Some(ty) = &return_type {
             let ty = self.check_type_expr(ty)?;
-            if !ty.subtype(&body_type) {
+            if !ty.subtype(&body_type).success {
                 return Err(TypeError {
                     message: format!(
                         "Function body type does not match the return type. Expected '{}', found '{}' at {}",
@@ -354,7 +354,7 @@ impl TypeChecker<'_> {
         // Filter out duplicate types (subtypes of existing types)
         let mut list_types = vec![];
         for ty in elem_types.iter() {
-            if !elem_types.iter().any(|t| ty.subtype(t)) {
+            if !elem_types.iter().any(|t| ty.subtype(t).success) {
                 // Add the type if it is not a subtype of any other type
                 list_types.push(ty.clone());
             }
@@ -490,7 +490,7 @@ impl TypeChecker<'_> {
             let FunctionType { param, ret } = fn_ty.borrow();
             // Check the type of the argument
             let arg = self.check_expr(arg)?;
-            if arg.get_type().subtype(&param.ty) {
+            if arg.get_type().subtype(&param.ty).success {
                 Ok(CheckedAst::Call {
                     return_type: ret.clone(),
                     function: Box::new(expr),
@@ -532,7 +532,7 @@ impl TypeChecker<'_> {
                 checked_operands
                     .iter()
                     .zip(op.signature().params.iter())
-                    .all(|(operand, param)| operand.get_type().subtype(&param.ty))
+                    .all(|(operand, param)| operand.get_type().subtype(&param.ty).success)
             })
         {
             match &op.handler {
@@ -594,7 +594,7 @@ impl TypeChecker<'_> {
         let lhs_type = checked_lhs.get_type();
         let rhs_type = checked_rhs.get_type();
         for op in self.lookup_operator(&op_info.symbol) {
-            if !lhs_type.subtype(&op.signature().params[0].ty) {
+            if !lhs_type.subtype(&op.signature().params[0].ty).success {
                 log::trace!(
                     "Skipping operator: {} because lhs type {} is not a subtype of {}",
                     op.info.symbol,
@@ -603,7 +603,7 @@ impl TypeChecker<'_> {
                 );
                 continue;
             }
-            if !rhs_type.subtype(&op.signature().params[1].ty) {
+            if !rhs_type.subtype(&op.signature().params[1].ty).success {
                 log::trace!(
                     "Skipping operator: {} because rhs type {} is not a subtype of {}",
                     op.info.symbol,
@@ -698,7 +698,7 @@ impl TypeChecker<'_> {
         let checked_operand = self.check_expr(operand)?;
         let operand_type = checked_operand.get_type();
         for op in self.lookup_operator(&op_info.symbol) {
-            if !op.signature().params[0].ty.subtype(operand_type) {
+            if !op.signature().params[0].ty.subtype(operand_type).success {
                 continue;
             }
             match &op.handler {
