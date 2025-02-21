@@ -19,9 +19,11 @@ pub trait GetType {
 //                                     Type System                                      //
 //--------------------------------------------------------------------------------------//
 
+pub type TypeJudgements = HashMap<Str, Type>;
+
 pub struct TypeResult {
     pub success: bool,
-    pub judgements: HashMap<Str, Type>,
+    pub judgements: TypeJudgements,
 }
 
 impl TypeResult {
@@ -130,6 +132,7 @@ pub trait TypeTrait {
     /// **Contravariant parameter type** : The parameter type of the supertype function (number) is a supertype of the parameter type of the subtype function (int).
     fn subtype(&self, other: &Self) -> TypeResult;
     fn simplify(self) -> Self;
+    fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -176,6 +179,16 @@ impl TypeTrait for FunctionType {
                 ty: self.param.ty.simplify(),
             },
             ret: self.ret.simplify(),
+        }
+    }
+
+    fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self {
+        FunctionType {
+            param: CheckedParam {
+                name: self.param.name.clone(),
+                ty: self.param.ty.specialize(judgements, changed),
+            },
+            ret: self.ret.specialize(judgements, changed),
         }
     }
 }
@@ -384,6 +397,57 @@ impl TypeTrait for Type {
                 parent,
                 name,
                 fields.into_iter().map(Type::simplify).collect(),
+            ),
+        }
+    }
+
+    fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self {
+        match self {
+            Type::Literal(_) => self.clone(),
+            Type::Alias(_, _) => self.clone(),
+            Type::Variable(s) => {
+                if let Some(ty) = judgements.get(s) {
+                    *changed = true;
+                    ty.clone()
+                } else {
+                    self.clone()
+                }
+            }
+            Type::Constructor(s, params, body) => Type::Constructor(
+                s.clone(),
+                params
+                    .iter()
+                    .map(|t| t.specialize(judgements, changed))
+                    .collect(),
+                Box::new(body.specialize(judgements, changed)),
+            ),
+            Type::Function(ty) => Type::Function(Box::new(ty.specialize(judgements, changed))),
+            Type::Tuple(types) => Type::Tuple(
+                types
+                    .iter()
+                    .map(|t| t.specialize(judgements, changed))
+                    .collect(),
+            ),
+            Type::List(t) => Type::List(Box::new(t.specialize(judgements, changed))),
+            Type::Record(fields) => Type::Record(
+                fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), t.specialize(judgements, changed)))
+                    .collect(),
+            ),
+            Type::Sum(types) => Type::Sum(
+                types
+                    .iter()
+                    .map(|t| t.specialize(judgements, changed))
+                    .collect(),
+            ),
+            Type::Variant(parent, name, fields) => Type::Variant(
+                parent.clone(),
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|t| t.specialize(judgements, changed))
+                    .collect(),
             ),
         }
     }

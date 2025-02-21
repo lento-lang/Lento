@@ -4,7 +4,7 @@ use crate::{
     type_checker::types::Type,
 };
 
-use super::types::{FunctionType, GetType};
+use super::types::{FunctionType, GetType, TypeJudgements, TypeTrait};
 
 #[derive(Debug, Clone)]
 pub struct CheckedOperator {
@@ -46,6 +46,13 @@ impl CheckedFunction {
             return_type,
             ty: Type::Function(Box::new(ty)),
         }
+    }
+
+    pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
+        self.param.ty = self.param.ty.specialize(judgements, changed);
+        self.return_type = self.return_type.specialize(judgements, changed);
+        self.ty = self.ty.specialize(judgements, changed);
+        self.body.specialize(judgements, changed);
     }
 
     pub fn pretty_print(&self) -> String {
@@ -131,6 +138,57 @@ impl CheckedAst {
             CheckedAst::Function(_, info) => info,
             CheckedAst::Assignment(_, _, _, info) => info,
             CheckedAst::Block(_, _, info) => info,
+        }
+    }
+
+    pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
+        match self {
+            CheckedAst::Literal(_, _) => (),
+            CheckedAst::Tuple(elements, ty, _) => {
+                for element in elements {
+                    element.specialize(judgements, changed);
+                }
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::List(elements, ty, _) => {
+                for element in elements {
+                    element.specialize(judgements, changed);
+                }
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::Record(elements, ty, _) => {
+                for (_, element) in elements {
+                    element.specialize(judgements, changed);
+                }
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::Identifier(_, ty, _) => {
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::Call {
+                function,
+                arg,
+                return_type,
+                ..
+            } => {
+                function.specialize(judgements, changed);
+                arg.specialize(judgements, changed);
+                *return_type = return_type.specialize(judgements, changed);
+            }
+            CheckedAst::Function(func, _) => {
+                func.specialize(judgements, changed);
+            }
+            CheckedAst::Assignment(lhs, rhs, ty, _) => {
+                lhs.specialize(judgements, changed);
+                rhs.specialize(judgements, changed);
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::Block(expressions, ty, _) => {
+                for expression in expressions {
+                    expression.specialize(judgements, changed);
+                }
+                *ty = ty.specialize(judgements, changed);
+            }
         }
     }
 

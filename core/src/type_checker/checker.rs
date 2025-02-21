@@ -496,7 +496,19 @@ impl TypeChecker<'_> {
                 );
                 if !tr.judgements.is_empty() {
                     log::trace!("Judgements: {}", tr.pretty_print_color_judgements());
+                    let mut changed = false;
+                    let param_ty = param.ty.specialize(&tr.judgements, &mut changed);
+                    let ret_ty = ret.specialize(&tr.judgements, &mut changed);
+                    if changed {
+                        log::trace!(
+                            "Specialized call: {} : {} -> {}",
+                            expr.print_sexpr(),
+                            param_ty.pretty_print_color(),
+                            ret_ty.pretty_print_color()
+                        );
+                    }
                 }
+
                 Ok(CheckedAst::Call {
                     return_type: ret.clone(),
                     function: Box::new(expr),
