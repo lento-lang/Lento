@@ -143,12 +143,12 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
         // dropped before we use `env` again to evaluate
         // the arguments.
         let handler = native.handler;
-        let args = args
+        let mut args = args
             .iter()
             .map(|arg| eval_ast(arg, env))
             .collect::<Result<Vec<Value>, _>>()?;
         // Invoke the native function
-        return handler(args);
+        return handler(&mut args);
     }
 
     // TODO: Implement support for function overloading (multiple variations)

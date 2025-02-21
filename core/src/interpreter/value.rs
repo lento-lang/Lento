@@ -41,7 +41,7 @@ pub struct UserFunction {
 }
 
 /// A function handler takes a list of arguments and returns a result.
-pub type NativeHandler = fn(Vec<Value>) -> InterpretResult;
+pub type NativeHandler = fn(&mut Vec<Value>) -> InterpretResult;
 
 /// Built-in functions
 #[derive(Debug, Clone)]
