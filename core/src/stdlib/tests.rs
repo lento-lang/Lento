@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::{
-        interpreter::environment::Environment, parser, stdlib::init::stdlib, util::str::Str,
-    };
+    use crate::{interpreter::env::Environment, parser, stdlib::init::stdlib, util::str::Str};
 
     #[test]
     fn test_init_parser() {

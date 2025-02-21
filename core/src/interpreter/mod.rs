@@ -1,6 +1,6 @@
-pub mod environment;
+pub mod env;
 pub mod error;
-pub mod interpreter;
+pub mod eval;
 pub mod number;
 mod tests;
 pub mod value;

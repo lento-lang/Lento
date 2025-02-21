@@ -3,7 +3,7 @@ use std::{path::Path, process::exit};
 use colorful::Colorful;
 
 use lento_core::{
-    interpreter::{environment::global_env, interpreter::interpret_module, value::Value},
+    interpreter::{env::global_env, eval::eval_module, value::Value},
     parser::parser::parse_path_all,
     stdlib::init::stdlib,
     type_checker::{checker::TypeChecker, types::GetType},
@@ -33,7 +33,7 @@ pub fn handle_command_file(file: &str) {
             exit(1);
         }
     };
-    match interpret_module(&checked_module, &mut env) {
+    match eval_module(&checked_module, &mut env) {
         Ok(val) => {
             if val != Value::Unit {
                 println!("{} {}", "Result:".light_green(), val);

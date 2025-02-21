@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use clap::{ArgMatches, Command};
 use colorful::Colorful;
 use lento_core::{
-    interpreter::environment::global_env, parser::parser, stdlib::init::stdlib,
+    interpreter::env::global_env, parser::parser, stdlib::init::stdlib,
     type_checker::checker::TypeChecker,
 };
 

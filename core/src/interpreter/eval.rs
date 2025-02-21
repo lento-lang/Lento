@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    environment::Environment,
+    env::Environment,
     error::{runtime_error, RuntimeError},
     value::{Function, UserFunction, Value},
 };
@@ -22,16 +22,16 @@ use super::{
 pub type InterpretResult = Result<Value, RuntimeError>;
 
 /// Interpret a module
-pub fn interpret_module(module: &CheckedModule, env: &mut Environment) -> InterpretResult {
+pub fn eval_module(module: &CheckedModule, env: &mut Environment) -> InterpretResult {
     let mut result = Value::Unit;
     for expr in &module.expressions {
-        result = interpret_ast(expr, env)?;
+        result = eval_ast(expr, env)?;
     }
     Ok(result)
 }
 
 /// Interpret a type-checked AST node
-pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
+pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     let result = match ast {
         CheckedAst::Call { function, arg, .. } => eval_call(function, arg, env)?,
         CheckedAst::Tuple(v, _, _) => eval_tuple(v, env)?,
@@ -53,21 +53,21 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
                     ))
                 }
             };
-            let rhs = interpret_ast(rhs, env)?;
+            let rhs = eval_ast(rhs, env)?;
             env.add_value(Str::String(lhs), rhs.clone())?;
             rhs
         }
         CheckedAst::List(elems, ty, _) => {
             let values = elems
                 .iter()
-                .map(|e| interpret_ast(e, env))
+                .map(|e| eval_ast(e, env))
                 .collect::<Result<Vec<Value>, _>>()?;
             Value::List(values, ty.clone())
         }
         CheckedAst::Record(expr, ty, _) => {
             let mut record = Vec::new();
             for (key, value) in expr {
-                let value = interpret_ast(value, env)?;
+                let value = eval_ast(value, env)?;
                 record.push((key.clone(), value));
             }
             Value::Record(record, ty.clone())
@@ -82,7 +82,7 @@ pub fn interpret_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult
             let mut result = Value::Unit;
             let mut scope = env.new_child(Str::Str("<block>"));
             for expr in exprs {
-                result = interpret_ast(expr, &mut scope)?;
+                result = eval_ast(expr, &mut scope)?;
             }
             result
         }
@@ -145,7 +145,7 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
         let handler = native.handler;
         let args = args
             .iter()
-            .map(|arg| interpret_ast(arg, env))
+            .map(|arg| eval_ast(arg, env))
             .collect::<Result<Vec<Value>, _>>()?;
         // Invoke the native function
         return handler(args);
@@ -153,7 +153,7 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
 
     // TODO: Implement support for function overloading (multiple variations)
 
-    let function = interpret_ast(function, env)?;
+    let function = eval_ast(function, env)?;
     let Value::Function(function) = function else {
         unreachable!("This should have been checked by the type checker");
     };
@@ -161,11 +161,11 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
     // Evaluate the function body or invoke the native handler
     match function.borrow() {
         Function::User(UserFunction { body, param, .. }) => {
-            let arg = interpret_ast(arg, env)?;
+            let arg = eval_ast(arg, env)?;
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
             closure.add_value(Str::String(param.name.clone()), arg.clone())?;
-            interpret_ast(body, &mut closure)
+            eval_ast(body, &mut closure)
         }
         Function::Native { .. } => {
             unreachable!("Native functions must not reach this!!!");
@@ -181,7 +181,7 @@ fn eval_tuple(elems: &[CheckedAst], env: &mut Environment) -> InterpretResult {
     let (values, types): (Vec<Value>, Vec<Type>) = elems
         .iter()
         .map(|e| {
-            let value = interpret_ast(e, env)?;
+            let value = eval_ast(e, env)?;
             let ty = value.get_type().clone();
             Ok((value, ty))
         })

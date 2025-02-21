@@ -2,8 +2,8 @@
 mod tests {
     use crate::{
         interpreter::{
-            environment::{global_env, Environment},
-            interpreter::{interpret_ast, interpret_module},
+            env::{global_env, Environment},
+            eval::{eval_ast, eval_module},
             number::{FloatingPoint, Number, UnsignedInteger},
             value::Value,
         },
@@ -69,7 +69,7 @@ mod tests {
             CheckedAst::Literal(make_u8(1), LineInfo::default()),
             CheckedAst::Literal(make_u8(2), LineInfo::default()),
         );
-        let result = interpret_ast(&ast, &mut std_env());
+        let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8));
@@ -87,7 +87,7 @@ mod tests {
             Type::Tuple(vec![std_types::UINT8; 3]),
             LineInfo::default(),
         );
-        let result = interpret_ast(&ast, &mut std_env());
+        let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result
@@ -108,7 +108,7 @@ mod tests {
             CheckedAst::Literal(make_u8(1), LineInfo::default()),
             CheckedAst::Literal(make_u8(2), LineInfo::default()),
         );
-        let result = interpret_ast(&ast, &mut std_env());
+        let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8));
@@ -123,7 +123,7 @@ mod tests {
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
-        let result = interpret_ast(&ast, &mut global_env());
+        let result = eval_ast(&ast, &mut global_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UNIT));
@@ -138,7 +138,7 @@ mod tests {
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
-        let result = interpret_ast(&ast, &mut global_env());
+        let result = eval_ast(&ast, &mut global_env());
         assert!(result.is_err());
     }
 
@@ -154,7 +154,7 @@ mod tests {
             std_types::UINT8,
             LineInfo::default(),
         );
-        let result = interpret_ast(&ast, &mut std_env());
+        let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8));
@@ -175,8 +175,8 @@ mod tests {
         let result2 = checker
             .check_module(&result2)
             .expect("Failed to type check expression");
-        let result1 = interpret_module(&result1, &mut std_env());
-        let result2 = interpret_module(&result2, &mut std_env());
+        let result1 = eval_module(&result1, &mut std_env());
+        let result2 = eval_module(&result2, &mut std_env());
         assert!(result1.is_ok());
         assert!(result2.is_ok());
         let result1 = result1.unwrap();
@@ -202,7 +202,7 @@ mod tests {
         let module = checker
             .check_module(&module)
             .expect("Failed to type check module");
-        let result = interpret_module(&module, &mut std_env());
+        let result = eval_module(&module, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8));
@@ -225,7 +225,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -246,7 +246,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -267,7 +267,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -288,7 +288,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -309,7 +309,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -330,7 +330,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -349,7 +349,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
@@ -368,7 +368,7 @@ mod tests {
             .check_module(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = interpret_module(&module, &mut env);
+        let result = eval_module(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }

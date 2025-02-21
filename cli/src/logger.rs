@@ -51,4 +51,5 @@ pub fn init_logger_str(level: &str) {
         }
     };
     init_logger(level);
+    log::info!("Setting log level to {}", level);
 }

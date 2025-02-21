@@ -5,7 +5,7 @@ use crate::type_checker::{
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
-use super::{environment::Environment, interpreter::InterpretResult, number::Number};
+use super::{env::Environment, eval::InterpretResult, number::Number};
 
 /// A key in a record can be a string, integer, float, or character.
 /// This is used to represent the key in the AST.

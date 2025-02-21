@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::Read};
 
 use crate::{
     interpreter::{
-        environment::Environment,
+        env::Environment,
         number::{FloatingPoint, Number},
         value::{Function, Value},
     },

@@ -4,8 +4,8 @@ use clap::{ArgMatches, Command};
 use colorful::Colorful;
 use lento_core::{
     interpreter::{
-        environment::{global_env, Environment},
-        interpreter::interpret_ast,
+        env::{global_env, Environment},
+        eval::eval_ast,
         value::Value,
     },
     parser::parser::{from_string, Parser},
@@ -52,7 +52,7 @@ pub fn eval_all<R: Read>(
                         break 'exprs; // Stop on error
                     }
                 };
-                match interpret_ast(&checked_ast, env) {
+                match eval_ast(&checked_ast, env) {
                     Ok(value) => {
                         if i == asts.len() - 1 && value != Value::Unit {
                             if colors {
