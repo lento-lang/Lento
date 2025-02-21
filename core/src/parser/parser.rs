@@ -289,7 +289,14 @@ impl<R: Read> Parser<R> {
             return func_def;
         }
 
-        log::trace!("Parsed function call: {}({:?})", id, args);
+        log::trace!(
+            "Parsed function call: {}({})",
+            id,
+            args.iter()
+                .map(Ast::print_sexpr)
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
         Ok(syntax_sugar::roll_function_call(id, args, info))
         // Ok(Ast::Call(id, args))
     }
