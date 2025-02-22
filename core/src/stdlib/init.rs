@@ -74,7 +74,7 @@ impl Initializer {
         }
         for (name, func) in &self.functions {
             // TODO: Implement support for function overloading (multiple variations)
-            type_checker.add_function(name, func.get_type());
+            type_checker.add_function(name, func.get_fn_type().clone());
         }
     }
 
@@ -115,7 +115,7 @@ impl Initializer {
                     // TODO: Implement support for function overloading (multiple variations)
                     // Assert that the function is already in the environment
                     if let Some(func) = env.lookup_function(function_name) {
-                        if !signature.function_type().equals(&func.get_type()).success {
+                        if !signature.function_type().equals(func.get_fn_type()).success {
                             panic!(
                                 "Function type mismatch for operator '{}': expected '{}', got '{}'",
                                 op.info.name,
@@ -178,7 +178,7 @@ pub fn stdlib() -> Initializer {
                 default_operator_precedence::ADDITIVE,
                 OperatorAssociativity::Left,
                 false,
-                OperatorSignature::from_function(&arithmetic::add().get_type()),
+                OperatorSignature::from_function(arithmetic::add().get_fn_type()),
             ),
             Operator::new_runtime(
                 "sub".into(),
@@ -187,7 +187,7 @@ pub fn stdlib() -> Initializer {
                 default_operator_precedence::ADDITIVE,
                 OperatorAssociativity::Left,
                 false,
-                OperatorSignature::from_function(&arithmetic::sub().get_type()),
+                OperatorSignature::from_function(arithmetic::sub().get_fn_type()),
             ),
             Operator::new_runtime(
                 "mul".into(),
@@ -196,7 +196,7 @@ pub fn stdlib() -> Initializer {
                 default_operator_precedence::MULTIPLICATIVE,
                 OperatorAssociativity::Left,
                 false,
-                OperatorSignature::from_function(&arithmetic::mul().get_type()),
+                OperatorSignature::from_function(arithmetic::mul().get_fn_type()),
             ),
             Operator::new_runtime(
                 "div".into(),
@@ -205,7 +205,7 @@ pub fn stdlib() -> Initializer {
                 default_operator_precedence::MULTIPLICATIVE,
                 OperatorAssociativity::Left,
                 false,
-                OperatorSignature::from_function(&arithmetic::div().get_type()),
+                OperatorSignature::from_function(arithmetic::div().get_fn_type()),
             ),
             // Comparison operators
             Operator::new_runtime(
@@ -215,7 +215,7 @@ pub fn stdlib() -> Initializer {
                 default_operator_precedence::EQUALITY,
                 OperatorAssociativity::Left,
                 false,
-                OperatorSignature::from_function(&logical::eq().get_type()),
+                OperatorSignature::from_function(logical::eq().get_fn_type()),
             ),
         ],
 

@@ -41,6 +41,7 @@ pub struct UserFunction {
     pub body: CheckedAst,
     pub closure: Environment<'static>,
     pub ret: Type,
+    fn_type: Type,
 }
 
 /// A function handler takes a list of arguments and returns a result.
@@ -57,6 +58,7 @@ pub struct NativeFunction {
     pub params: Vec<CheckedParam>,
     /// The return type of the function
     pub ret: Type,
+    fn_type: Type,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +75,7 @@ impl Function {
         ret: Type,
     ) -> Self {
         Self::User(UserFunction {
+            fn_type: Type::Function(Box::new(FunctionType::new(param.clone(), ret.clone()))),
             param,
             body,
             closure,
@@ -86,7 +89,13 @@ impl Function {
         params: Vec<CheckedParam>,
         ret: Type,
     ) -> Self {
+        let mut params_iter = params.iter();
+        let mut fn_type = FunctionType::new(params_iter.next().unwrap().clone(), ret.clone());
+        for param in params_iter {
+            fn_type = FunctionType::new(param.clone(), Type::Function(Box::new(fn_type.clone())));
+        }
         Self::Native(NativeFunction {
+            fn_type: Type::Function(Box::new(fn_type)),
             name,
             handler,
             params,
@@ -101,36 +110,28 @@ impl Function {
         }
     }
 
-    pub fn get_type(&self) -> FunctionType {
+    pub fn get_fn_type(&self) -> &FunctionType {
+        let Type::Function(t) = self.get_type() else {
+            unreachable!();
+        };
+        t.as_ref()
+    }
+
+    pub fn get_type(&self) -> &Type {
         match self {
-            Function::User(UserFunction {
-                param: params, ret, ..
-            }) => FunctionType::new(params.clone(), ret.clone()),
-            Function::Native(NativeFunction { params, ret, .. }) => {
-                let mut params = params.iter();
-                let mut function_type =
-                    FunctionType::new(params.next().unwrap().clone(), ret.clone());
-                for param in params {
-                    function_type = FunctionType::new(
-                        param.clone(),
-                        Type::Function(Box::new(function_type.clone())),
-                    );
-                }
-                function_type
-            }
+            Function::User(UserFunction { fn_type, .. }) => fn_type,
+            Function::Native(NativeFunction { fn_type, .. }) => fn_type,
         }
     }
 
     pub fn pretty_print_color(&self) -> String {
-        // TODO: Improve this ugly code
-        Type::Function(Box::new(self.get_type().clone())).pretty_print_color()
+        self.get_type().pretty_print_color()
     }
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: And this ugly code too
-        Type::Function(Box::new(self.get_type().clone())).fmt(f)
+        self.get_type().fmt(f)
     }
 }
 
@@ -163,7 +164,7 @@ impl GetType for Value {
             Value::Tuple(_, t) => t,
             Value::List(_, t) => t,
             Value::Record(_, t) => t,
-            Value::Function(f) => f.get_return_type(),
+            Value::Function(f) => f.get_type(),
             Value::Type(_) => &std_types::TYPE,
         }
     }
@@ -180,9 +181,7 @@ impl PartialEq for Value {
             (Self::Tuple(l0, _), Self::Tuple(r0, _)) => l0 == r0,
             (Self::List(l0, _), Self::List(r0, _)) => l0 == r0,
             (Self::Record(l0, _), Self::Record(r0, _)) => l0 == r0,
-            (Self::Function(l0), Self::Function(r0)) => {
-                l0.get_type().equals(&r0.get_type()).success
-            }
+            (Self::Function(l0), Self::Function(r0)) => l0.get_type().equals(r0.get_type()).success,
             (Self::Type(l0), Self::Type(r0)) => l0.equals(r0).success,
             _ => false,
         }
