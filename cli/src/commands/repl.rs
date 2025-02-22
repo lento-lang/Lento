@@ -52,7 +52,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
-        eval_all(
+        let found_expr = eval_all(
             &mut parser,
             &mut checker,
             &mut env,
@@ -62,6 +62,11 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
         );
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
         parser.lexer().reset();
+
+        if !found_expr {
+            // move the cursor up one line and clear it
+            println!("\x1B[1A\x1B[K             	  ");
+        }
     }
 }
 

@@ -37,6 +37,9 @@ pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
     eval_all(&mut parser, &mut checker, &mut env, false, false, &source);
 }
 
+/// Evaluate all expressions in the parser and print the results.
+/// Stops on the first error.
+/// Returns true if any expression was evaluated.
 pub fn eval_all<R: Read>(
     parser: &mut Parser<R>,
     checker: &mut TypeChecker,
@@ -44,9 +47,12 @@ pub fn eval_all<R: Read>(
     print_types: bool,
     colors: bool,
     source: &InputSource,
-) {
+) -> bool {
     match parser.parse_all() {
         Ok(asts) => {
+            if asts.is_empty() {
+                return false;
+            }
             'exprs: for (i, ast) in asts.iter().enumerate() {
                 let checked_ast = match checker.check_expr(ast) {
                     Ok(ast) => ast,
@@ -85,4 +91,5 @@ pub fn eval_all<R: Read>(
         }
         Err(err) => print_parse_error(err, source),
     }
+    true
 }
