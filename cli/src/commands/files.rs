@@ -4,6 +4,7 @@ use colorful::Colorful;
 
 use lento_core::{
     interpreter::{env::global_env, eval::eval_module, value::Value},
+    lexer::lexer::InputSource,
     parser::parser::parse_path_all,
     stdlib::init::stdlib,
     type_checker::{checker::TypeChecker, types::GetType},
@@ -13,11 +14,13 @@ use crate::error::{print_parse_error, print_runtime_error, print_type_error};
 
 /// Interpret a file and exit if any errors occurred.
 pub fn handle_command_file(file: &str) {
+    let file = Path::new(file);
+    let source = InputSource::File(file.to_path_buf());
     let std = stdlib();
     let module = match parse_path_all(Path::new(file), Some(&std)) {
         Ok(module) => module,
         Err(err) => {
-            print_parse_error(err.message);
+            print_parse_error(err, &source);
             exit(1);
         }
     };
@@ -29,7 +32,7 @@ pub fn handle_command_file(file: &str) {
     let checked_module = match checker.check_module(&module) {
         Ok(module) => module,
         Err(err) => {
-            print_type_error(err.message);
+            print_type_error(err, &source);
             exit(1);
         }
     };
@@ -45,7 +48,7 @@ pub fn handle_command_file(file: &str) {
             }
         }
         Err(err) => {
-            print_runtime_error(err.message);
+            print_runtime_error(err, &source);
             exit(1);
         }
     };

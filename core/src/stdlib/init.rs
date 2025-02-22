@@ -6,7 +6,7 @@ use crate::{
         number::{FloatingPoint, Number},
         value::{Function, Value},
     },
-    lexer::lexer::Lexer,
+    lexer::{lexer::Lexer, token::LineInfo},
     parser::{
         ast::Ast,
         op::{
@@ -87,7 +87,7 @@ impl Initializer {
             self.types.len()
         );
         for (name, val) in &self.values {
-            if let Err(e) = env.add_value(name.clone(), val.clone()) {
+            if let Err(e) = env.add_value(name.clone(), val.clone(), &LineInfo::default()) {
                 panic!(
                     "Environment initialization failed when adding value '{}': {:?}",
                     name, e
@@ -98,6 +98,7 @@ impl Initializer {
             if let Err(e) = env.add_value(
                 Str::String(name.to_string()),
                 Value::Function(Box::new(func.clone())),
+                &LineInfo::default(),
             ) {
                 panic!(
                     "Environment initialization failed when adding function '{}': {:?}",

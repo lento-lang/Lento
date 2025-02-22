@@ -8,7 +8,10 @@ use malachite::{
     Integer, Natural, Rational,
 };
 
-use crate::type_checker::types::{std_types, GetType, Type};
+use crate::{
+    lexer::token::LineInfo,
+    type_checker::types::{std_types, GetType, Type},
+};
 
 use super::error::RuntimeError;
 
@@ -32,13 +35,14 @@ pub trait ArithmeticOperations<T> {
     fn add(lhs: &T, rhs: &T) -> Number;
     fn sub(lhs: &T, rhs: &T) -> Number;
     fn mul(lhs: &T, rhs: &T) -> Number;
-    fn div(lhs: &T, rhs: &T) -> Result<Number, RuntimeError>;
+    fn div(lhs: &T, rhs: &T, info: &LineInfo) -> Result<Number, RuntimeError>;
 }
 
-fn div_zero_error<T>() -> Result<T, RuntimeError> {
-    Err(RuntimeError {
-        message: "Division by zero".to_string(),
-    })
+fn div_zero_error<T>(info: &LineInfo) -> Result<T, RuntimeError> {
+    Err(RuntimeError::new(
+        "Division by zero".to_string(),
+        info.clone(),
+    ))
 }
 
 pub trait ComparisonOperations<T> {
@@ -454,50 +458,58 @@ impl ArithmeticOperations<UnsignedInteger> for UnsignedInteger {
         })
     }
 
-    fn div(lhs: &UnsignedInteger, rhs: &UnsignedInteger) -> Result<Number, RuntimeError> {
+    fn div(
+        lhs: &UnsignedInteger,
+        rhs: &UnsignedInteger,
+        info: &LineInfo,
+    ) -> Result<Number, RuntimeError> {
         Ok(Number::UnsignedInteger(
             match lhs.get_size().cmp(&rhs.get_size()) {
-                Ordering::Greater => return UnsignedInteger::div(lhs, &rhs.upcast(lhs.get_size())),
-                Ordering::Less => return UnsignedInteger::div(&lhs.upcast(rhs.get_size()), rhs),
+                Ordering::Greater => {
+                    return UnsignedInteger::div(lhs, &rhs.upcast(lhs.get_size()), info)
+                }
+                Ordering::Less => {
+                    return UnsignedInteger::div(&lhs.upcast(rhs.get_size()), rhs, info)
+                }
                 Ordering::Equal => match (lhs, rhs) {
                     (UnsignedInteger::UInt1(lhs), UnsignedInteger::UInt1(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt1(lhs / rhs)
                         }
                     }
                     (UnsignedInteger::UInt8(lhs), UnsignedInteger::UInt8(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt8(lhs / rhs)
                         }
                     }
                     (UnsignedInteger::UInt16(lhs), UnsignedInteger::UInt16(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt16(lhs / rhs)
                         }
                     }
                     (UnsignedInteger::UInt32(lhs), UnsignedInteger::UInt32(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt32(lhs / rhs)
                         }
                     }
                     (UnsignedInteger::UInt64(lhs), UnsignedInteger::UInt64(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt64(lhs / rhs)
                         }
                     }
                     (UnsignedInteger::UInt128(lhs), UnsignedInteger::UInt128(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             UnsignedInteger::UInt128(lhs / rhs)
                         }
@@ -816,50 +828,58 @@ impl ArithmeticOperations<SignedInteger> for SignedInteger {
         })
     }
 
-    fn div(lhs: &SignedInteger, rhs: &SignedInteger) -> Result<Number, RuntimeError> {
+    fn div(
+        lhs: &SignedInteger,
+        rhs: &SignedInteger,
+        info: &LineInfo,
+    ) -> Result<Number, RuntimeError> {
         Ok(Number::SignedInteger(
             match lhs.get_size().cmp(&rhs.get_size()) {
-                Ordering::Greater => return SignedInteger::div(lhs, &rhs.upcast(lhs.get_size())),
-                Ordering::Less => return SignedInteger::div(&lhs.upcast(rhs.get_size()), rhs),
+                Ordering::Greater => {
+                    return SignedInteger::div(lhs, &rhs.upcast(lhs.get_size()), info)
+                }
+                Ordering::Less => {
+                    return SignedInteger::div(&lhs.upcast(rhs.get_size()), rhs, info)
+                }
                 Ordering::Equal => match (lhs, rhs) {
                     (SignedInteger::Int8(lhs), SignedInteger::Int8(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::Int8(lhs / rhs)
                         }
                     }
                     (SignedInteger::Int16(lhs), SignedInteger::Int16(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::Int16(lhs / rhs)
                         }
                     }
                     (SignedInteger::Int32(lhs), SignedInteger::Int32(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::Int32(lhs / rhs)
                         }
                     }
                     (SignedInteger::Int64(lhs), SignedInteger::Int64(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::Int64(lhs / rhs)
                         }
                     }
                     (SignedInteger::Int128(lhs), SignedInteger::Int128(rhs)) => {
                         if *rhs == 0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::Int128(lhs / rhs)
                         }
                     }
                     (SignedInteger::IntVar(lhs), SignedInteger::IntVar(rhs)) => {
                         if rhs.cmp(&Integer::from(0)) == Ordering::Equal {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             SignedInteger::IntVar(lhs / rhs)
                         }
@@ -997,29 +1017,37 @@ impl ArithmeticOperations<FloatingPoint> for FloatingPoint {
         })
     }
 
-    fn div(lhs: &FloatingPoint, rhs: &FloatingPoint) -> Result<Number, RuntimeError> {
+    fn div(
+        lhs: &FloatingPoint,
+        rhs: &FloatingPoint,
+        info: &LineInfo,
+    ) -> Result<Number, RuntimeError> {
         Ok(Number::FloatingPoint(
             match lhs.get_size().cmp(&rhs.get_size()) {
-                Ordering::Greater => return FloatingPoint::div(lhs, &rhs.upcast(lhs.get_size())),
-                Ordering::Less => return FloatingPoint::div(&lhs.upcast(rhs.get_size()), rhs),
+                Ordering::Greater => {
+                    return FloatingPoint::div(lhs, &rhs.upcast(lhs.get_size()), info)
+                }
+                Ordering::Less => {
+                    return FloatingPoint::div(&lhs.upcast(rhs.get_size()), rhs, info)
+                }
                 Ordering::Equal => match (lhs, rhs) {
                     (FloatingPoint::Float32(lhs), FloatingPoint::Float32(rhs)) => {
                         if *rhs == 0.0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             FloatingPoint::Float32(lhs / rhs)
                         }
                     }
                     (FloatingPoint::Float64(lhs), FloatingPoint::Float64(rhs)) => {
                         if *rhs == 0.0 {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             FloatingPoint::Float64(lhs / rhs)
                         }
                     }
                     (FloatingPoint::FloatBig(lhs), FloatingPoint::FloatBig(rhs)) => {
                         if rhs.cmp(&Rational::from(0)) == Ordering::Equal {
-                            return div_zero_error();
+                            return div_zero_error(info);
                         } else {
                             FloatingPoint::FloatBig(lhs / rhs)
                         }
@@ -1145,34 +1173,34 @@ impl ArithmeticOperations<Number> for Number {
         }
     }
 
-    fn div(lhs: &Number, rhs: &Number) -> Result<Number, RuntimeError> {
+    fn div(lhs: &Number, rhs: &Number, info: &LineInfo) -> Result<Number, RuntimeError> {
         Ok(match (lhs, rhs) {
             (Number::UnsignedInteger(lhs), Number::UnsignedInteger(rhs)) => {
-                UnsignedInteger::div(lhs, rhs)?
+                UnsignedInteger::div(lhs, rhs, info)?
             }
             (Number::SignedInteger(lhs), Number::SignedInteger(rhs)) => {
-                SignedInteger::div(lhs, rhs)?
+                SignedInteger::div(lhs, rhs, info)?
             }
             (Number::FloatingPoint(lhs), Number::FloatingPoint(rhs)) => {
-                FloatingPoint::div(lhs, rhs)?
+                FloatingPoint::div(lhs, rhs, info)?
             }
             (Number::UnsignedInteger(lhs), Number::SignedInteger(rhs)) => {
-                SignedInteger::div(&lhs.to_signed(), rhs)?
+                SignedInteger::div(&lhs.to_signed(), rhs, info)?
             }
             (Number::SignedInteger(lhs), Number::UnsignedInteger(rhs)) => {
-                SignedInteger::div(lhs, &rhs.to_signed())?
+                SignedInteger::div(lhs, &rhs.to_signed(), info)?
             }
             (Number::UnsignedInteger(lhs), Number::FloatingPoint(rhs)) => {
-                FloatingPoint::div(&lhs.to_float(), rhs)?
+                FloatingPoint::div(&lhs.to_float(), rhs, info)?
             }
             (Number::FloatingPoint(lhs), Number::UnsignedInteger(rhs)) => {
-                FloatingPoint::div(lhs, &rhs.to_float())?
+                FloatingPoint::div(lhs, &rhs.to_float(), info)?
             }
             (Number::SignedInteger(lhs), Number::FloatingPoint(rhs)) => {
-                FloatingPoint::div(&lhs.to_float(), rhs)?
+                FloatingPoint::div(&lhs.to_float(), rhs, info)?
             }
             (Number::FloatingPoint(lhs), Number::SignedInteger(rhs)) => {
-                FloatingPoint::div(lhs, &rhs.to_float())?
+                FloatingPoint::div(lhs, &rhs.to_float(), info)?
             }
         })
     }

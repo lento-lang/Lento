@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 
 use crate::{
     interpreter::value::NativeFunction,
+    lexer::token::LineInfo,
     type_checker::{
         checked_ast::{CheckedAst, CheckedModule},
         types::{GetType, Type},
@@ -11,7 +12,7 @@ use crate::{
 
 use super::{
     env::Environment,
-    error::{runtime_error, RuntimeError},
+    error::RuntimeError,
     value::{Function, UserFunction, Value},
 };
 
@@ -33,28 +34,38 @@ pub fn eval_module(module: &CheckedModule, env: &mut Environment) -> InterpretRe
 /// Interpret a type-checked AST node
 pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     let result = match ast {
-        CheckedAst::Call { function, arg, .. } => eval_call(function, arg, env)?,
+        CheckedAst::Call { function, arg, .. } => eval_call(function, arg, env, ast.info())?,
         CheckedAst::Tuple(v, _, _) => eval_tuple(v, env)?,
         CheckedAst::Literal(l, _) => l.clone(),
         CheckedAst::Identifier(id, _, _) => match env.lookup_identifier(id) {
             (Some(_), Some(_)) => {
-                return Err(runtime_error(format!("Ambiguous identifier '{}'", id)))
+                return Err(RuntimeError::new(
+                    format!("Ambiguous identifier '{}'", id),
+                    ast.info().clone(),
+                ))
             }
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
-            (None, None) => return Err(runtime_error(format!("Unknown identifier '{}'", id))),
+            (None, None) => {
+                return Err(RuntimeError::new(
+                    format!("Unknown identifier '{}'", id),
+                    ast.info().clone(),
+                ))
+            }
         },
         CheckedAst::Assignment(lhs, rhs, _, _) => {
+            let info = lhs.info();
             let lhs = match *lhs.to_owned() {
                 CheckedAst::Identifier(id, _, _) => id,
                 _ => {
-                    return Err(runtime_error(
+                    return Err(RuntimeError::new(
                         "Assignment expects an identifier".to_string(),
+                        ast.info().clone(),
                     ))
                 }
             };
             let rhs = eval_ast(rhs, env)?;
-            env.add_value(Str::String(lhs), rhs.clone())?;
+            env.add_value(Str::String(lhs), rhs.clone(), info)?;
             rhs
         }
         CheckedAst::List(elems, ty, _) => {
@@ -97,7 +108,12 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     Ok(result)
 }
 
-fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> InterpretResult {
+fn eval_call(
+    function: &CheckedAst,
+    arg: &CheckedAst,
+    env: &mut Environment,
+    info: &LineInfo,
+) -> InterpretResult {
     /// Unwrap a native function call
     /// Returns a tuple of the native function and the arguments
     /// If the expression is not a native function, return None
@@ -131,12 +147,15 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
     if let Some((native, args)) = unwrap_native(function, vec![arg], env) {
         // We only allow fully-applied native functions
         if args.len() != native.params.len() {
-            return Err(runtime_error(format!(
-                "Expected {} arguments, found {} when calling native function '{}'",
-                native.params.len(),
-                args.len(),
-                native.name
-            )));
+            return Err(RuntimeError::new(
+                format!(
+                    "Expected {} arguments, found {} when calling native function '{}'",
+                    native.params.len(),
+                    args.len(),
+                    native.name
+                ),
+                info.clone(),
+            ));
         }
         // Extract the handler from the native function,
         // so that the lifetime of the `native` ref is
@@ -148,7 +167,7 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
             .map(|arg| eval_ast(arg, env))
             .collect::<Result<Vec<Value>, _>>()?;
         // Invoke the native function
-        return handler(&mut args);
+        return handler(&mut args, info);
     }
 
     // TODO: Implement support for function overloading (multiple variations)
@@ -164,7 +183,7 @@ fn eval_call(function: &CheckedAst, arg: &CheckedAst, env: &mut Environment) -> 
             let arg = eval_ast(arg, env)?;
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
-            closure.add_value(Str::String(param.name.clone()), arg.clone())?;
+            closure.add_value(Str::String(param.name.clone()), arg.clone(), info)?;
             eval_ast(body, &mut closure)
         }
         Function::Native { .. } => {

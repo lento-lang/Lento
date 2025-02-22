@@ -1,9 +1,14 @@
+use crate::lexer::token::LineInfo;
+
 /// Runtime error
 #[derive(Debug, Clone)]
 pub struct RuntimeError {
     pub message: String,
+    pub info: LineInfo,
 }
 
-pub fn runtime_error(message: String) -> RuntimeError {
-    RuntimeError { message }
+impl RuntimeError {
+    pub fn new(message: String, info: LineInfo) -> Self {
+        Self { message, info }
+    }
 }

@@ -1,6 +1,6 @@
 use crate::{
     interpreter::value::{RecordKey, Value},
-    lexer::{lexer::InputSource, token::LineInfo},
+    lexer::token::LineInfo,
 };
 
 use super::op::OperatorInfo;
@@ -225,15 +225,10 @@ impl PartialEq for Ast {
 pub struct Module {
     pub name: String,
     pub expressions: Vec<Ast>,
-    pub source: InputSource,
 }
 
 impl Module {
-    pub fn new(name: String, expressions: Vec<Ast>, source: InputSource) -> Module {
-        Module {
-            name,
-            expressions,
-            source,
-        }
+    pub fn new(name: String, expressions: Vec<Ast>) -> Module {
+        Module { name, expressions }
     }
 }

@@ -36,6 +36,7 @@ pub enum InputSource {
     /// A stream of characters. \
     /// 1. The string is the name of the stream.
     Stream(String),
+    StdIn,
 }
 
 impl Display for InputSource {
@@ -44,6 +45,7 @@ impl Display for InputSource {
             InputSource::File(path) => write!(f, "file '{}'", path.to_string_lossy()),
             InputSource::String => write!(f, "string"),
             InputSource::Stream(name) => write!(f, "stream '{}'", name),
+            InputSource::StdIn => write!(f, "stdin"),
         }
     }
 }
@@ -102,7 +104,6 @@ pub struct Lexer<R>
 where
     R: Read,
 {
-    input_source: InputSource,
     reader: R,
     /// Everything successfully read from the source code.
     content: Vec<u8>,
@@ -128,9 +129,8 @@ where
 impl<R: Read> Lexer<R> {
     /// Create a new lexer from a reader.
     /// The lexer will read from the reader until it reaches the end of the file.
-    pub fn new(reader: R, input_source: InputSource) -> Self {
+    pub fn new(reader: R) -> Self {
         Self {
-            input_source,
             reader,
             content: Vec::new(),
             index: 0,
@@ -149,9 +149,8 @@ impl<R: Read> Lexer<R> {
     /// Create a new lexer from a reader.
     /// The lexer will read from the reader until it reaches the end of the stream, then the parser must call `refill_on_read` to refill the buffer.
     /// If the reader is a stream, the lexer will be able to refill the buffer with new data from the reader on the next read (at any time)
-    pub fn new_stream(reader: R, stream_name: &str) -> Self {
+    pub fn new_stream(reader: R) -> Self {
         Self {
-            input_source: InputSource::Stream(stream_name.to_string()),
             reader,
             content: Vec::new(),
             index: 0,
@@ -480,10 +479,7 @@ impl<R: Read> Lexer<R> {
         if allow_eof_before_cond_false {
             Ok(result)
         } else {
-            Err(LexerError::unexpected_end_of_file(
-                self.line_info.clone(),
-                self.input_source.clone(),
-            ))
+            Err(LexerError::unexpected_end_of_file(self.line_info.clone()))
         }
     }
 
@@ -522,11 +518,7 @@ impl<R: Read> Lexer<R> {
     fn read_char(&mut self) -> LexResult {
         self.read_quoted('\'', |this, s| {
             if s.len() != 1 {
-                Err(LexerError::invalid_char(
-                    s,
-                    this.line_info.clone(),
-                    this.input_source.clone(),
-                ))
+                Err(LexerError::invalid_char(s, this.line_info.clone()))
             } else {
                 this.new_token_info(TokenKind::Char(s.chars().next().unwrap()))
             }
@@ -714,7 +706,6 @@ impl<R: Read> Lexer<R> {
                             s,
                             &std_types::UINT1,
                             self.line_info.clone(),
-                            self.input_source.clone(),
                         ))
                     } else {
                         Ok(Number::UnsignedInteger(UnsignedInteger::UInt1(i)))
@@ -724,7 +715,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT1,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -740,7 +730,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT8,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -756,7 +745,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT16,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -772,7 +760,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT32,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -788,7 +775,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT64,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -804,7 +790,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINT128,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -820,7 +805,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::UINTBIG,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -836,7 +820,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INT8,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -852,7 +835,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INT16,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -868,7 +850,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INT32,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -884,7 +865,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INT64,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -900,7 +880,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INT128,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -916,7 +895,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::INTBIG,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -932,7 +910,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::FLOAT32,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -948,7 +925,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::FLOAT64,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -964,7 +940,6 @@ impl<R: Read> Lexer<R> {
                         s,
                         &std_types::FLOATBIG,
                         self.line_info.clone(),
-                        self.input_source.clone(),
                     ))
                 }
             }
@@ -972,7 +947,6 @@ impl<R: Read> Lexer<R> {
                 s,
                 &std_types::NUM(),
                 self.line_info.clone(),
-                self.input_source.clone(),
             )),
         }
     }
@@ -982,11 +956,7 @@ impl<R: Read> Lexer<R> {
         if let Ok(f) = s.parse::<f32>() {
             Ok(Number::FloatingPoint(FloatingPoint::Float32(f)))
         } else {
-            Err(LexerError::invalid_number(
-                s,
-                self.line_info.clone(),
-                self.input_source.clone(),
-            ))
+            Err(LexerError::invalid_number(s, self.line_info.clone()))
         }
     }
 
@@ -998,11 +968,7 @@ impl<R: Read> Lexer<R> {
                 if let Ok(i) = Integer::from_str(s) {
                     return Ok(Number::SignedInteger(SignedInteger::IntVar(i)));
                 }
-                return Err(LexerError::invalid_number(
-                    s,
-                    self.line_info.clone(),
-                    self.input_source.clone(),
-                ));
+                return Err(LexerError::invalid_number(s, self.line_info.clone()));
             }
             let i = i.unwrap();
             Ok(if i >= i8::MIN as i128 && i <= i8::MAX as i128 {
@@ -1022,11 +988,7 @@ impl<R: Read> Lexer<R> {
                 if let Ok(u) = Natural::from_str(s) {
                     return Ok(Number::UnsignedInteger(UnsignedInteger::UIntVar(u)));
                 }
-                return Err(LexerError::invalid_number(
-                    s,
-                    self.line_info.clone(),
-                    self.input_source.clone(),
-                ));
+                return Err(LexerError::invalid_number(s, self.line_info.clone()));
             }
             let u = u.unwrap();
             Ok(if u <= 1 {
@@ -1047,11 +1009,10 @@ impl<R: Read> Lexer<R> {
 
     fn set_number_ty(&self, rc: &RefCell<Option<NumInfo>>, ty: NumInfo) -> Result<(), LexerError> {
         if let Some(ty) = rc.replace(Some(ty)) {
-            Err(LexerError {
-                message: format!("Type already set to {:?}", ty),
-                info: self.line_info.clone(),
-                input_source: self.input_source.clone(),
-            })
+            Err(LexerError::new(
+                format!("Type already set to {:?}", ty),
+                self.line_info.clone(),
+            ))
         } else {
             Ok(())
         }
@@ -1152,7 +1113,6 @@ impl<R: Read> Lexer<R> {
             return Err(LexerError::unexpected_character(
                 first,
                 self.line_info.clone(),
-                self.input_source.clone(),
             ));
         }
         let mut longest_match = first.to_string();
@@ -1175,28 +1135,25 @@ impl<R: Read> Lexer<R> {
 }
 
 pub fn from_str(input: &str) -> Lexer<BytesReader<'_>> {
-    Lexer::new(BytesReader::from(input), InputSource::String)
+    Lexer::new(BytesReader::from(input))
 }
 
 pub fn from_string(input: String) -> Lexer<Cursor<String>> {
-    Lexer::new(Cursor::new(input), InputSource::String)
+    Lexer::new(Cursor::new(input))
 }
 
-pub fn from_file(file: File, path: PathBuf) -> Lexer<BufReader<File>> {
-    Lexer::new(BufReader::new(file), InputSource::File(path))
+pub fn from_file(file: File) -> Lexer<BufReader<File>> {
+    Lexer::new(BufReader::new(file))
 }
 
 pub fn from_path(path: PathBuf) -> Result<Lexer<BufReader<File>>, Error> {
-    Ok(Lexer::new(
-        BufReader::new(File::open(path.clone())?),
-        InputSource::File(path),
-    ))
+    Ok(Lexer::new(BufReader::new(File::open(path.clone())?)))
 }
 
-pub fn from_stream<R: Read>(reader: R, name: &str) -> Lexer<R> {
-    Lexer::new_stream(reader, name)
+pub fn from_stream<R: Read>(reader: R) -> Lexer<R> {
+    Lexer::new_stream(reader)
 }
 
 pub fn from_stdin() -> Lexer<StdinReader> {
-    from_stream(StdinReader::default(), "stdin")
+    from_stream(StdinReader::default())
 }

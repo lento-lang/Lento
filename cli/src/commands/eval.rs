@@ -8,6 +8,7 @@ use lento_core::{
         eval::eval_ast,
         value::Value,
     },
+    lexer::lexer::InputSource,
     parser::parser::{from_string, Parser},
     stdlib::init::stdlib,
     type_checker::{checker::TypeChecker, types::GetType},
@@ -24,6 +25,7 @@ pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
         init_logger_str(debug_level);
     }
     let expr = args.get_one::<String>("expr").unwrap().to_owned();
+    let source = InputSource::String;
 
     let std = stdlib();
     let mut parser = from_string(expr);
@@ -32,7 +34,7 @@ pub fn handle_command_eval(args: &ArgMatches, _arg_parser: &mut Command) {
     std.init_type_checker(&mut checker);
     let mut env = global_env();
     std.init_environment(&mut env);
-    eval_all(&mut parser, &mut checker, &mut env, false, false);
+    eval_all(&mut parser, &mut checker, &mut env, false, false, &source);
 }
 
 pub fn eval_all<R: Read>(
@@ -41,6 +43,7 @@ pub fn eval_all<R: Read>(
     env: &mut Environment,
     print_types: bool,
     colors: bool,
+    source: &InputSource,
 ) {
     match parser.parse_all() {
         Ok(asts) => {
@@ -48,7 +51,7 @@ pub fn eval_all<R: Read>(
                 let checked_ast = match checker.check_expr(ast) {
                     Ok(ast) => ast,
                     Err(err) => {
-                        print_type_error(err.message);
+                        print_type_error(err, source);
                         break 'exprs; // Stop on error
                     }
                 };
@@ -74,12 +77,12 @@ pub fn eval_all<R: Read>(
                         }
                     }
                     Err(err) => {
-                        print_runtime_error(err.message);
+                        print_runtime_error(err, source);
                         break 'exprs; // Stop on error
                     }
                 }
             }
         }
-        Err(err) => print_parse_error(err.message),
+        Err(err) => print_parse_error(err, source),
     }
 }

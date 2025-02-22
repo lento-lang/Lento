@@ -121,26 +121,35 @@ impl Display for TokenKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LocationInfo {
     pub index: usize,
     pub line: usize,
     pub column: usize,
+    eof: bool,
 }
 
-impl Debug for LocationInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "index: {}, line: {}, column: {}",
-            self.index, self.line, self.column
-        )
+impl LocationInfo {
+    pub fn new(index: usize, line: usize, column: usize) -> Self {
+        Self {
+            index,
+            line,
+            column,
+            eof: false,
+        }
     }
-}
 
-impl Display for LocationInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "line {} column {}", self.line, self.column)
+    pub fn eof(index: usize) -> Self {
+        Self {
+            index,
+            line: 0,
+            column: 0,
+            eof: true,
+        }
+    }
+
+    pub fn is_eof(&self) -> bool {
+        self.eof
     }
 }
 
@@ -150,17 +159,29 @@ impl Default for LocationInfo {
             index: 0,
             line: 1,
             column: 1,
+            eof: false,
         }
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LineInfo {
     pub start: LocationInfo,
     pub end: LocationInfo,
 }
 
 impl LineInfo {
+    pub fn new(start: LocationInfo, end: LocationInfo) -> Self {
+        Self { start, end }
+    }
+
+    pub fn eof(index: usize) -> Self {
+        Self {
+            start: LocationInfo::eof(index),
+            end: LocationInfo::eof(index),
+        }
+    }
+
     pub fn join(&self, other: &LineInfo) -> LineInfo {
         let start = if self.start.index < other.start.index {
             self.start.clone()
@@ -174,12 +195,6 @@ impl LineInfo {
         };
 
         LineInfo { start, end }
-    }
-}
-
-impl Debug for LineInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({:?}) to ({:?})", self.start, self.end)
     }
 }
 

@@ -17,7 +17,7 @@ use crate::{
 pub fn print() -> Function {
     Function::new_native(
         "print".into(),
-        |values| {
+        |values, _| {
             for val in values {
                 println!("{}", val.pretty_print());
             }
@@ -34,7 +34,7 @@ pub fn print() -> Function {
 pub fn dbg() -> Function {
     Function::new_native(
         "dbg".into(),
-        |values| {
+        |values, _| {
             if values.len() != 1 {
                 panic!("dbg() expects 1 argument");
             }
@@ -58,7 +58,7 @@ pub fn dbg() -> Function {
 pub fn type_of() -> Function {
     Function::new_native(
         "typeof".into(),
-        |values| {
+        |values, _| {
             if values.len() != 1 {
                 panic!("typeof() expects 1 argument");
             }
@@ -76,7 +76,7 @@ pub fn type_of() -> Function {
 pub fn exit() -> Function {
     Function::new_native(
         "exit".into(),
-        |values| {
+        |values, _| {
             if values.len() != 1 {
                 panic!("exit() expects 1 argument");
             }

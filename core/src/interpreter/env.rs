@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
+    lexer::token::LineInfo,
     type_checker::types::Type,
     util::{failable::Failable, str::Str},
 };
@@ -79,25 +80,23 @@ impl<'a> Environment<'a> {
             .or_else(|| self.parent.and_then(|p| p.lookup_function(name)))
     }
 
-    pub fn add_function_variation(
-        &mut self,
-        name: &str,
-        variation: Function,
-    ) -> Result<(), RuntimeError> {
-        if let Some(_existing) = self.functions.get_mut(name) {
-            // TODO: Allow for multiple variations of the same function
-            // TODO: with the same name but different parameter types
-            return Err(RuntimeError {
-                message: format!(
-                    "Function {} already exists in the current environment",
-                    name
-                ),
-            });
-        } else {
-            self.functions.insert(name.to_string(), variation);
-        }
-        Ok(())
-    }
+    // pub fn add_function_variation(
+    //     &mut self,
+    //     name: &str,
+    //     variation: Function,
+    // ) -> Result<(), RuntimeError> {
+    //     if let Some(_existing) = self.functions.get_mut(name) {
+    //         // TODO: Allow for multiple variations of the same function
+    //         // TODO: with the same name but different parameter types
+    //         return Err(RuntimeError::new(format!(
+    //             "Function {} already exists in the current environment",
+    //             name
+    //         )));
+    //     } else {
+    //         self.functions.insert(name.to_string(), variation);
+    //     }
+    //     Ok(())
+    // }
 
     /// Get a value from the environment.
     /// If the value is not found in the current environment, the parent environment is searched recursively.
@@ -132,37 +131,45 @@ impl<'a> Environment<'a> {
 
     /// Add a variable (any value or function) to the environment.
     /// If the variable already exists in a parent environment, it is shadowed.
-    pub fn add_value(&mut self, name: Str, value: Value) -> Failable<RuntimeError> {
+    pub fn add_value(
+        &mut self,
+        name: Str,
+        value: Value,
+        info: &LineInfo,
+    ) -> Failable<RuntimeError> {
         let name = name.to_string();
         // Check if the variable already exists in the standard library
         if self.variables.contains_key(&name) {
-            Err(RuntimeError {
-                message: format!(
+            Err(RuntimeError::new(
+                format!(
                     "Variable named '{}' already exists in the current environment",
                     name
                 ),
-            })
+                info.clone(),
+            ))
         } else {
             match value {
                 Value::Function(func) => {
                     if self.functions.contains_key(&name) {
-                        return Err(RuntimeError {
-                            message: format!(
+                        return Err(RuntimeError::new(
+                            format!(
                                 "Function {} already exists in the current environment",
                                 name
                             ),
-                        });
+                            info.clone(),
+                        ));
                     }
                     self.functions.insert(name, *func);
                 }
                 _ => {
                     if self.variables.contains_key(&name) {
-                        return Err(RuntimeError {
-                            message: format!(
+                        return Err(RuntimeError::new(
+                            format!(
                                 "Variable {} already exists in the current environment",
                                 name
                             ),
-                        });
+                            info.clone(),
+                        ));
                     }
                     self.variables.insert(name, value);
                 }

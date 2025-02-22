@@ -1,6 +1,6 @@
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
-    lexer::{lexer::InputSource, token::LineInfo},
+    lexer::token::LineInfo,
     type_checker::types::Type,
 };
 
@@ -325,15 +325,10 @@ impl CheckedAst {
 pub struct CheckedModule {
     pub name: String,
     pub expressions: Vec<CheckedAst>,
-    pub source: InputSource,
 }
 
 impl CheckedModule {
-    pub fn new(name: String, expressions: Vec<CheckedAst>, source: InputSource) -> CheckedModule {
-        CheckedModule {
-            name,
-            expressions,
-            source,
-        }
+    pub fn new(name: String, expressions: Vec<CheckedAst>) -> CheckedModule {
+        CheckedModule { name, expressions }
     }
 }

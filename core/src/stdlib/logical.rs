@@ -1,6 +1,6 @@
 use crate::{
     interpreter::{
-        error::runtime_error,
+        error::RuntimeError,
         value::{Function, Value},
     },
     type_checker::{checked_ast::CheckedParam, types::std_types},
@@ -9,9 +9,12 @@ use crate::{
 pub fn eq() -> Function {
     Function::new_native(
         "eq".into(),
-        |values| {
+        |values, info| {
             if values.len() != 2 {
-                return Err(runtime_error("eq() expects 2 arguments".to_string()));
+                return Err(RuntimeError::new(
+                    "eq() expects 2 arguments".to_string(),
+                    info.clone(),
+                ));
             }
             Ok(Value::Boolean(values[0] == values[1]))
         },

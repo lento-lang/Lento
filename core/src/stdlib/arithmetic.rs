@@ -1,6 +1,6 @@
 use crate::{
     interpreter::{
-        error::runtime_error,
+        error::RuntimeError,
         number::{ArithmeticOperations, Number},
         value::{Function, Value},
     },
@@ -17,10 +17,13 @@ use crate::{
 pub fn add() -> Function {
     Function::new_native(
         "add".into(),
-        |values| {
+        |values, info| {
             let ty_num = std_types::NUM();
             if values.len() != 2 {
-                return Err(runtime_error("add() expects 2 arguments".to_string()));
+                return Err(RuntimeError::new(
+                    "add() expects 2 arguments".to_string(),
+                    info.clone(),
+                ));
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
@@ -30,12 +33,15 @@ pub fn add() -> Function {
                     _ => panic!("add expects 2 arguments of type '{}'", ty_num),
                 }
             } else {
-                Err(runtime_error(format!(
-                    "add expects 2 arguments of type '{}', got '{}' and '{}'",
-                    ty_num,
-                    lhs.get_type(),
-                    rhs.get_type()
-                )))
+                Err(RuntimeError::new(
+                    format!(
+                        "add expects 2 arguments of type '{}', got '{}' and '{}'",
+                        ty_num,
+                        lhs.get_type(),
+                        rhs.get_type()
+                    ),
+                    info.clone(),
+                ))
             }
         },
         vec![
@@ -55,10 +61,13 @@ pub fn add() -> Function {
 pub fn sub() -> Function {
     Function::new_native(
         "sub".into(),
-        |values| {
+        |values, info| {
             let ty_num = std_types::NUM();
             if values.len() != 2 {
-                return Err(runtime_error("sub() expects 2 arguments".to_string()));
+                return Err(RuntimeError::new(
+                    "sub() expects 2 arguments".to_string(),
+                    info.clone(),
+                ));
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
@@ -68,12 +77,15 @@ pub fn sub() -> Function {
                     _ => panic!("sub expects 2 arguments of type '{}'", ty_num),
                 }
             } else {
-                Err(runtime_error(format!(
-                    "sub expects 2 arguments of type '{}', got '{}' and '{}'",
-                    ty_num,
-                    lhs.get_type(),
-                    rhs.get_type()
-                )))
+                Err(RuntimeError::new(
+                    format!(
+                        "sub expects 2 arguments of type '{}', got '{}' and '{}'",
+                        ty_num,
+                        lhs.get_type(),
+                        rhs.get_type()
+                    ),
+                    info.clone(),
+                ))
             }
         },
         vec![
@@ -93,10 +105,13 @@ pub fn sub() -> Function {
 pub fn mul() -> Function {
     Function::new_native(
         "mul".into(),
-        |values| {
+        |values, info| {
             let ty_num = std_types::NUM();
             if values.len() != 2 {
-                return Err(runtime_error("mul() expects 2 arguments".to_string()));
+                return Err(RuntimeError::new(
+                    "mul() expects 2 arguments".to_string(),
+                    info.clone(),
+                ));
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
@@ -106,12 +121,15 @@ pub fn mul() -> Function {
                     _ => panic!("mul expects 2 arguments of type '{}'", ty_num),
                 }
             } else {
-                Err(runtime_error(format!(
-                    "mul expects 2 arguments of type '{}', got '{}' and '{}'",
-                    ty_num,
-                    lhs.get_type(),
-                    rhs.get_type()
-                )))
+                Err(RuntimeError::new(
+                    format!(
+                        "mul expects 2 arguments of type '{}', got '{}' and '{}'",
+                        ty_num,
+                        lhs.get_type(),
+                        rhs.get_type()
+                    ),
+                    info.clone(),
+                ))
             }
         },
         vec![
@@ -131,25 +149,33 @@ pub fn mul() -> Function {
 pub fn div() -> Function {
     Function::new_native(
         "div".into(),
-        |values| {
+        |values, info| {
             let ty_num = std_types::NUM();
             if values.len() != 2 {
-                return Err(runtime_error("div() expects 2 arguments".to_string()));
+                return Err(RuntimeError::new(
+                    "div() expects 2 arguments".to_string(),
+                    info.clone(),
+                ));
             }
             let lhs = values[0].clone();
             let rhs = values[1].clone();
             if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
-                    (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::div(&l, &r)?)),
+                    (Value::Number(l), Value::Number(r)) => {
+                        Ok(Value::Number(Number::div(&l, &r, info)?))
+                    }
                     _ => panic!("div expects 2 arguments of type '{}'", ty_num),
                 }
             } else {
-                Err(runtime_error(format!(
-                    "div expects 2 arguments of type '{}', got '{}' and '{}'",
-                    ty_num,
-                    lhs.get_type(),
-                    rhs.get_type()
-                )))
+                Err(RuntimeError::new(
+                    format!(
+                        "div expects 2 arguments of type '{}', got '{}' and '{}'",
+                        ty_num,
+                        lhs.get_type(),
+                        rhs.get_type()
+                    ),
+                    info.clone(),
+                ))
             }
         },
         vec![

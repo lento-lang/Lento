@@ -1,8 +1,11 @@
 use std::fmt::Display;
 
-use crate::type_checker::{
-    checked_ast::{CheckedAst, CheckedParam},
-    types::{std_types, FunctionType, GetType, Type, TypeTrait},
+use crate::{
+    lexer::token::LineInfo,
+    type_checker::{
+        checked_ast::{CheckedAst, CheckedParam},
+        types::{std_types, FunctionType, GetType, Type, TypeTrait},
+    },
 };
 
 use super::{env::Environment, eval::InterpretResult, number::Number};
@@ -41,7 +44,7 @@ pub struct UserFunction {
 }
 
 /// A function handler takes a list of arguments and returns a result.
-pub type NativeHandler = fn(&mut Vec<Value>) -> InterpretResult;
+pub type NativeHandler = fn(&mut Vec<Value>, info: &LineInfo) -> InterpretResult;
 
 /// Built-in functions
 #[derive(Debug, Clone)]

@@ -1,9 +1,14 @@
+use crate::lexer::token::LineInfo;
+
 /// Lexer error
 #[derive(Debug, Clone)]
 pub struct CompileError {
     pub message: String,
+    pub info: LineInfo,
 }
 
-pub fn compile_error(message: String) -> CompileError {
-    CompileError { message }
+impl CompileError {
+    pub fn new(message: String, info: LineInfo) -> Self {
+        Self { message, info }
+    }
 }

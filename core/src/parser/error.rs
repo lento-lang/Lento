@@ -1,20 +1,16 @@
 use std::fmt::Debug;
 
-#[derive(Clone, PartialEq)]
+use crate::lexer::token::LineInfo;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParseError {
     pub message: String,
-    pub span: (usize, usize),
+    pub info: LineInfo,
 }
 
 impl ParseError {
-    pub fn new(message: String, span: (usize, usize)) -> Self {
-        Self { message, span }
-    }
-}
-
-impl Debug for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} in {:?}", self.message, self.span)
+    pub fn new(message: String, info: LineInfo) -> Self {
+        Self { message, info }
     }
 }
 
