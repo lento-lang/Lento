@@ -23,8 +23,11 @@ mod tests {
         Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(n)))
     }
 
-    fn lit(v: Value) -> Ast {
-        Ast::Literal(v, LineInfo::default())
+    fn lit(value: Value) -> Ast {
+        Ast::Literal {
+            value,
+            info: LineInfo::default(),
+        }
     }
 
     #[test]
@@ -75,10 +78,10 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple(_, _)));
-        if let Ast::Tuple(elems, _) = &result.expressions[0] {
-            assert_eq!(elems.len(), 1);
-            assert_eq!(elems[0], lit(make_u1(1)));
+        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+            assert_eq!(exprs.len(), 1);
+            assert_eq!(exprs[0], lit(make_u1(1)));
         }
     }
 
@@ -88,11 +91,11 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple(_, _)));
-        if let Ast::Tuple(elems, _) = &result.expressions[0] {
-            assert_eq!(elems.len(), 2);
-            assert_eq!(elems[0], lit(make_u1(1)));
-            assert_eq!(elems[1], lit(make_u8(2)));
+        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+            assert_eq!(exprs.len(), 2);
+            assert_eq!(exprs[0], lit(make_u1(1)));
+            assert_eq!(exprs[1], lit(make_u8(2)));
         }
     }
 
@@ -102,12 +105,12 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple(_, _)));
-        if let Ast::Tuple(elems, _) = &result.expressions[0] {
-            assert_eq!(elems.len(), 3);
-            assert_eq!(elems[0], lit(make_u1(1)));
-            assert_eq!(elems[1], lit(make_u8(2)));
-            assert_eq!(elems[2], lit(make_u8(3)));
+        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+            assert_eq!(exprs.len(), 3);
+            assert_eq!(exprs[0], lit(make_u1(1)));
+            assert_eq!(exprs[1], lit(make_u8(2)));
+            assert_eq!(exprs[2], lit(make_u8(3)));
         }
     }
 
@@ -117,12 +120,12 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple(_, _)));
-        if let Ast::Tuple(elems, _) = &result.expressions[0] {
-            assert_eq!(elems.len(), 3);
-            assert_eq!(elems[0], lit(make_u1(1)));
-            assert_eq!(elems[1], lit(make_u8(2)));
-            assert_eq!(elems[2], lit(make_u8(3)));
+        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+            assert_eq!(exprs.len(), 3);
+            assert_eq!(exprs[0], lit(make_u1(1)));
+            assert_eq!(exprs[1], lit(make_u8(2)));
+            assert_eq!(exprs[2], lit(make_u8(3)));
         }
     }
 
@@ -132,11 +135,14 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary(_, _, _, _)));
-        if let Ast::Binary(lhs, op, rhs, _) = &result.expressions[0] {
-            assert_eq!(op.name, "add".to_string());
-            assert!(matches!(*lhs.to_owned(), Ast::Tuple(_, _)));
-            assert!(matches!(*rhs.to_owned(), Ast::Tuple(_, _)));
+        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
+        if let Ast::Binary {
+            lhs, op_info, rhs, ..
+        } = &result.expressions[0]
+        {
+            assert_eq!(op_info.name, "add".to_string());
+            assert!(matches!(*lhs.to_owned(), Ast::Tuple { .. }));
+            assert!(matches!(*rhs.to_owned(), Ast::Tuple { .. }));
         }
     }
 
@@ -146,8 +152,12 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::List(_, _)));
-        if let Ast::List(elems, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::List { .. }));
+        if let Ast::List {
+            exprs: elems,
+            info: _,
+        } = &result.expressions[0]
+        {
             assert_eq!(elems.len(), 3);
             assert_eq!(elems[0], lit(make_u1(1)));
             assert_eq!(elems[1], lit(make_u8(2)));
@@ -158,11 +168,14 @@ mod tests {
     #[test]
     fn call_paren_apply() {
         let result = parse_str_one("println(\"Hello, World!\")", None);
-        let expected = Ast::Call(
-            Box::new(Ast::Identifier("println".to_string(), LineInfo::default())),
-            Box::new(lit(Value::String("Hello, World!".to_string()))),
-            LineInfo::default(),
-        );
+        let expected = Ast::FunctionCall {
+            expr: Box::new(Ast::Identifier {
+                name: "println".to_string(),
+                info: LineInfo::default(),
+            }),
+            arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
+            info: LineInfo::default(),
+        };
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
@@ -172,11 +185,14 @@ mod tests {
     #[test]
     fn call_no_paren_apply() {
         let result = parse_str_one("println \"Hello, World!\"", None);
-        let expected = Ast::Call(
-            Box::new(Ast::Identifier("println".to_string(), LineInfo::default())),
-            Box::new(lit(Value::String("Hello, World!".to_string()))),
-            LineInfo::default(),
-        );
+        let expected = Ast::FunctionCall {
+            expr: Box::new(Ast::Identifier {
+                name: "println".to_string(),
+                info: LineInfo::default(),
+            }),
+            arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
+            info: LineInfo::default(),
+        };
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
@@ -186,11 +202,14 @@ mod tests {
     #[test]
     fn call_tuple_apply() {
         let result = parse_str_one("println (\"Hello, World!\")", None);
-        let expected = Ast::Call(
-            Box::new(Ast::Identifier("println".to_string(), LineInfo::default())),
-            Box::new(lit(Value::String("Hello, World!".to_string()))),
-            LineInfo::default(),
-        );
+        let expected = Ast::FunctionCall {
+            expr: Box::new(Ast::Identifier {
+                name: "println".to_string(),
+                info: LineInfo::default(),
+            }),
+            arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
+            info: LineInfo::default(),
+        };
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
@@ -200,11 +219,14 @@ mod tests {
     #[test]
     fn hello_world_file() {
         let result = parse_path_one(Path::new("./examples/basic/hello_world.lt"), None);
-        let expected = Ast::Call(
-            Box::new(Ast::Identifier("println".to_string(), LineInfo::default())),
-            Box::new(lit(Value::String("Hello, World!".to_string()))),
-            LineInfo::default(),
-        );
+        let expected = Ast::FunctionCall {
+            expr: Box::new(Ast::Identifier {
+                name: "println".to_string(),
+                info: LineInfo::default(),
+            }),
+            arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
+            info: LineInfo::default(),
+        };
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
@@ -217,15 +239,27 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary(_, _, _, _)));
+        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
         // Assert "add"
-        if let Ast::Binary(_, op, _, _) = &result.expressions[0] {
-            assert_eq!(op.name, "add".to_string());
+        if let Ast::Binary { op_info, .. } = &result.expressions[0] {
+            assert_eq!(op_info.name, "add".to_string());
         }
-        if let Ast::Binary(lhs, _, rhs, _) = &result.expressions[0] {
+        if let Ast::Binary { lhs, rhs, .. } = &result.expressions[0] {
             // Always true
-            assert!(matches!(*lhs.to_owned(), Ast::Literal(Value::Number(_), _)));
-            assert!(matches!(*rhs.to_owned(), Ast::Literal(Value::Number(_), _)));
+            assert!(matches!(
+                *lhs.to_owned(),
+                Ast::Literal {
+                    value: Value::Number(_),
+                    ..
+                }
+            ));
+            assert!(matches!(
+                *rhs.to_owned(),
+                Ast::Literal {
+                    value: Value::Number(_),
+                    ..
+                }
+            ));
         }
     }
 
@@ -235,10 +269,10 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary(_, _, _, _)));
+        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
         // Assert left side
-        if let Ast::Binary(lhs, _, _, _) = &result.expressions[0] {
-            assert!(matches!(**lhs, Ast::Binary(_, _, _, _)));
+        if let Ast::Binary { lhs, .. } = &result.expressions[0] {
+            assert!(matches!(**lhs, Ast::Binary { .. }));
         }
         // dbg!(&result.expressions[0].print_sexpr());
     }
@@ -249,7 +283,7 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Assignment(_, _, _)));
+        assert!(matches!(result.expressions[0], Ast::Assignment { .. }));
     }
 
     #[test]
@@ -258,10 +292,10 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Assignment(_, _, _)));
-        if let Ast::Assignment(lhs, rhs, _) = &result.expressions[0] {
-            assert!(matches!(*lhs.to_owned(), Ast::Identifier(_, _)));
-            assert!(matches!(*rhs.to_owned(), Ast::Binary(_, _, _, _)));
+        assert!(matches!(result.expressions[0], Ast::Assignment { .. }));
+        if let Ast::Assignment { target, expr, .. } = &result.expressions[0] {
+            assert!(matches!(*target.to_owned(), Ast::Identifier { .. }));
+            assert!(matches!(*expr.to_owned(), Ast::Binary { .. }));
         }
     }
 
@@ -298,15 +332,15 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary(_, _, _, _)));
-        if let Ast::Binary(lhs, _, rhs, _) = &result.expressions[0] {
-            assert!(matches!(*lhs.to_owned(), Ast::Binary(_, _, _, _)));
-            assert!(matches!(*rhs.to_owned(), Ast::Literal(_, _)));
-            if let Ast::Binary(lhs, _, _, _) = &**lhs {
-                assert!(matches!(*lhs.to_owned(), Ast::Binary(_, _, _, _)));
-                assert!(matches!(*rhs.to_owned(), Ast::Literal(_, _)));
-                if let Ast::Binary(lhs, _, _, _) = &**lhs {
-                    assert!(matches!(*lhs.to_owned(), Ast::Literal(_, _)));
+        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
+        if let Ast::Binary { lhs, rhs, .. } = &result.expressions[0] {
+            assert!(matches!(*lhs.to_owned(), Ast::Binary { .. }));
+            assert!(matches!(*rhs.to_owned(), Ast::Literal { .. }));
+            if let Ast::Binary { lhs, .. } = &**lhs {
+                assert!(matches!(*lhs.to_owned(), Ast::Binary { .. }));
+                assert!(matches!(*rhs.to_owned(), Ast::Literal { .. }));
+                if let Ast::Binary { lhs, .. } = &**lhs {
+                    assert!(matches!(*lhs.to_owned(), Ast::Literal { .. }));
                 }
             }
         }
@@ -318,8 +352,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record(_, _)));
-        if let Ast::Record(fields, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result.expressions[0] {
             assert_eq!(fields.len(), 0);
         }
     }
@@ -330,15 +364,15 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record(_, _)));
-        if let Ast::Record(fields, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result.expressions[0] {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
             if let RecordKey::String(key) = &fields[0].0 {
                 assert_eq!(key, "x");
             }
-            assert!(matches!(fields[0].1, Ast::Literal(_, _)));
+            assert!(matches!(fields[0].1, Ast::Literal { .. }));
             assert_eq!(fields[0].1, lit(make_u1(1)));
         }
     }
@@ -349,8 +383,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record(_, _)));
-        if let Ast::Record(fields, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result.expressions[0] {
             assert_eq!(fields.len(), 2);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -361,8 +395,8 @@ mod tests {
             if let RecordKey::String(key) = &fields[1].0 {
                 assert_eq!(key, "y");
             }
-            assert!(matches!(fields[0].1, Ast::Literal(_, _)));
-            assert!(matches!(fields[1].1, Ast::Literal(_, _)));
+            assert!(matches!(fields[0].1, Ast::Literal { .. }));
+            assert!(matches!(fields[1].1, Ast::Literal { .. }));
             assert_eq!(fields[0].1, lit(make_u1(1)));
             assert_eq!(fields[1].1, lit(make_u8(2)));
         }
@@ -374,23 +408,27 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record(_, _)));
-        if let Ast::Record(fields, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result.expressions[0] {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
             if let RecordKey::String(key) = &fields[0].0 {
                 assert_eq!(key, "x");
             }
-            assert!(matches!(fields[0].1, Ast::Record(_, _)));
-            if let Ast::Record(inner_fields, _) = &fields[0].1 {
+            assert!(matches!(fields[0].1, Ast::Record { .. }));
+            if let Ast::Record {
+                fields: inner_fields,
+                ..
+            } = &fields[0].1
+            {
                 assert_eq!(inner_fields.len(), 1);
                 let inner_fields = inner_fields.iter().collect::<Vec<_>>();
                 assert!(matches!(inner_fields[0].0, RecordKey::String(_)));
                 if let RecordKey::String(key) = &inner_fields[0].0 {
                     assert_eq!(key, "y");
                 }
-                assert!(matches!(inner_fields[0].1, Ast::Literal(_, _)));
+                assert!(matches!(inner_fields[0].1, Ast::Literal { .. }));
                 assert_eq!(inner_fields[0].1, lit(make_u1(1)));
             }
         }
@@ -402,8 +440,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record(_, _)));
-        if let Ast::Record(fields, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result.expressions[0] {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -413,7 +451,7 @@ mod tests {
             assert!(matches!(fields[0].1, Ast::Block(_, _)));
             if let Ast::Block(inner, _) = &fields[0].1 {
                 assert_eq!(inner.len(), 1);
-                assert!(matches!(inner[0], Ast::Binary(_, _, _, _)));
+                assert!(matches!(inner[0], Ast::Binary { .. }));
             }
         }
     }
@@ -427,7 +465,7 @@ mod tests {
         assert!(matches!(result.expressions[0], Ast::Block(_, _)));
         if let Ast::Block(inner, _) = &result.expressions[0] {
             assert_eq!(inner.len(), 1);
-            assert!(matches!(inner[0], Ast::Literal(_, _)));
+            assert!(matches!(inner[0], Ast::Literal { .. }));
         }
     }
 
@@ -440,8 +478,8 @@ mod tests {
         assert!(matches!(result.expressions[0], Ast::Block(_, _)));
         if let Ast::Block(inner, _) = &result.expressions[0] {
             assert_eq!(inner.len(), 2);
-            assert!(matches!(inner[0], Ast::Literal(_, _)));
-            assert!(matches!(inner[1], Ast::Literal(_, _)));
+            assert!(matches!(inner[0], Ast::Literal { .. }));
+            assert!(matches!(inner[1], Ast::Literal { .. }));
         }
     }
 
@@ -454,9 +492,9 @@ mod tests {
         assert!(matches!(result.expressions[0], Ast::Block(_, _)));
         if let Ast::Block(inner, _) = &result.expressions[0] {
             assert_eq!(inner.len(), 3);
-            assert!(matches!(inner[0], Ast::Literal(_, _)));
-            assert!(matches!(inner[1], Ast::Literal(_, _)));
-            assert!(matches!(inner[2], Ast::Literal(_, _)));
+            assert!(matches!(inner[0], Ast::Literal { .. }));
+            assert!(matches!(inner[1], Ast::Literal { .. }));
+            assert!(matches!(inner[2], Ast::Literal { .. }));
         }
     }
 
@@ -469,9 +507,9 @@ mod tests {
         assert!(matches!(result.expressions[0], Ast::Block(_, _)));
         if let Ast::Block(inner, _) = &result.expressions[0] {
             assert_eq!(inner.len(), 3);
-            assert!(matches!(inner[0], Ast::Literal(_, _)));
-            assert!(matches!(inner[1], Ast::Literal(_, _)));
-            assert!(matches!(inner[2], Ast::Literal(_, _)));
+            assert!(matches!(inner[0], Ast::Literal { .. }));
+            assert!(matches!(inner[1], Ast::Literal { .. }));
+            assert!(matches!(inner[2], Ast::Literal { .. }));
         }
     }
 
@@ -500,8 +538,8 @@ mod tests {
             assert!(matches!(inner[0], Ast::Block(_, _)));
             if let Ast::Block(inner_inner, _) = &inner[0] {
                 assert_eq!(inner_inner.len(), 2);
-                assert!(matches!(inner_inner[0], Ast::Literal(_, _)));
-                assert!(matches!(inner_inner[1], Ast::Literal(_, _)));
+                assert!(matches!(inner_inner[0], Ast::Literal { .. }));
+                assert!(matches!(inner_inner[1], Ast::Literal { .. }));
             }
         }
     }

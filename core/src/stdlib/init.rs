@@ -164,7 +164,11 @@ pub fn stdlib() -> Initializer {
                 |op| {
                     if let StaticOperatorAst::Infix(lhs, rhs) = op {
                         let info = lhs.info().join(rhs.info());
-                        Ast::Assignment(Box::new(lhs), Box::new(rhs), info)
+                        Ast::Assignment {
+                            target: Box::new(lhs),
+                            expr: Box::new(rhs),
+                            info: info,
+                        }
                     } else {
                         panic!("assign expects an infix operator");
                     }
