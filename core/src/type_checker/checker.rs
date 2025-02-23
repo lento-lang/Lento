@@ -271,7 +271,7 @@ impl TypeChecker<'_> {
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
-            Ast::Identifier { name, info } => self.check_identifier(&name, info)?,
+            Ast::Identifier { name, info } => self.check_identifier(name, info)?,
             Ast::FunctionCall {
                 expr,
                 arg: args,

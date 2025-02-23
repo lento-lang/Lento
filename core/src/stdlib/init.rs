@@ -167,7 +167,7 @@ pub fn stdlib() -> Initializer {
                         Ast::Assignment {
                             target: Box::new(lhs),
                             expr: Box::new(rhs),
-                            info: info,
+                            info,
                         }
                     } else {
                         panic!("assign expects an infix operator");

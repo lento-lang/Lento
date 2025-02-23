@@ -193,7 +193,7 @@ fn eval_call(
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
             closure.add_value(Str::String(param.name.clone()), arg.clone(), info)?;
-            eval_ast(&body, &mut closure)
+            eval_ast(body, &mut closure)
         }
         Function::Native { .. } => {
             unreachable!("Native functions must not reach this!!!");
