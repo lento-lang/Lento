@@ -34,13 +34,17 @@ pub fn eval_module(module: &CheckedModule, env: &mut Environment) -> InterpretRe
 /// Interpret a type-checked AST node
 pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     let result = match ast {
-        CheckedAst::Call { function, arg, .. } => eval_call(function, arg, env, ast.info())?,
-        CheckedAst::Tuple(v, _, _) => eval_tuple(v, env)?,
-        CheckedAst::Literal(l, _) => l.clone(),
-        CheckedAst::Identifier(id, _, _) => match env.lookup_identifier(id) {
+        CheckedAst::FunctionCall {
+            expr: function,
+            arg,
+            ..
+        } => eval_call(function, arg, env, ast.info())?,
+        CheckedAst::Tuple { exprs, .. } => eval_tuple(exprs, env)?,
+        CheckedAst::Literal { value, .. } => value.clone(),
+        CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(_), Some(_)) => {
                 return Err(RuntimeError::new(
-                    format!("Ambiguous identifier '{}'", id),
+                    format!("Ambiguous identifier '{}'", name),
                     ast.info().clone(),
                 ))
             }
@@ -48,15 +52,15 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
             (None, None) => {
                 return Err(RuntimeError::new(
-                    format!("Unknown identifier '{}'", id),
+                    format!("Unknown identifier '{}'", name),
                     ast.info().clone(),
                 ))
             }
         },
-        CheckedAst::Assignment(lhs, rhs, _, _) => {
-            let info = lhs.info();
-            let lhs = match *lhs.to_owned() {
-                CheckedAst::Identifier(id, _, _) => id,
+        CheckedAst::Assignment { target, expr, .. } => {
+            let info = target.info();
+            let target = match *target.to_owned() {
+                CheckedAst::Identifier { name, .. } => name,
                 _ => {
                     return Err(RuntimeError::new(
                         "Assignment expects an identifier".to_string(),
@@ -64,32 +68,37 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
                     ))
                 }
             };
-            let rhs = eval_ast(rhs, env)?;
-            env.add_value(Str::String(lhs), rhs.clone(), info)?;
-            rhs
+            let value = eval_ast(expr, env)?;
+            env.add_value(Str::String(target), value.clone(), info)?;
+            value
         }
-        CheckedAst::List(elems, ty, _) => {
-            let values = elems
+        CheckedAst::List { exprs, ty, .. } => Value::List(
+            exprs
                 .iter()
                 .map(|e| eval_ast(e, env))
-                .collect::<Result<Vec<Value>, _>>()?;
-            Value::List(values, ty.clone())
-        }
-        CheckedAst::Record(expr, ty, _) => {
+                .collect::<Result<Vec<Value>, _>>()?,
+            ty.clone(),
+        ),
+        CheckedAst::Record { fields, ty, .. } => {
             let mut record = Vec::new();
-            for (key, value) in expr {
+            for (key, value) in fields {
                 let value = eval_ast(value, env)?;
                 record.push((key.clone(), value));
             }
             Value::Record(record, ty.clone())
         }
-        CheckedAst::Function(func, _) => Value::Function(Box::new(Function::new_user(
-            func.param.clone(),
-            func.body.clone(),
+        CheckedAst::FunctionDef {
+            param,
+            body,
+            return_type,
+            ..
+        } => Value::Function(Box::new(Function::new_user(
+            param.clone(),
+            *body.clone(),
             env.deep_clone(),
-            func.return_type.clone(),
+            return_type.clone(),
         ))),
-        CheckedAst::Block(exprs, _, _) => {
+        CheckedAst::Block { exprs, .. } => {
             let mut result = Value::Unit;
             let mut scope = env.new_child(Str::Str("<block>"));
             for expr in exprs {
@@ -98,7 +107,7 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             result
         }
     };
-    if !matches!(ast, CheckedAst::Literal(_, _)) {
+    if !matches!(ast, CheckedAst::Literal { .. }) {
         log::trace!(
             "Eval: {} -> {}",
             ast.print_sexpr(),
@@ -129,15 +138,15 @@ fn eval_call(
         env: &'a mut Environment,
     ) -> Option<(&'a NativeFunction, Vec<&'b CheckedAst>)> {
         match expr {
-            CheckedAst::Identifier(id, _, _) => match env.lookup_function(id) {
+            CheckedAst::Identifier { name, .. } => match env.lookup_function(name) {
                 Some(Function::Native(native)) => Some((native, args)),
                 _ => None,
             },
-            CheckedAst::Call { function, arg, .. } => {
+            CheckedAst::FunctionCall { expr, arg, .. } => {
                 // This argument will be applied before the other arguments
                 args.insert(0, arg);
                 // Recurse until we find a native function (if any)
-                unwrap_native(function, args, env)
+                unwrap_native(expr, args, env)
             }
             _ => None,
         }
@@ -184,7 +193,7 @@ fn eval_call(
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
             closure.add_value(Str::String(param.name.clone()), arg.clone(), info)?;
-            eval_ast(body, &mut closure)
+            eval_ast(&body, &mut closure)
         }
         Function::Native { .. } => {
             unreachable!("Native functions must not reach this!!!");
@@ -193,11 +202,11 @@ fn eval_call(
 }
 
 /// Assume `elems` are a non-empty vector
-fn eval_tuple(elems: &[CheckedAst], env: &mut Environment) -> InterpretResult {
-    if elems.is_empty() {
+fn eval_tuple(exprs: &[CheckedAst], env: &mut Environment) -> InterpretResult {
+    if exprs.is_empty() {
         return Ok(Value::Unit);
     }
-    let (values, types): (Vec<Value>, Vec<Type>) = elems
+    let (values, types): (Vec<Value>, Vec<Type>) = exprs
         .iter()
         .map(|e| {
             let value = eval_ast(e, env)?;

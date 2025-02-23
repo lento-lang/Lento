@@ -736,7 +736,10 @@ impl<R: Read> Parser<R> {
                                         exprs.push(self.parse_top_expr()?);
                                     }
                                     let last = self.parse_expected(TokenKind::RightBrace, "}")?;
-                                    Ast::Block(exprs, t.info.join(&last.info))
+                                    Ast::Block {
+                                        exprs,
+                                        info: t.info.join(&last.info),
+                                    }
                                 }
                             }
                             // Lists: []

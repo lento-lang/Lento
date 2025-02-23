@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedFunction, CheckedModule, CheckedParam},
+    checked_ast::{CheckedAst, CheckedModule, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -218,7 +218,7 @@ impl TypeChecker<'_> {
                             self.check_function(checked_param.clone(), body, return_type, info)?;
                         let variation = FunctionType {
                             param: checked_param,
-                            ret: checked.get_type().clone(),
+                            return_type: checked.get_type().clone(),
                         };
                         log::debug!(
                             "Adding function '{}' with variation: {}",
@@ -264,7 +264,10 @@ impl TypeChecker<'_> {
                 return_type,
                 info,
             } => self.check_function(self.check_param(param)?, body, return_type, info)?,
-            Ast::Literal { value, info } => CheckedAst::Literal(value.clone(), info.clone()),
+            Ast::Literal { value, info } => CheckedAst::Literal {
+                value: value.clone(),
+                info: info.clone(),
+            },
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -291,7 +294,7 @@ impl TypeChecker<'_> {
                 info,
             } => self.check_unary(op, operand, info)?,
             Ast::Assignment { target, expr, info } => self.check_assignment(target, expr, info)?,
-            Ast::Block(exprs, info) => self.check_block(exprs, info)?,
+            Ast::Block { exprs, info } => self.check_block(exprs, info)?,
         })
     }
 
@@ -346,15 +349,21 @@ impl TypeChecker<'_> {
             body_type
         };
 
-        Ok(CheckedAst::Function(
-            Box::new(CheckedFunction::new(param, body, return_type)),
+        Ok(CheckedAst::function_def(
+            param,
+            body,
+            return_type,
             info.clone(),
         ))
     }
 
     fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
         if elems.is_empty() {
-            return Ok(CheckedAst::Tuple(vec![], std_types::UNIT, info.clone()));
+            return Ok(CheckedAst::Tuple {
+                exprs: vec![],
+                expr_types: std_types::UNIT,
+                info: info.clone(),
+            });
         }
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
@@ -362,11 +371,11 @@ impl TypeChecker<'_> {
             .map(|e| e.get_type())
             .cloned()
             .collect::<Vec<_>>();
-        Ok(CheckedAst::Tuple(
-            checked_elems,
-            Type::Tuple(elem_types),
-            info.clone(),
-        ))
+        Ok(CheckedAst::Tuple {
+            exprs: checked_elems,
+            expr_types: Type::Tuple(elem_types),
+            info: info.clone(),
+        })
     }
 
     fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
@@ -389,11 +398,11 @@ impl TypeChecker<'_> {
         } else {
             Type::Sum(list_types)
         };
-        Ok(CheckedAst::List(
-            checked_elems,
-            Type::List(Box::new(list_type)),
-            info.clone(),
-        ))
+        Ok(CheckedAst::List {
+            exprs: checked_elems,
+            ty: Type::List(Box::new(list_type)),
+            info: info.clone(),
+        })
     }
 
     fn check_record(
@@ -411,28 +420,35 @@ impl TypeChecker<'_> {
                 .map(|(k, v)| (k.clone(), v.get_type().clone()))
                 .collect(),
         );
-        Ok(CheckedAst::Record(pairs, record_type, info.clone()))
+        Ok(CheckedAst::Record {
+            fields: pairs,
+            ty: record_type,
+            info: info.clone(),
+        })
     }
 
     fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
-            Some(IdentifierType::Variable(ty)) => {
-                CheckedAst::Identifier(name.to_string(), ty.clone(), info.clone())
-            }
-            Some(IdentifierType::Type(ty)) => {
-                CheckedAst::Literal(Value::Type(ty.clone()), info.clone())
-            }
+            Some(IdentifierType::Variable(ty)) => CheckedAst::Identifier {
+                name: name.to_string(),
+                ty: ty.clone(),
+                info: info.clone(),
+            },
+            Some(IdentifierType::Type(ty)) => CheckedAst::Literal {
+                value: Value::Type(ty.clone()),
+                info: info.clone(),
+            },
             Some(IdentifierType::Function(variants)) => {
                 // TODO: Do not select the first variant!!!
                 // Instead, select the variant that matches the arguments types
                 // Or infer based on the context of use etc.
                 // This is a very temporary solution...
                 if let Some(variant) = variants.first() {
-                    CheckedAst::Identifier(
-                        name.to_string(),
-                        Type::Function(Box::new(variant.clone())),
-                        info.clone(),
-                    )
+                    CheckedAst::Identifier {
+                        name: name.to_string(),
+                        ty: Type::Function(Box::new(variant.clone())),
+                        info: info.clone(),
+                    }
                 } else {
                     return Err(TypeError::new(
                         format!("Function '{}' has no variants", name),
@@ -479,16 +495,16 @@ impl TypeChecker<'_> {
         let ty = expr.get_type().clone();
         let assign_info = info.join(expr.info());
         self.env.add_variable(target, ty.clone());
-        Ok(CheckedAst::Assignment(
-            Box::new(CheckedAst::Identifier(
-                target.to_string(),
-                ty.clone(),
-                info.clone(),
-            )),
-            Box::new(expr),
+        Ok(CheckedAst::Assignment {
+            target: Box::new(CheckedAst::Identifier {
+                name: target.to_string(),
+                ty: ty.clone(),
+                info: info.clone(),
+            }),
+            expr: Box::new(expr),
             ty,
-            assign_info,
-        ))
+            info: assign_info,
+        })
     }
 
     fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
@@ -499,7 +515,11 @@ impl TypeChecker<'_> {
         } else {
             std_types::UNIT
         };
-        Ok(CheckedAst::Block(exprs, ty, info.clone()))
+        Ok(CheckedAst::Block {
+            exprs,
+            ty,
+            info: info.clone(),
+        })
     }
 
     fn check_call(&mut self, expr: &Ast, arg: &Ast, info: &LineInfo) -> TypeResult<CheckedAst> {
@@ -510,7 +530,10 @@ impl TypeChecker<'_> {
         // Go through the expression and check if the type is a function
         let expr = self.check_expr(expr)?;
         if let Type::Function(fn_ty) = expr.get_type() {
-            let FunctionType { param, ret } = fn_ty.borrow();
+            let FunctionType {
+                param,
+                return_type: ret,
+            } = fn_ty.borrow();
             // Check the type of the argument
             let arg = self.check_expr(arg)?;
             let tr = arg.get_type().subtype(&param.ty);
@@ -538,9 +561,9 @@ impl TypeChecker<'_> {
                     }
                 }
 
-                Ok(CheckedAst::Call {
+                Ok(CheckedAst::FunctionCall {
                     return_type: ret.clone(),
-                    function: Box::new(expr),
+                    expr: Box::new(expr),
                     arg: Box::new(arg),
                     info: info.clone(),
                 })
@@ -698,22 +721,28 @@ impl TypeChecker<'_> {
                         .clone();
 
                     // Assert that the function type has two parameters and the return type
-                    let FunctionType { ret: inner_ret, .. } = function_ty.borrow();
+                    let FunctionType {
+                        return_type: inner_ret,
+                        ..
+                    } = function_ty.borrow();
                     let Type::Function(inner_ty) = inner_ret else {
                         return Err(TypeError::new(
                             format!("Expected function type, found '{}'", inner_ret),
                             info.clone(),
                         ));
                     };
-                    let FunctionType { ret: outer_ret, .. } = inner_ty.borrow();
+                    let FunctionType {
+                        return_type: outer_ret,
+                        ..
+                    } = inner_ty.borrow();
 
-                    let result = CheckedAst::Call {
-                        function: Box::new(CheckedAst::Call {
-                            function: Box::new(CheckedAst::Identifier(
-                                function_name.clone(),
-                                Type::Function(Box::new(function_ty.clone())),
-                                info.clone(),
-                            )),
+                    let result = CheckedAst::FunctionCall {
+                        expr: Box::new(CheckedAst::FunctionCall {
+                            expr: Box::new(CheckedAst::Identifier {
+                                name: function_name.clone(),
+                                ty: Type::Function(Box::new(function_ty.clone())),
+                                info: info.clone(),
+                            }),
                             arg: Box::new(checked_lhs),
                             return_type: inner_ret.clone(),
                             info: info.clone(),

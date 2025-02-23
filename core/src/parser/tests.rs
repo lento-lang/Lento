@@ -448,8 +448,8 @@ mod tests {
             if let RecordKey::String(key) = &fields[0].0 {
                 assert_eq!(key, "x");
             }
-            assert!(matches!(fields[0].1, Ast::Block(_, _)));
-            if let Ast::Block(inner, _) = &fields[0].1 {
+            assert!(matches!(fields[0].1, Ast::Block { .. }));
+            if let Ast::Block { exprs: inner, .. } = &fields[0].1 {
                 assert_eq!(inner.len(), 1);
                 assert!(matches!(inner[0], Ast::Binary { .. }));
             }
@@ -462,8 +462,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 1);
             assert!(matches!(inner[0], Ast::Literal { .. }));
         }
@@ -475,8 +475,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 2);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -489,8 +489,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 3);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -504,8 +504,8 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 3);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -519,10 +519,10 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 1);
-            assert!(matches!(inner[0], Ast::Block(_, _)));
+            assert!(matches!(inner[0], Ast::Block { .. }));
         }
     }
 
@@ -532,11 +532,14 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block(_, _)));
-        if let Ast::Block(inner, _) = &result.expressions[0] {
+        assert!(matches!(result.expressions[0], Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
             assert_eq!(inner.len(), 1);
-            assert!(matches!(inner[0], Ast::Block(_, _)));
-            if let Ast::Block(inner_inner, _) = &inner[0] {
+            assert!(matches!(inner[0], Ast::Block { .. }));
+            if let Ast::Block {
+                exprs: inner_inner, ..
+            } = &inner[0]
+            {
                 assert_eq!(inner_inner.len(), 2);
                 assert!(matches!(inner_inner[0], Ast::Literal { .. }));
                 assert!(matches!(inner_inner[1], Ast::Literal { .. }));

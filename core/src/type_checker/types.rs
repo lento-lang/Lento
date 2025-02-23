@@ -138,19 +138,19 @@ pub trait TypeTrait {
 #[derive(Clone, Debug)]
 pub struct FunctionType {
     pub param: CheckedParam,
-    pub ret: Type,
+    pub return_type: Type,
 }
 
 impl FunctionType {
-    pub fn new(param: CheckedParam, ret: Type) -> Self {
-        FunctionType { param, ret }
+    pub fn new(param: CheckedParam, return_type: Type) -> Self {
+        FunctionType { param, return_type }
     }
 
     pub fn pretty_print(&self) -> String {
         format!(
             "{} -> {}",
             self.param.ty.pretty_print(),
-            self.ret.pretty_print()
+            self.return_type.pretty_print()
         )
     }
 
@@ -159,7 +159,7 @@ impl FunctionType {
             "{} {} {}",
             self.param.ty.pretty_print_color(),
             "->".dark_gray(),
-            self.ret.pretty_print_color()
+            self.return_type.pretty_print_color()
         )
     }
 }
@@ -169,7 +169,7 @@ impl TypeTrait for FunctionType {
         self.param
             .ty
             .subtype(&other.param.ty)
-            .and(self.ret.subtype(&other.ret))
+            .and(self.return_type.subtype(&other.return_type))
     }
 
     fn simplify(self) -> Self {
@@ -178,7 +178,7 @@ impl TypeTrait for FunctionType {
                 name: self.param.name,
                 ty: self.param.ty.simplify(),
             },
-            ret: self.ret.simplify(),
+            return_type: self.return_type.simplify(),
         }
     }
 
@@ -188,7 +188,7 @@ impl TypeTrait for FunctionType {
                 name: self.param.name.clone(),
                 ty: self.param.ty.specialize(judgements, changed),
             },
-            ret: self.ret.specialize(judgements, changed),
+            return_type: self.return_type.specialize(judgements, changed),
         }
     }
 }
@@ -461,7 +461,7 @@ impl Display for Type {
             Type::Variable(s) => write!(f, "{}", s),
             Type::Function(func) => {
                 write!(f, "{}", func.param.ty)?;
-                write!(f, " -> {}", func.ret)
+                write!(f, " -> {}", func.return_type)
             }
             Type::Tuple(types) => {
                 write!(f, "(")?;

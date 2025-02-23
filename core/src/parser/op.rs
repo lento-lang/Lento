@@ -105,12 +105,12 @@ impl OperatorSignature {
         let mut params = self.params.iter();
         let mut func = FunctionType {
             param: params.next().unwrap().clone(),
-            ret: self.ret.clone(),
+            return_type: self.ret.clone(),
         };
         for param in params {
             func = FunctionType {
                 param: param.clone(),
-                ret: Type::Function(Box::new(func)),
+                return_type: Type::Function(Box::new(func)),
             };
         }
         func
@@ -119,7 +119,7 @@ impl OperatorSignature {
     pub fn from_function(function: &FunctionType) -> Self {
         let mut params = Vec::new();
         let mut func = function;
-        while let Type::Function(f) = &func.ret {
+        while let Type::Function(f) = &func.return_type {
             params.push(f.param.clone());
             func = f;
         }
@@ -127,7 +127,7 @@ impl OperatorSignature {
         params.reverse();
         Self {
             params,
-            ret: func.ret.clone(),
+            ret: func.return_type.clone(),
         }
     }
 }

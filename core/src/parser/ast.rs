@@ -61,7 +61,7 @@ pub enum Ast {
         expr: Box<Ast>,
         info: LineInfo,
     },
-    /// A function declaration is a named function with a list of parameters and a body expression.
+    /// A function definition is a named function with a list of parameters and a body expression.
     FunctionDef {
         param: ParamAst,
         body: Box<Ast>,
@@ -94,7 +94,7 @@ pub enum Ast {
         info: LineInfo,
     },
     /// Block expression evaluates all expressions in the block and returns the value of the last expression.
-    Block(Vec<Ast>, LineInfo),
+    Block { exprs: Vec<Ast>, info: LineInfo },
 }
 
 impl Ast {
@@ -102,7 +102,7 @@ impl Ast {
         match self {
             Ast::Literal { info, .. } => info,
             Ast::Tuple { info, .. } => info,
-            Ast::List { exprs: _, info } => info,
+            Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall {
@@ -127,7 +127,7 @@ impl Ast {
                 expr: _,
                 info,
             } => info,
-            Ast::Block(_, info) => info,
+            Ast::Block { info, .. } => info,
         }
     }
 
@@ -215,9 +215,9 @@ impl Ast {
             } => {
                 format!("(= {} {})", lhs.print_sexpr(), rhs.print_sexpr())
             }
-            Ast::Block(expressions, _) => format!(
+            Ast::Block { exprs, .. } => format!(
                 "({})",
-                expressions
+                exprs
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
@@ -313,7 +313,7 @@ impl PartialEq for Ast {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
-            (Self::Block(l0, _), Self::Block(r0, _)) => l0 == r0,
+            (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
             _ => false,
         }
     }

@@ -11,7 +11,7 @@ mod tests {
         parser::parser,
         stdlib::init::stdlib,
         type_checker::{
-            checked_ast::{CheckedAst, CheckedFunction, CheckedParam},
+            checked_ast::{CheckedAst, CheckedParam},
             checker::TypeChecker,
             types::{std_types, GetType, Type, TypeTrait},
         },
@@ -32,13 +32,13 @@ mod tests {
     }
 
     fn add(lhs: CheckedAst, rhs: CheckedAst) -> CheckedAst {
-        CheckedAst::Call {
-            function: Box::new(CheckedAst::Call {
-                function: Box::new(CheckedAst::Identifier(
-                    "add".into(),
-                    std_types::NUM(),
-                    LineInfo::default(),
-                )),
+        CheckedAst::FunctionCall {
+            expr: Box::new(CheckedAst::FunctionCall {
+                expr: Box::new(CheckedAst::Identifier {
+                    name: "add".into(),
+                    ty: std_types::NUM(),
+                    info: LineInfo::default(),
+                }),
                 arg: Box::new(rhs),
                 return_type: std_types::NUM(),
                 info: LineInfo::default(),
@@ -50,15 +50,17 @@ mod tests {
     }
 
     fn fn_unit() -> CheckedAst {
-        CheckedAst::Function(
-            Box::new(CheckedFunction::new(
-                CheckedParam {
-                    name: "ignore".to_string(),
-                    ty: std_types::UNIT,
-                },
-                CheckedAst::Block(vec![], std_types::UNIT, LineInfo::default()),
-                std_types::UNIT,
-            )),
+        CheckedAst::function_def(
+            CheckedParam {
+                name: "ignore".to_string(),
+                ty: std_types::UNIT,
+            },
+            CheckedAst::Block {
+                exprs: vec![],
+                ty: std_types::UNIT,
+                info: LineInfo::default(),
+            },
+            std_types::UNIT,
             LineInfo::default(),
         )
     }
@@ -66,8 +68,14 @@ mod tests {
     #[test]
     fn binary_add() {
         let ast = add(
-            CheckedAst::Literal(make_u8(1), LineInfo::default()),
-            CheckedAst::Literal(make_u8(2), LineInfo::default()),
+            CheckedAst::Literal {
+                value: make_u8(1),
+                info: LineInfo::default(),
+            },
+            CheckedAst::Literal {
+                value: make_u8(2),
+                info: LineInfo::default(),
+            },
         );
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
@@ -78,15 +86,24 @@ mod tests {
 
     #[test]
     fn tuple() {
-        let ast = CheckedAst::Tuple(
-            vec![
-                CheckedAst::Literal(make_u8(1), LineInfo::default()),
-                CheckedAst::Literal(make_u8(2), LineInfo::default()),
-                CheckedAst::Literal(make_u8(3), LineInfo::default()),
+        let ast = CheckedAst::Tuple {
+            exprs: vec![
+                CheckedAst::Literal {
+                    value: make_u8(1),
+                    info: LineInfo::default(),
+                },
+                CheckedAst::Literal {
+                    value: make_u8(2),
+                    info: LineInfo::default(),
+                },
+                CheckedAst::Literal {
+                    value: make_u8(3),
+                    info: LineInfo::default(),
+                },
             ],
-            Type::Tuple(vec![std_types::UINT8; 3]),
-            LineInfo::default(),
-        );
+            expr_types: Type::Tuple(vec![std_types::UINT8; 3]),
+            info: LineInfo::default(),
+        };
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -108,8 +125,14 @@ mod tests {
     #[test]
     fn function_call() {
         let ast = add(
-            CheckedAst::Literal(make_u8(1), LineInfo::default()),
-            CheckedAst::Literal(make_u8(2), LineInfo::default()),
+            CheckedAst::Literal {
+                value: make_u8(1),
+                info: LineInfo::default(),
+            },
+            CheckedAst::Literal {
+                value: make_u8(2),
+                info: LineInfo::default(),
+            },
         );
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
@@ -120,9 +143,12 @@ mod tests {
 
     #[test]
     fn unit_function() {
-        let ast = CheckedAst::Call {
-            function: Box::new(fn_unit()),
-            arg: Box::new(CheckedAst::Literal(Value::Unit, LineInfo::default())),
+        let ast = CheckedAst::FunctionCall {
+            expr: Box::new(fn_unit()),
+            arg: Box::new(CheckedAst::Literal {
+                value: Value::Unit,
+                info: LineInfo::default(),
+            }),
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
@@ -135,9 +161,12 @@ mod tests {
 
     #[test]
     fn invalid_function() {
-        let ast = CheckedAst::Call {
-            function: Box::new(fn_unit()),
-            arg: Box::new(CheckedAst::Literal(make_u8(1), LineInfo::default())),
+        let ast = CheckedAst::FunctionCall {
+            expr: Box::new(fn_unit()),
+            arg: Box::new(CheckedAst::Literal {
+                value: make_u8(1),
+                info: LineInfo::default(),
+            }),
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
@@ -147,16 +176,19 @@ mod tests {
 
     #[test]
     fn assignment() {
-        let ast = CheckedAst::Assignment(
-            Box::new(CheckedAst::Identifier(
-                "x".to_string(),
-                std_types::UINT8,
-                LineInfo::default(),
-            )),
-            Box::new(CheckedAst::Literal(make_u8(1), LineInfo::default())),
-            std_types::UINT8,
-            LineInfo::default(),
-        );
+        let ast = CheckedAst::Assignment {
+            target: Box::new(CheckedAst::Identifier {
+                name: "x".to_string(),
+                ty: std_types::UINT8,
+                info: LineInfo::default(),
+            }),
+            expr: Box::new(CheckedAst::Literal {
+                value: make_u8(1),
+                info: LineInfo::default(),
+            }),
+            ty: std_types::UINT8,
+            info: LineInfo::default(),
+        };
         let result = eval_ast(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
