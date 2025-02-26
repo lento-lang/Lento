@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
     fmt::Display,
     fs::File,
-    io::{BufReader, Cursor, Error, ErrorKind, Read},
+    io::{BufReader, Cursor, ErrorKind, Read},
     path::PathBuf,
     str::FromStr,
 };
@@ -210,10 +210,12 @@ impl<R: Read> Lexer<R> {
     }
 
     fn new_token_info(&self, token: TokenKind) -> LexResult {
-        Ok(TokenInfo {
-            info: self.line_info.clone(),
-            token,
-        })
+        let info = if token == TokenKind::EndOfFile {
+            LineInfo::eof(self.line_info.start.clone(), self.line_info.end.index)
+        } else {
+            self.line_info.clone()
+        };
+        Ok(TokenInfo { info, token })
     }
 
     /// Set the start of the token to the current position of the lexer.
@@ -1144,10 +1146,6 @@ pub fn from_string(input: String) -> Lexer<Cursor<String>> {
 
 pub fn from_file(file: File) -> Lexer<BufReader<File>> {
     Lexer::new(BufReader::new(file))
-}
-
-pub fn from_path(path: PathBuf) -> Result<Lexer<BufReader<File>>, Error> {
-    Ok(Lexer::new(BufReader::new(File::open(path.clone())?)))
 }
 
 pub fn from_stream<R: Read>(reader: R) -> Lexer<R> {

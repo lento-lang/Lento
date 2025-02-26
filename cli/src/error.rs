@@ -27,18 +27,18 @@ pub fn print_error_kind(kind: &str, msg: String) {
 }
 
 pub fn print_error_at(info: LineInfo, source: &InputSource) {
-    let span = if info.start.line == info.end.line {
-        format!(
+    let msg = match info.end.eof {
+        true => format!("line {}:{} to end of", info.start.line, info.start.column),
+        false if info.start.line == info.end.line => format!(
             "line {}:{} to {}",
             info.start.line, info.start.column, info.end.column
-        )
-    } else {
-        format!(
-            "line {}:{} to {}:{}",
+        ),
+        false => format!(
+            "line {}:{} to line {}:{} in",
             info.start.line, info.start.column, info.end.line, info.end.column
-        )
+        ),
     };
-    print_error_kind("└─ at", format!("{} in {}\n", span, source));
+    print_error_kind("└─ at", format!("{} {}\n", msg, source));
 }
 
 pub fn print_error(msg: String) {

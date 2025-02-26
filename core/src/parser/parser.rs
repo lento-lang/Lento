@@ -1,8 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufReader, Cursor, Error, Read},
-    path::Path,
+    io::{BufReader, Cursor, Read},
 };
 
 use crate::{
@@ -275,17 +274,15 @@ impl<R: Read> Parser<R> {
                     }
                 }
             }
-            let end = self
-                .lexer
-                .peek_token(0)
-                .map(|t| t.info)
-                .unwrap_or(LineInfo::eof(self.lexer.current_index()));
             return Err(ParseError::new(
                 format!(
                     "Expected ',' or ')', but found {:?}",
                     self.lexer.peek_token(0)
                 ),
-                end,
+                self.lexer
+                    .peek_token(0)
+                    .map(|t| t.info)
+                    .unwrap_or(LineInfo::eof(info.start, self.lexer.current_index())),
             ));
         }
         self.parse_expected(TokenKind::RightParen, ")")?;
@@ -404,7 +401,7 @@ impl<R: Read> Parser<R> {
                     log::error!("Failed to parse function parameter: {}", err.message);
                     return Err(ParseError::new(
                         format!("Failed to parse function parameter: {}", err.message),
-                        LineInfo::eof(self.lexer.current_index()),
+                        LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
                 None => {
@@ -430,7 +427,7 @@ impl<R: Read> Parser<R> {
                     log::error!("Failed to parse parameter name: {}", err.message);
                     return Err(ParseError::new(
                         format!("Failed to parse parameter name: {}", err.message),
-                        LineInfo::eof(self.lexer.current_index()),
+                        LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
             };
@@ -455,7 +452,7 @@ impl<R: Read> Parser<R> {
                 self.lexer
                     .peek_token(0)
                     .map(|t| t.info)
-                    .unwrap_or(LineInfo::eof(self.lexer.current_index())),
+                    .unwrap_or(LineInfo::eof(info.end, self.lexer.current_index())),
             ));
         }
         self.parse_expected(TokenKind::RightParen, ")")?;
@@ -647,6 +644,9 @@ impl<R: Read> Parser<R> {
                                         return self.parse_func_def(Some(id), name, t.info, vec![]);
                                     }
                                 }
+                            } else if let TokenKind::LeftParen { .. } = t.token {
+                                self.lexer.next_token().unwrap(); // Consume the left paren
+                                return self.parse_paren_call(id, t.info);
                             }
                         }
                         Ast::Identifier {
@@ -705,10 +705,9 @@ impl<R: Read> Parser<R> {
                                             "Expected ',' or ')', but found {:?}",
                                             self.lexer.peek_token(0)
                                         ),
-                                        self.lexer
-                                            .peek_token(0)
-                                            .map(|t| t.info)
-                                            .unwrap_or(LineInfo::eof(self.lexer.current_index())),
+                                        self.lexer.peek_token(0).map(|t| t.info).unwrap_or(
+                                            LineInfo::eof(t.info.end, self.lexer.current_index()),
+                                        ),
                                     ));
                                 }
                                 let end = self.parse_expected(TokenKind::RightParen, ")")?;
@@ -767,10 +766,9 @@ impl<R: Read> Parser<R> {
                                             "Expected ',' or ']', but found {:?}",
                                             self.lexer.peek_token(0)
                                         ),
-                                        self.lexer
-                                            .peek_token(0)
-                                            .map(|t| t.info)
-                                            .unwrap_or(LineInfo::eof(self.lexer.current_index())),
+                                        self.lexer.peek_token(0).map(|t| t.info).unwrap_or(
+                                            LineInfo::eof(t.info.end, self.lexer.current_index()),
+                                        ),
                                     ));
                                 }
                                 let last = self.parse_expected(TokenKind::RightBracket, "]")?;
@@ -1082,10 +1080,6 @@ pub fn from_file(file: File) -> Parser<BufReader<File>> {
     Parser::new(lexer::from_file(file))
 }
 
-pub fn from_path(source_file: &Path) -> Result<Parser<BufReader<File>>, Error> {
-    Ok(Parser::new(lexer::from_path(source_file.to_path_buf())?))
-}
-
 pub fn from_string(source: String) -> Parser<Cursor<String>> {
     Parser::new(lexer::from_string(source))
 }
@@ -1179,27 +1173,6 @@ pub fn parse_file_one(file: File, init: Option<&Initializer>) -> ModuleResult {
 
 pub fn parse_file_all(file: File, init: Option<&Initializer>) -> ModuleResult {
     let mut parser = from_file(file);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(String::from("unnamed"), parser.parse_all()?))
-}
-
-pub fn parse_path_one(path: &Path, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_path(path)
-        .map_err(|e| ParseError::new(format!("Failed to open file: {}", e), LineInfo::eof(0)))?;
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(
-        String::from("unnamed"),
-        vec![parser.parse_one()?],
-    ))
-}
-
-pub fn parse_path_all(path: &Path, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_path(path)
-        .map_err(|e| ParseError::new(format!("Failed to open file: {}", e), LineInfo::eof(0)))?;
     if let Some(init) = init {
         init.init_parser(&mut parser);
     }

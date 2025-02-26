@@ -126,7 +126,7 @@ pub struct LocationInfo {
     pub index: usize,
     pub line: usize,
     pub column: usize,
-    eof: bool,
+    pub eof: bool,
 }
 
 impl LocationInfo {
@@ -146,10 +146,6 @@ impl LocationInfo {
             column: 0,
             eof: true,
         }
-    }
-
-    pub fn is_eof(&self) -> bool {
-        self.eof
     }
 }
 
@@ -175,10 +171,10 @@ impl LineInfo {
         Self { start, end }
     }
 
-    pub fn eof(index: usize) -> Self {
+    pub fn eof(start: LocationInfo, eof_index: usize) -> Self {
         Self {
-            start: LocationInfo::eof(index),
-            end: LocationInfo::eof(index),
+            start,
+            end: LocationInfo::eof(eof_index),
         }
     }
 

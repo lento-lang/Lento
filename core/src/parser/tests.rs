@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{fs::File, path::Path};
 
     use crate::{
         interpreter::{
@@ -10,7 +10,7 @@ mod tests {
         lexer::token::LineInfo,
         parser::{
             ast::Ast,
-            parser::{parse_path_one, parse_str_all, parse_str_one},
+            parser::{parse_file_one, parse_str_all, parse_str_one},
         },
         stdlib::init::stdlib,
     };
@@ -218,7 +218,11 @@ mod tests {
 
     #[test]
     fn hello_world_file() {
-        let result = parse_path_one(Path::new("./examples/basic/hello_world.lt"), None);
+        let path = Path::new("./examples/basic/hello_world.lt");
+        let result = parse_file_one(
+            File::open(path).expect("Failed to open example file!"),
+            None,
+        );
         let expected = Ast::FunctionCall {
             expr: Box::new(Ast::Identifier {
                 name: "println".to_string(),
