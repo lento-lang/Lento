@@ -647,7 +647,9 @@ impl<R: Read> Parser<R> {
                     .with_label("This is not a valid record key".to_string(), t.info)));
                 }
             };
-            let _ = Some(self.parse_expected(TokenKind::Colon, ":"))?;
+            if let Err(err) = self.parse_expected(TokenKind::Colon, ":") {
+                return Some(Err(err));
+            }
             let value = match self.parse_top_expr() {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
