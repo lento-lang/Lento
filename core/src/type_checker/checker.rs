@@ -339,9 +339,8 @@ impl TypeChecker<'_> {
         return_type: &Option<TypeAst>,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        let body_info = body.info();
-        let body = self.new_scope().check_expr(body)?;
-        let body_type = body.get_type().clone();
+        let checked_body = self.new_scope().check_expr(body)?;
+        let body_type = checked_body.get_type().clone();
         let return_type = if let Some(ty) = &return_type {
             let ty = self.check_type_expr(ty)?;
             if !ty.subtype(&body_type).success {
@@ -351,7 +350,11 @@ impl TypeChecker<'_> {
                         ty.pretty_print_color(),
                         body_type.pretty_print_color()
                     ),
-                    body_info.clone(),
+                    info.clone(),
+                )
+                .with_label(
+                    format!("This is not of type {}", ty.pretty_print_color()),
+                    body.last_info().clone(),
                 ));
             }
             ty
@@ -362,7 +365,7 @@ impl TypeChecker<'_> {
 
         Ok(CheckedAst::function_def(
             param,
-            body,
+            checked_body,
             return_type,
             info.clone(),
         ))
@@ -471,7 +474,8 @@ impl TypeChecker<'_> {
                 return Err(TypeError::new(
                     format!("Unknown variable {}", name.yellow()),
                     info.clone(),
-                ));
+                )
+                .with_label("This variable is not defined".to_string(), info.clone()));
             }
         })
     }
@@ -488,7 +492,12 @@ impl TypeChecker<'_> {
                 return Err(TypeError::new(
                     "Assignment expects an identifier".to_string(),
                     info.clone(),
-                ))
+                )
+                .with_label(
+                    "This is not an identifier".to_string(),
+                    target.info().clone(),
+                )
+                .with_hint("Did you mean to assign to an identifier?".to_string()));
             }
         };
         if let Some(existing) = self.lookup_local_identifier(target) {
@@ -586,13 +595,22 @@ impl TypeChecker<'_> {
                         arg.get_type().pretty_print_color()
                     ),
                     info.clone(),
+                )
+                .with_label(
+                    format!("This is of type {}", arg.get_type().pretty_print_color()),
+                    arg.info().clone(),
+                )
+                .with_label(
+                    format!("This expected type {}", param.ty.pretty_print_color()),
+                    expr.info().clone(),
                 ))
             }
         } else {
             Err(TypeError::new(
                 format!("Cannot call non-function: {}", expr.get_type()),
                 info.clone(),
-            ))
+            )
+            .with_label("This is not a function".into(), info.clone()))
         }
     }
 
@@ -608,16 +626,13 @@ impl TypeChecker<'_> {
             .iter()
             .map(|a| self.check_expr(a))
             .collect::<TypeResult<Vec<_>>>()?;
-        if let Some(op) = self
-            .lookup_operator(&op_info.symbol)
-            .into_iter()
-            .find(|op| {
-                checked_operands
-                    .iter()
-                    .zip(op.signature().params.iter())
-                    .all(|(operand, param)| operand.get_type().subtype(&param.ty).success)
-            })
-        {
+        let alternatives = self.lookup_operator(&op_info.symbol);
+        if let Some(op) = alternatives.iter().find(|op| {
+            checked_operands
+                .iter()
+                .zip(op.signature().params.iter())
+                .all(|(operand, param)| operand.get_type().subtype(&param.ty).success)
+        }) {
             match &op.handler {
                 OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
                     // Construct a function call expression
@@ -646,13 +661,32 @@ impl TypeChecker<'_> {
                 }
             }
         } else {
-            Err(TypeError::new(
+            let mut err = TypeError::new(
                 format!(
                     "Unknown accumulate operator {}",
                     op_info.symbol.clone().yellow()
                 ),
                 info.clone(),
-            ))
+            );
+
+            if let Some(op) = alternatives.first() {
+                let params = op
+                    .signature()
+                    .params
+                    .iter()
+                    .map(|p| p.ty.pretty_print_color())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let ret = op.signature().ret.pretty_print_color();
+                err = err.with_hint(format!(
+                    "Did you mean {} {} {}?",
+                    params,
+                    op_info.symbol.clone().yellow(),
+                    ret
+                ));
+            }
+
+            Err(err)
         }
     }
 
@@ -726,7 +760,11 @@ impl TypeChecker<'_> {
                         .lookup_function(function_name)
                         .ok_or_else(|| {
                             TypeError::new(
-                                format!("Unknown function {}", function_name.clone().yellow()),
+                                format!(
+                                    "Unknown handler function {} for operator {}",
+                                    function_name.clone().yellow(),
+                                    op_info.symbol.clone().yellow()
+                                ),
                                 info.clone(),
                             )
                         })?
@@ -734,8 +772,9 @@ impl TypeChecker<'_> {
                         .ok_or_else(|| {
                             TypeError::new(
                                 format!(
-                                    "Function {} has no variants",
-                                    function_name.clone().yellow()
+                                    "Handler function {} for operator {} has no variants",
+                                    function_name.clone().yellow(),
+                                    op_info.symbol.clone().yellow()
                                 ),
                                 info.clone(),
                             )
@@ -836,7 +875,9 @@ impl TypeChecker<'_> {
     ) -> TypeResult<CheckedAst> {
         let checked_operand = self.check_expr(operand)?;
         let operand_type = checked_operand.get_type();
+        let mut closest_match = None;
         for op in self.lookup_operator(&op_info.symbol) {
+            closest_match = Some(op);
             if !op.signature().params[0].ty.subtype(operand_type).success {
                 continue;
             }
@@ -859,10 +900,19 @@ impl TypeChecker<'_> {
                 }
             }
         }
-        Err(TypeError::new(
+        let mut err = TypeError::new(
             format!("Unknown unary operator {}", op_info.symbol.clone().yellow()),
             info.clone(),
-        ))
+        );
+        if let Some(closest_match) = closest_match {
+            err = err.with_hint(format!(
+                "Did you mean {} {} returning {}?",
+                closest_match.info.symbol.clone().yellow(),
+                closest_match.signature().params[0].ty.pretty_print_color(),
+                closest_match.signature().ret.pretty_print_color()
+            ));
+        }
+        Err(err)
     }
 
     // ================== Type inference functions ==================

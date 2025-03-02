@@ -131,6 +131,13 @@ impl Ast {
         }
     }
 
+    pub fn last_info(&self) -> &LineInfo {
+        match self {
+            Ast::Block { exprs, .. } => exprs.last().map_or_else(|| self.info(), |e| e.last_info()),
+            _ => self.info(),
+        }
+    }
+
     pub fn print_sexpr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
