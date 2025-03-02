@@ -199,9 +199,15 @@ impl<R: Read> Parser<R> {
                 TokenKind::Char(c) => Value::Char(*c),
                 TokenKind::Boolean(b) => Value::Boolean(*b),
                 _ => {
-                    log::error!("Expected literal, but found {:?}", token);
+                    log::error!(
+                        "Expected literal, but found {}",
+                        token.to_string().light_red()
+                    );
                     return Err(ParseError::new(
-                        format!("Expected literal, but found {:?}", token),
+                        format!(
+                            "Expected literal, but found {}",
+                            token.to_string().light_red()
+                        ),
                         info,
                     ));
                 }
@@ -257,9 +263,19 @@ impl<R: Read> Parser<R> {
                                 // Continue parsing the function definition
                                 // The ) will be consumed by the `parse_func_def` function
                             } else {
-                                log::error!("Expected ',' or ')', but found {:?}", nt.token);
+                                log::error!(
+                                    "Expected {} or {}, but found {}",
+                                    ",".yellow(),
+                                    ")".yellow(),
+                                    nt.token.to_string().light_red()
+                                );
                                 return Err(ParseError::new(
-                                    format!("Expected ',' or ')', but found {:?}", nt.token),
+                                    format!(
+                                        "Expected {} or {}, but found {}",
+                                        ",".yellow(),
+                                        ")".yellow(),
+                                        nt.token.to_string().light_red()
+                                    ),
                                     info,
                                 ));
                             }
@@ -288,16 +304,22 @@ impl<R: Read> Parser<R> {
                     }
                 }
             }
-            return Err(ParseError::new(
-                format!(
-                    "Expected ',' or ')', but found {:?}",
-                    self.lexer.peek_token(0)
-                ),
-                self.lexer
-                    .peek_token(0)
-                    .map(|t| t.info)
-                    .unwrap_or(LineInfo::eof(info.start, self.lexer.current_index())),
-            ));
+            if let Ok(nt) = self.lexer.peek_token(0) {
+                return Err(ParseError::new(
+                    format!(
+                        "Expected {} or {}, but found {}",
+                        ",".yellow(),
+                        ")".yellow(),
+                        nt.token.to_string().light_red()
+                    ),
+                    nt.info,
+                ));
+            } else {
+                return Err(ParseError::new(
+                    "Unexpected end of program".to_string(),
+                    LineInfo::eof(info.start, self.lexer.current_index()),
+                ));
+            }
         }
         self.parse_expected(TokenKind::RightParen, ")")?;
 
@@ -419,9 +441,15 @@ impl<R: Read> Parser<R> {
                     ));
                 }
                 None => {
-                    log::error!("Expected parameter type, but found {:?}", end.token);
+                    log::error!(
+                        "Expected parameter type, but found {}",
+                        end.token.to_string().light_red()
+                    );
                     return Err(ParseError::new(
-                        format!("Expected type identifier, but found {:?}", end.token),
+                        format!(
+                            "Expected type identifier, but found {}",
+                            end.token.to_string().light_red()
+                        ),
                         info,
                     ));
                 }
@@ -430,9 +458,15 @@ impl<R: Read> Parser<R> {
                 Ok(t) => match t.token {
                     TokenKind::Identifier(id) => (id, t.info),
                     _ => {
-                        log::error!("Expected parameter name, but found {:?}", t.token);
+                        log::error!(
+                            "Expected parameter name, but found {}",
+                            t.token.to_string().light_red()
+                        );
                         return Err(ParseError::new(
-                            format!("Expected parameter name, but found {:?}", t.token),
+                            format!(
+                                "Expected parameter name, but found {}",
+                                t.token.to_string().light_red()
+                            ),
                             info,
                         ));
                     }
@@ -458,16 +492,22 @@ impl<R: Read> Parser<R> {
                     break;
                 }
             }
-            return Err(ParseError::new(
-                format!(
-                    "Expected ',' or ')', but found {:?}",
-                    self.lexer.peek_token(0)
-                ),
-                self.lexer
-                    .peek_token(0)
-                    .map(|t| t.info)
-                    .unwrap_or(LineInfo::eof(info.end, self.lexer.current_index())),
-            ));
+            if let Ok(nt) = self.lexer.peek_token(0) {
+                return Err(ParseError::new(
+                    format!(
+                        "Expected {} or {}, but found {}",
+                        ",".yellow(),
+                        ")".yellow(),
+                        nt.token.to_string().light_red()
+                    ),
+                    nt.info,
+                ));
+            } else {
+                return Err(ParseError::new(
+                    "Unexpected end of program".to_string(),
+                    LineInfo::eof(info.end, self.lexer.current_index()),
+                ));
+            }
         }
         self.parse_expected(TokenKind::RightParen, ")")?;
         self.parse_expected(TokenKind::Op("=".into()), "=")?;
@@ -570,7 +610,12 @@ impl<R: Read> Parser<R> {
                     _ => {
                         log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError::new(
-                            format!("Expected ',' or '}}', but found {:?}", t),
+                            format!(
+                                "Expected {} or {}, but found {}",
+                                ",".yellow(),
+                                "}".yellow(),
+                                t.token.to_string().light_red()
+                            ),
                             t.info,
                         )));
                     }
@@ -590,9 +635,15 @@ impl<R: Read> Parser<R> {
                 TokenKind::String(s) => RecordKey::String(s),
                 TokenKind::Char(c) => RecordKey::Char(c),
                 _ => {
-                    log::error!("Expected record key, but found {:?}", t.token);
+                    log::error!(
+                        "Expected record key, but found {}",
+                        t.token.to_string().light_red()
+                    );
                     return Some(Err(ParseError::new(
-                        format!("Expected record key, but found {:?}", t.token),
+                        format!(
+                            "Expected record key, but found {}",
+                            t.token.to_string().light_red()
+                        ),
                         t.info,
                     )));
                 }
@@ -613,7 +664,12 @@ impl<R: Read> Parser<R> {
                     _ => {
                         log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError::new(
-                            format!("Expected ',' or '}}', but found {:?}", t),
+                            format!(
+                                "Expected {} or {}, but found {}",
+                                ",".yellow(),
+                                "}".yellow(),
+                                t.token.to_string().light_red()
+                            ),
                             t.info,
                         )));
                     }
@@ -681,7 +737,7 @@ impl<R: Read> Parser<R> {
                         } else {
                             log::error!("Expected prefix operator, but found {:?}", op);
                             return Err(ParseError::new(
-                                format!("Expected prefix operator, but found {:?}", op),
+                                format!("Expected prefix operator, but found {}", op.light_red()),
                                 t.info,
                             ));
                         }
@@ -714,15 +770,22 @@ impl<R: Read> Parser<R> {
                                             break;
                                         }
                                     }
-                                    return Err(ParseError::new(
-                                        format!(
-                                            "Expected ',' or ')', but found {:?}",
-                                            self.lexer.peek_token(0)
-                                        ),
-                                        self.lexer.peek_token(0).map(|t| t.info).unwrap_or(
+                                    if let Ok(nt) = self.lexer.peek_token(0) {
+                                        return Err(ParseError::new(
+                                            format!(
+                                                "Expected {} or {}, but found {}",
+                                                ",".yellow(),
+                                                ")".yellow(),
+                                                nt.token.to_string().light_red()
+                                            ),
+                                            nt.info,
+                                        ));
+                                    } else {
+                                        return Err(ParseError::new(
+                                            "Unexpected end of program".to_string(),
                                             LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                        ),
-                                    ));
+                                        ));
+                                    }
                                 }
                                 let end = self.parse_expected(TokenKind::RightParen, ")")?;
                                 if exprs.len() == 1 && !explicit_single {
@@ -775,15 +838,22 @@ impl<R: Read> Parser<R> {
                                         "Expected ',' or ']', but found {:?}",
                                         self.lexer.peek_token(0)
                                     );
-                                    return Err(ParseError::new(
-                                        format!(
-                                            "Expected ',' or ']', but found {:?}",
-                                            self.lexer.peek_token(0)
-                                        ),
-                                        self.lexer.peek_token(0).map(|t| t.info).unwrap_or(
+                                    if let Ok(nt) = self.lexer.peek_token(0) {
+                                        return Err(ParseError::new(
+                                            format!(
+                                                "Expected {} or {}, but found {}",
+                                                ",".yellow(),
+                                                "]".yellow(),
+                                                nt.token.to_string().light_red()
+                                            ),
+                                            nt.info,
+                                        ));
+                                    } else {
+                                        return Err(ParseError::new(
+                                            "Unexpected end of program".to_string(),
                                             LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                        ),
-                                    ));
+                                        ));
+                                    }
                                 }
                                 let last = self.parse_expected(TokenKind::RightBracket, "]")?;
                                 Ast::List {
@@ -797,7 +867,10 @@ impl<R: Read> Parser<R> {
                     _ => {
                         log::error!("Expected primary expression, but found {}", t.token);
                         return Err(ParseError::new(
-                            format!("Expected primary expression, but found {}", t.token),
+                            format!(
+                                "Expected primary expression, but found {}",
+                                t.token.to_string().light_red()
+                            ),
                             t.info,
                         ));
                     }
@@ -962,7 +1035,7 @@ impl<R: Read> Parser<R> {
                 format!(
                     "Expected {} but found {}",
                     symbol.yellow(),
-                    t.token.to_string().red()
+                    t.token.to_string().light_red()
                 ),
                 t.info,
             )),
