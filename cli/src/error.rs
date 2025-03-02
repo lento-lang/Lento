@@ -52,7 +52,7 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
 
     if base.info.end.eof {
         report = report.with_label(
-            Label::new((source.name(), base.info.start.index..base.info.end.index))
+            Label::new((source.name(), base.info.end.index..base.info.end.index))
                 .with_message(format!("end of {}", source.human_readable()))
                 .with_color(ariadne::Color::Yellow),
         );
