@@ -6,6 +6,7 @@ use crate::{
     interpreter::value::{RecordKey, Value},
     parser::{
         ast::{Ast, ParamAst, TypeAst},
+        error::ParseError,
         op::{
             Operator, OperatorHandler, OperatorInfo, RuntimeOperatorHandler, StaticOperatorAst,
             StaticOperatorHandler,
@@ -53,8 +54,31 @@ impl BaseErrorExt for TypeError {
     }
 }
 
+/// The result of the type checker stage.
+/// This is a type error variant that can be either a type error or a parse error.
+#[derive(Debug)]
+pub enum TypeErrorVariant {
+    /// A type error occurred during type checking
+    TypeError(TypeError),
+    /// A parse error occurred during type checking,
+    /// this should only happen iff a static operator handler is used.
+    ParseError(ParseError),
+}
+
+impl From<TypeError> for TypeErrorVariant {
+    fn from(err: TypeError) -> Self {
+        Self::TypeError(err)
+    }
+}
+
+impl From<ParseError> for TypeErrorVariant {
+    fn from(err: ParseError) -> Self {
+        Self::ParseError(err)
+    }
+}
+
 // The result of the type checker stage
-pub type TypeResult<T> = Result<T, TypeError>;
+pub type TypeResult<T> = Result<T, TypeErrorVariant>;
 
 /// The type environment contains all the types and functions in the program.
 /// It is used to check the types of expressions and functions.
@@ -287,6 +311,11 @@ impl TypeChecker<'_> {
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
+            Ast::FieldAccess {
+                expr: record,
+                field,
+                info,
+            } => self.check_field_access(record, field, info)?,
             Ast::Identifier { name, info } => self.check_identifier(name, info)?,
             Ast::FunctionCall {
                 expr,
@@ -336,7 +365,8 @@ impl TypeChecker<'_> {
             .with_label(
                 "Add a type to this parameter".to_string(),
                 param.info.clone(),
-            ));
+            )
+            .into());
         };
         let param = CheckedParam {
             name: param.name.clone(),
@@ -368,7 +398,8 @@ impl TypeChecker<'_> {
                 .with_label(
                     format!("This is not of type {}", ty.pretty_print_color()),
                     body.last_info().clone(),
-                ));
+                )
+                .into());
             }
             ty
         } else {
@@ -454,6 +485,61 @@ impl TypeChecker<'_> {
         })
     }
 
+    fn check_field_access(
+        &mut self,
+        record: &Ast,
+        field: &RecordKey,
+        info: &LineInfo,
+    ) -> TypeResult<CheckedAst> {
+        let record = self.check_expr(record)?;
+        let record_ty = record.get_type();
+        if let Type::Record(fields) = record_ty {
+            if let Some(ty) =
+                fields
+                    .iter()
+                    .find_map(|(k, v)| if k == field { Some(v.clone()) } else { None })
+            {
+                Ok(CheckedAst::FieldAccess {
+                    expr: Box::new(record),
+                    field: field.clone(),
+                    ty,
+                    info: info.clone(),
+                })
+            } else {
+                Err(TypeError::new(
+                    format!(
+                        "Field {} not found in record of type {}",
+                        field.to_string().yellow(),
+                        record_ty.pretty_print_color()
+                    ),
+                    info.clone(),
+                )
+                .with_label(
+                    format!(
+                        "This record does not have the field {}",
+                        field.to_string().yellow()
+                    ),
+                    info.clone(),
+                )
+                .into())
+            }
+        } else {
+            Err(TypeError::new(
+                format!(
+                    "Cannot access field {} of non-record type {}",
+                    field.to_string().yellow(),
+                    record_ty.pretty_print_color()
+                ),
+                info.clone(),
+            )
+            .with_label(
+                format!("This is of type {}", record_ty.pretty_print_color()),
+                record.info().clone(),
+            )
+            .into())
+        }
+    }
+
     fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
             Some(IdentifierType::Variable(ty)) => CheckedAst::Identifier {
@@ -480,7 +566,8 @@ impl TypeChecker<'_> {
                     return Err(TypeError::new(
                         format!("Function {} has no variants", name.yellow()),
                         info.clone(),
-                    ));
+                    )
+                    .into());
                 }
             }
             None => {
@@ -488,7 +575,8 @@ impl TypeChecker<'_> {
                     format!("Unknown variable {}", name.yellow()),
                     info.clone(),
                 )
-                .with_label("This variable is not defined".to_string(), info.clone()));
+                .with_label("This variable is not defined".to_string(), info.clone())
+                .into());
             }
         })
     }
@@ -510,7 +598,8 @@ impl TypeChecker<'_> {
                     "This is not an identifier".to_string(),
                     target.info().clone(),
                 )
-                .with_hint("Did you mean to assign to an identifier?".to_string()));
+                .with_hint("Did you mean to assign to an identifier?".to_string())
+                .into());
             }
         };
         if let Some(existing) = self.lookup_local_identifier(target) {
@@ -523,7 +612,8 @@ impl TypeChecker<'_> {
                 format!("{} {} already exists", ty_name, target.clone().yellow()),
                 info.clone(),
             )
-            .with_hint("Use a different name for the variable".to_string()));
+            .with_hint("Use a different name for the variable".to_string())
+            .into());
         }
         let expr = self.check_expr(expr)?;
         let ty = expr.get_type().clone();
@@ -617,14 +707,16 @@ impl TypeChecker<'_> {
                 .with_label(
                     format!("This expected type {}", param.ty.pretty_print_color()),
                     expr.info().clone(),
-                ))
+                )
+                .into())
             }
         } else {
             Err(TypeError::new(
                 format!("Cannot call non-function: {}", expr.get_type()),
                 info.clone(),
             )
-            .with_label("This is not a function".into(), info.clone()))
+            .with_label("This is not a function".into(), info.clone())
+            .into())
         }
     }
 
@@ -670,8 +762,7 @@ impl TypeChecker<'_> {
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
-                    let ast = handler(StaticOperatorAst::Accumulate(operands.to_vec()));
-                    self.check_expr(&ast)
+                    self.check_expr(&handler(StaticOperatorAst::Accumulate(operands.to_vec()))?)
                 }
             }
         } else {
@@ -700,7 +791,7 @@ impl TypeChecker<'_> {
                 ));
             }
 
-            Err(err)
+            Err(err.into())
         }
     }
 
@@ -729,7 +820,7 @@ impl TypeChecker<'_> {
             return self.check_expr(&(op.handler)(StaticOperatorAst::Infix(
                 lhs.clone(),
                 rhs.clone(),
-            )));
+            ))?);
         }
         let checked_lhs = self.check_expr(lhs)?;
         let checked_rhs = self.check_expr(rhs)?;
@@ -807,7 +898,8 @@ impl TypeChecker<'_> {
                                 inner_ret.pretty_print_color()
                             ),
                             info.clone(),
-                        ));
+                        )
+                        .into());
                     };
                     let FunctionType {
                         return_type: outer_ret,
@@ -841,8 +933,10 @@ impl TypeChecker<'_> {
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
-                    let ast = handler(StaticOperatorAst::Infix(lhs.clone(), rhs.clone()));
-                    return self.check_expr(&ast);
+                    return self.check_expr(&handler(StaticOperatorAst::Infix(
+                        lhs.clone(),
+                        rhs.clone(),
+                    ))?);
                 }
             }
         }
@@ -878,7 +972,7 @@ impl TypeChecker<'_> {
                 closest_match.signature().ret.pretty_print_color()
             ));
         }
-        Err(err)
+        Err(err.into())
     }
 
     fn check_unary(
@@ -909,8 +1003,7 @@ impl TypeChecker<'_> {
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
-                    let ast = handler(StaticOperatorAst::Prefix(operand.clone()));
-                    return self.check_expr(&ast);
+                    return self.check_expr(&handler(StaticOperatorAst::Prefix(operand.clone()))?);
                 }
             }
         }
@@ -926,7 +1019,7 @@ impl TypeChecker<'_> {
                 closest_match.signature().ret.pretty_print_color()
             ));
         }
-        Err(err)
+        Err(err.into())
     }
 
     // ================== Type inference functions ==================

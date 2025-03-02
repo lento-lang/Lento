@@ -12,7 +12,10 @@ use lento_core::{
     lexer::lexer::InputSource,
     parser::parser::{from_string, Parser},
     stdlib::init::stdlib,
-    type_checker::{checker::TypeChecker, types::GetType},
+    type_checker::{
+        checker::{TypeChecker, TypeErrorVariant},
+        types::GetType,
+    },
 };
 
 use crate::{
@@ -58,11 +61,22 @@ pub fn eval_all<R: Read>(
                 let checked_ast = match checker.check_expr(ast) {
                     Ok(ast) => ast,
                     Err(err) => {
-                        print_type_error(
-                            err,
-                            str::from_utf8(parser.get_content()).unwrap(),
-                            source,
-                        );
+                        match err {
+                            TypeErrorVariant::TypeError(err) => {
+                                print_type_error(
+                                    err,
+                                    str::from_utf8(parser.get_content()).unwrap(),
+                                    source,
+                                );
+                            }
+                            TypeErrorVariant::ParseError(err) => {
+                                print_parse_error(
+                                    err,
+                                    str::from_utf8(parser.get_content()).unwrap(),
+                                    source,
+                                );
+                            }
+                        }
                         break 'exprs; // Stop on error
                     }
                 };

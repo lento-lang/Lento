@@ -6,6 +6,8 @@ use crate::{
     },
 };
 
+use super::parser::ParseResult;
+
 //--------------------------------------------------------------------------------------//
 //                               Execution Agnostic Data                                //
 //--------------------------------------------------------------------------------------//
@@ -76,6 +78,7 @@ pub mod default_operator_precedence {
     pub const EXPONENTIAL: OperatorPrecedence = 900;
     pub const PREFIX: OperatorPrecedence = 1000;
     pub const POSTFIX: OperatorPrecedence = 1100;
+    pub const MEMBER_ACCESS: OperatorPrecedence = 1200;
 }
 
 //--------------------------------------------------------------------------------------//
@@ -179,7 +182,7 @@ pub struct RuntimeOperatorHandler {
 #[derive(Clone, Debug)]
 pub struct StaticOperatorHandler {
     pub signature: OperatorSignature,
-    pub handler: fn(StaticOperatorAst) -> Ast,
+    pub handler: fn(StaticOperatorAst) -> ParseResult,
 }
 
 #[derive(Clone, Debug)]
@@ -249,7 +252,7 @@ impl Operator {
         associativity: OperatorAssociativity,
         allow_trailing: bool,
         signature: OperatorSignature,
-        handler: fn(StaticOperatorAst) -> Ast,
+        handler: fn(StaticOperatorAst) -> ParseResult,
     ) -> Self {
         Self {
             info: OperatorInfo {

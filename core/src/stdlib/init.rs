@@ -4,13 +4,15 @@ use colorful::Colorful;
 
 use crate::{
     interpreter::{
+        self,
         env::Environment,
         number::{FloatingPoint, Number},
-        value::{Function, Value},
+        value::{Function, RecordKey, Value},
     },
     lexer::lexer::Lexer,
     parser::{
         ast::Ast,
+        error::ParseError,
         op::{
             default_operator_precedence, Operator, OperatorAssociativity, OperatorHandler,
             OperatorPosition, OperatorSignature, RuntimeOperatorHandler, StaticOperatorAst,
@@ -172,13 +174,70 @@ pub fn stdlib() -> Initializer {
                 |op| {
                     if let StaticOperatorAst::Infix(lhs, rhs) = op {
                         let info = lhs.info().join(rhs.info());
-                        Ast::Assignment {
+                        Ok(Ast::Assignment {
                             target: Box::new(lhs),
                             expr: Box::new(rhs),
                             info,
-                        }
+                        })
                     } else {
                         panic!("assign expects an infix operator");
+                    }
+                },
+            ),
+            // Field access operator
+            Operator::new_static(
+                "field_access".into(),
+                ".".into(),
+                OperatorPosition::Infix,
+                default_operator_precedence::MEMBER_ACCESS,
+                OperatorAssociativity::Left,
+                false,
+                OperatorSignature::new(
+                    vec![
+                        CheckedParam::from_str("record", std_types::ANY),
+                        CheckedParam::from_str("field", std_types::ANY),
+                    ],
+                    std_types::ANY.clone(),
+                ),
+                |op| {
+                    if let StaticOperatorAst::Infix(lhs, rhs) = op {
+                        let key = if let Ast::Identifier { name, .. } = &rhs {
+                            RecordKey::String(name.to_string())
+                        } else if let Ast::Literal {
+                            value: Value::Number(interpreter::number::Number::UnsignedInteger(n)),
+                            ..
+                        } = &rhs
+                        {
+                            RecordKey::Number(Number::UnsignedInteger(n.clone()))
+                        } else {
+                            return Err(ParseError::new(
+                                format!(
+                                    "Field access via {} requires a identifier or {} literal",
+                                    ".".yellow(),
+                                    std_types::UINT().pretty_print_color()
+                                ),
+                                rhs.info().clone(),
+                            )
+                            .with_label(
+                                format!(
+                                    "This is not an identifier or {}",
+                                    std_types::UINT().pretty_print_color()
+                                ),
+                                rhs.info().clone(),
+                            )
+                            .with_hint(format!(
+                                "Did you mean to use indexing via {} instead?",
+                                "[]".yellow()
+                            )));
+                        };
+                        let info = lhs.info().join(rhs.info());
+                        Ok(Ast::FieldAccess {
+                            expr: Box::new(lhs),
+                            field: key,
+                            info,
+                        })
+                    } else {
+                        panic!("field_access expects an infix operator");
                     }
                 },
             ),

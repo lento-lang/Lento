@@ -21,7 +21,6 @@ use super::{env::Environment, eval::InterpretResult, number::Number};
 pub enum RecordKey {
     String(String),
     Number(Number),
-    Char(char),
 }
 
 impl Display for RecordKey {
@@ -29,7 +28,6 @@ impl Display for RecordKey {
         match self {
             RecordKey::String(s) => write!(f, "{}", s),
             RecordKey::Number(n) => write!(f, "{}", n),
-            RecordKey::Char(c) => write!(f, "{}", c),
         }
     }
 }

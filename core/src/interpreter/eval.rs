@@ -70,6 +70,21 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             }
             Value::Record(record, ty.clone())
         }
+        CheckedAst::FieldAccess { expr, field, .. } => {
+            let record = eval_expr(expr, env)?;
+            match record {
+                Value::Record(fields, _) => fields
+                    .iter()
+                    .find(|(key, _)| key == field)
+                    .map(|(_, value)| value.clone())
+                    .unwrap_or_else(|| {
+                        unreachable!("This should have been checked by the type checker")
+                    }),
+                _ => {
+                    unreachable!("This should have been checked by the type checker");
+                }
+            }
+        }
         CheckedAst::FunctionDef {
             param,
             body,

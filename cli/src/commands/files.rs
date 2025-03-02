@@ -8,7 +8,10 @@ use lento_core::{
     lexer::lexer::InputSource,
     parser::parser::from_file,
     stdlib::init::stdlib,
-    type_checker::{checker::TypeChecker, types::GetType},
+    type_checker::{
+        checker::{TypeChecker, TypeErrorVariant},
+        types::GetType,
+    },
 };
 
 use crate::error::{print_error, print_parse_error, print_runtime_error, print_type_error};
@@ -31,7 +34,7 @@ pub fn handle_command_file(file: &str) {
         Ok(exprs) => exprs,
         Err(err) => {
             print_parse_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
-            exit(1);
+            exit(1)
         }
     };
 
@@ -42,8 +45,16 @@ pub fn handle_command_file(file: &str) {
     let checked_exprs = match checker.check_top_exprs(&exprs) {
         Ok(exprs) => exprs,
         Err(err) => {
-            print_type_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
-            exit(1);
+            match err {
+                TypeErrorVariant::ParseError(err) => {
+                    // Parse errors can occur during type checking if a static operator is used and modifies the AST
+                    print_parse_error(err, str::from_utf8(parser.get_content()).unwrap(), &source)
+                }
+                TypeErrorVariant::TypeError(err) => {
+                    print_type_error(err, str::from_utf8(parser.get_content()).unwrap(), &source)
+                }
+            };
+            exit(1)
         }
     };
     match eval_exprs(&checked_exprs, &mut env) {
@@ -58,8 +69,7 @@ pub fn handle_command_file(file: &str) {
             }
         }
         Err(err) => {
-            print_runtime_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
-            exit(1);
+            print_runtime_error(err, str::from_utf8(parser.get_content()).unwrap(), &source)
         }
     };
     exit(0)

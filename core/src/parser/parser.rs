@@ -584,7 +584,7 @@ impl<R: Read> Parser<R> {
                 TokenKind::Identifier(id) => RecordKey::String(id),
                 TokenKind::Number(n) => RecordKey::Number(n),
                 TokenKind::String(s) => RecordKey::String(s),
-                TokenKind::Char(c) => RecordKey::Char(c),
+                TokenKind::Char(c) => RecordKey::String(c.to_string()),
                 _ => return None, // Not a record
             };
             if let Ok(t) = self.lexer.peek_token(1) {
@@ -635,7 +635,7 @@ impl<R: Read> Parser<R> {
                 TokenKind::Identifier(id) => RecordKey::String(id),
                 TokenKind::Number(n) => RecordKey::Number(n),
                 TokenKind::String(s) => RecordKey::String(s),
-                TokenKind::Char(c) => RecordKey::Char(c),
+                TokenKind::Char(c) => RecordKey::String(c.to_string()),
                 _ => {
                     return Some(Err(ParseError::new(
                         format!(

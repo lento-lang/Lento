@@ -53,6 +53,14 @@ pub enum Ast {
         fields: Vec<(RecordKey, Ast)>,
         info: LineInfo,
     },
+    /// A field access expression is a reference to a field in a record.
+    FieldAccess {
+        /// The record expression to access the field from.
+        expr: Box<Ast>,
+        /// The field key to access.
+        field: RecordKey,
+        info: LineInfo,
+    },
     /// An identifier is a named reference to a value in the environment.
     Identifier { name: String, info: LineInfo },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
@@ -104,6 +112,7 @@ impl Ast {
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
+            Ast::FieldAccess { info, .. } => info,
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall {
                 expr: _,
@@ -170,6 +179,7 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            Ast::FieldAccess { expr, field, .. } => format!("({}.{})", expr.print_sexpr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
                 format!("{}({})", expr.print_sexpr(), arg.print_sexpr())

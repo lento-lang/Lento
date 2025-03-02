@@ -59,6 +59,16 @@ pub enum CheckedAst {
         ty: Type,
         info: LineInfo,
     },
+    /// A field access expression is a reference to a field in a record.
+    FieldAccess {
+        /// The record expression to access the field from.
+        expr: Box<CheckedAst>,
+        /// The key of the field to access.
+        field: RecordKey,
+        /// The type of the field, the type of the value in the record.
+        ty: Type,
+        info: LineInfo,
+    },
     /// An identifier is a named reference to a value in the environment.
     Identifier {
         name: String,
@@ -108,6 +118,7 @@ impl GetType for CheckedAst {
             CheckedAst::Tuple { expr_types: ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
+            CheckedAst::FieldAccess { ty, .. } => ty,
             CheckedAst::Identifier { ty, .. } => ty,
             CheckedAst::FunctionCall { return_type, .. } => return_type,
             CheckedAst::FunctionDef { ty, .. } => ty,
@@ -115,13 +126,9 @@ impl GetType for CheckedAst {
                 target: _,
                 expr: _,
                 ty,
-                info: _,
+                ..
             } => ty,
-            CheckedAst::Block {
-                exprs: _,
-                ty,
-                info: _,
-            } => ty,
+            CheckedAst::Block { exprs: _, ty, .. } => ty,
         }
     }
 }
@@ -147,50 +154,26 @@ impl CheckedAst {
 
     pub fn info(&self) -> &LineInfo {
         match self {
-            CheckedAst::Literal { value: _, info } => info,
-            CheckedAst::Tuple {
-                exprs: _,
-                expr_types: _,
-                info,
-            } => info,
-            CheckedAst::List {
-                exprs: _,
-                ty: _,
-                info,
-            } => info,
-            CheckedAst::Record {
-                fields: _,
-                ty: _,
-                info,
-            } => info,
-            CheckedAst::Identifier {
-                name: _,
-                ty: _,
-                info,
-            } => info,
+            CheckedAst::Literal { info, .. } => info,
+            CheckedAst::Tuple { info, .. } => info,
+            CheckedAst::List { info, .. } => info,
+            CheckedAst::Record { info, .. } => info,
+            CheckedAst::FieldAccess { info, .. } => info,
+            CheckedAst::Identifier { info, .. } => info,
             CheckedAst::FunctionCall { info, .. } => info,
             CheckedAst::FunctionDef { info, .. } => info,
-            CheckedAst::Assignment {
-                target: _,
-                expr: _,
-                ty: _,
-                info,
-            } => info,
-            CheckedAst::Block {
-                exprs: _,
-                ty: _,
-                info,
-            } => info,
+            CheckedAst::Assignment { info, .. } => info,
+            CheckedAst::Block { info, .. } => info,
         }
     }
 
     pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
         match self {
-            CheckedAst::Literal { value: _, info: _ } => (),
+            CheckedAst::Literal { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
                 expr_types: ty,
-                info: _,
+                ..
             } => {
                 for element in elements {
                     element.specialize(judgements, changed);
@@ -200,7 +183,7 @@ impl CheckedAst {
             CheckedAst::List {
                 exprs: elements,
                 ty,
-                info: _,
+                ..
             } => {
                 for element in elements {
                     element.specialize(judgements, changed);
@@ -210,18 +193,23 @@ impl CheckedAst {
             CheckedAst::Record {
                 fields: elements,
                 ty,
-                info: _,
+                ..
             } => {
                 for (_, element) in elements {
                     element.specialize(judgements, changed);
                 }
                 *ty = ty.specialize(judgements, changed);
             }
-            CheckedAst::Identifier {
-                name: _,
+            CheckedAst::FieldAccess {
+                expr: record,
+                field: _,
                 ty,
-                info: _,
+                ..
             } => {
+                record.specialize(judgements, changed);
+                *ty = ty.specialize(judgements, changed);
+            }
+            CheckedAst::Identifier { name: _, ty, .. } => {
                 *ty = ty.specialize(judgements, changed);
             }
             CheckedAst::FunctionCall {
@@ -235,11 +223,11 @@ impl CheckedAst {
                 *return_type = return_type.specialize(judgements, changed);
             }
             CheckedAst::FunctionDef {
-                info: _,
                 param,
                 body,
                 return_type,
                 ty,
+                ..
             } => {
                 param.ty = param.ty.specialize(judgements, changed);
                 *return_type = return_type.specialize(judgements, changed);
@@ -250,7 +238,7 @@ impl CheckedAst {
                 target: lhs,
                 expr: rhs,
                 ty,
-                info: _,
+                ..
             } => {
                 lhs.specialize(judgements, changed);
                 rhs.specialize(judgements, changed);
@@ -259,7 +247,7 @@ impl CheckedAst {
             CheckedAst::Block {
                 exprs: expressions,
                 ty,
-                info: _,
+                ..
             } => {
                 for expression in expressions {
                     expression.specialize(judgements, changed);
@@ -273,9 +261,7 @@ impl CheckedAst {
         match self {
             CheckedAst::Literal { value, info: _ } => value.pretty_print(),
             CheckedAst::Tuple {
-                exprs: elements,
-                expr_types: _,
-                info: _,
+                exprs: elements, ..
             } => format!(
                 "({})",
                 elements
@@ -285,9 +271,7 @@ impl CheckedAst {
                     .join(", ")
             ),
             CheckedAst::List {
-                exprs: elements,
-                ty: _,
-                info: _,
+                exprs: elements, ..
             } => format!(
                 "[{}]",
                 elements
@@ -296,11 +280,7 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            CheckedAst::Record {
-                fields,
-                ty: _,
-                info: _,
-            } => format!(
+            CheckedAst::Record { fields, .. } => format!(
                 "{{ {} }}",
                 fields
                     .iter()
@@ -308,11 +288,12 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            CheckedAst::Identifier {
-                name,
-                ty: _,
-                info: _,
-            } => name.clone(),
+            CheckedAst::FieldAccess {
+                expr: record,
+                field,
+                ..
+            } => format!("({}.{})", record.print_sexpr(), field),
+            CheckedAst::Identifier { name, .. } => name.clone(),
             CheckedAst::FunctionCall {
                 expr: function,
                 arg,
@@ -346,15 +327,12 @@ impl CheckedAst {
             CheckedAst::Assignment {
                 target: lhs,
                 expr: rhs,
-                ty: _,
-                info: _,
+                ..
             } => {
                 format!("({} = {})", lhs.print_sexpr(), rhs.print_sexpr())
             }
             CheckedAst::Block {
-                exprs: expressions,
-                ty: _,
-                info: _,
+                exprs: expressions, ..
             } => format!(
                 "{{ {} }}",
                 expressions
@@ -402,6 +380,11 @@ impl CheckedAst {
                 result.push_str(" }");
                 result
             }
+            Self::FieldAccess {
+                expr: e, field: f, ..
+            } => {
+                format!("{}.{}", e.pretty_print(), f)
+            }
             Self::Identifier { name, .. } => name.clone(),
             Self::FunctionCall {
                 expr: function,
@@ -417,14 +400,14 @@ impl CheckedAst {
                 target: lhs,
                 expr: rhs,
                 ty: _,
-                info: _,
+                ..
             } => {
                 format!("{} = {}", lhs.pretty_print(), rhs.pretty_print())
             }
             Self::Block {
                 exprs: expressions,
                 ty: _,
-                info: _,
+                ..
             } => {
                 let mut result = "{".to_string();
                 for (i, e) in expressions.iter().enumerate() {
