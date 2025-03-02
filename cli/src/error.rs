@@ -38,11 +38,15 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
         );
     }
 
-    for label in base.labels {
+    for label in &base.labels {
         report = report.with_label(
             Label::new((source.name(), label.info.start.index..label.info.end.index))
-                .with_message(label.message)
-                .with_color(colors.next()),
+                .with_message(&label.message)
+                .with_color(if base.labels.len() == 1 {
+                    ariadne::Color::BrightRed
+                } else {
+                    colors.next()
+                }),
         );
     }
 

@@ -519,7 +519,7 @@ impl TypeChecker<'_> {
                         "This record does not have the field {}",
                         field.to_string().yellow()
                     ),
-                    info.clone(),
+                    record.info().clone(),
                 )
                 .into())
             }
