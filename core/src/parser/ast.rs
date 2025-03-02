@@ -1,6 +1,6 @@
 use crate::{
     interpreter::value::{RecordKey, Value},
-    lexer::token::LineInfo,
+    util::error::LineInfo,
 };
 
 use super::op::OperatorInfo;

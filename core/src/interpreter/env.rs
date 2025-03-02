@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use colorful::Colorful;
+
 use crate::{
-    lexer::token::LineInfo,
+    util::error::LineInfo,
     type_checker::types::Type,
     util::{failable::Failable, str::Str},
 };
@@ -64,9 +66,9 @@ impl<'a> Environment<'a> {
 
     pub fn lookup_variable(&self, name: &str) -> Option<&Value> {
         log::trace!(
-            "Looking up variable '{}' in environment '{}' of {:?}",
-            name,
-            self.name,
+            "Looking up variable {} in environment {} of {:?}",
+            name.yellow(),
+            self.name.to_string().yellow(),
             self.variables.keys().collect::<Vec<&String>>()
         );
         self.variables
@@ -89,7 +91,7 @@ impl<'a> Environment<'a> {
     //         // TODO: Allow for multiple variations of the same function
     //         // TODO: with the same name but different parameter types
     //         return Err(RuntimeError::new(format!(
-    //             "Function {} already exists in the current environment",
+    //             "Function {} already exists",
     //             name
     //         )));
     //     } else {
@@ -102,9 +104,9 @@ impl<'a> Environment<'a> {
     /// If the value is not found in the current environment, the parent environment is searched recursively.
     pub fn lookup_identifier(&self, name: &str) -> (Option<&Value>, Option<&Function>) {
         log::trace!(
-            "Looking up identifier '{}' in environment '{}'",
-            name,
-            self.name
+            "Looking up identifier {} in environment {}",
+            name.yellow(),
+            self.name.to_string().yellow()
         );
         (self.lookup_variable(name), self.lookup_function(name))
     }
@@ -123,7 +125,7 @@ impl<'a> Environment<'a> {
     /// If the type already exists in a parent environment, it is shadowed.
     pub fn add_type(&mut self, name: Str, type_: Type) -> Failable<RuntimeError> {
         if self.types.contains_key(&name.to_string()) {
-            panic!("Type {} already exists in the current environment", name);
+            panic!("Type {} already exists", name.to_string().blue());
         }
         self.types.insert(name.to_string(), type_);
         Ok(())
@@ -141,10 +143,7 @@ impl<'a> Environment<'a> {
         // Check if the variable already exists in the standard library
         if self.variables.contains_key(&name) {
             Err(RuntimeError::new(
-                format!(
-                    "Variable named '{}' already exists in the current environment",
-                    name
-                ),
+                format!("Variable {} already exists", name.clone().yellow()),
                 info.clone(),
             ))
         } else {
@@ -152,10 +151,7 @@ impl<'a> Environment<'a> {
                 Value::Function(func) => {
                     if self.functions.contains_key(&name) {
                         return Err(RuntimeError::new(
-                            format!(
-                                "Function {} already exists in the current environment",
-                                name
-                            ),
+                            format!("Function {} already exists", name),
                             info.clone(),
                         ));
                     }
@@ -164,10 +160,7 @@ impl<'a> Environment<'a> {
                 _ => {
                     if self.variables.contains_key(&name) {
                         return Err(RuntimeError::new(
-                            format!(
-                                "Variable {} already exists in the current environment",
-                                name
-                            ),
+                            format!("Variable {} already exists", name),
                             info.clone(),
                         ));
                     }

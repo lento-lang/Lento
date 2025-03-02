@@ -1,12 +1,14 @@
 use std::{collections::HashMap, io::Read};
 
+use colorful::Colorful;
+
 use crate::{
     interpreter::{
         env::Environment,
         number::{FloatingPoint, Number},
         value::{Function, Value},
     },
-    lexer::{lexer::Lexer, token::LineInfo},
+    lexer::lexer::Lexer,
     parser::{
         ast::Ast,
         op::{
@@ -21,7 +23,7 @@ use crate::{
         checker::TypeChecker,
         types::{std_types, Type, TypeTrait},
     },
-    util::str::Str,
+    util::{error::LineInfo, str::Str},
 };
 
 use super::{logical, system};
@@ -89,8 +91,9 @@ impl Initializer {
         for (name, val) in &self.values {
             if let Err(e) = env.add_value(name.clone(), val.clone(), &LineInfo::default()) {
                 panic!(
-                    "Environment initialization failed when adding value '{}': {:?}",
-                    name, e
+                    "Environment initialization failed when adding value {}: {}",
+                    name.to_string().yellow(),
+                    e.inner.message
                 );
             }
         }
@@ -101,8 +104,9 @@ impl Initializer {
                 &LineInfo::default(),
             ) {
                 panic!(
-                    "Environment initialization failed when adding function '{}': {:?}",
-                    name, e
+                    "Environment initialization failed when adding function {}: {}",
+                    name.to_string().yellow(),
+                    e.inner.message
                 );
             }
         }
@@ -117,8 +121,8 @@ impl Initializer {
                     if let Some(func) = env.lookup_function(function_name) {
                         if !signature.function_type().equals(func.get_fn_type()).success {
                             panic!(
-                                "Function type mismatch for operator '{}': expected '{}', got '{}'",
-                                op.info.name,
+                                "Function type mismatch for operator {}: expected {}, but got {}",
+                                op.info.name.clone().yellow(),
                                 signature.function_type().pretty_print(),
                                 func.get_type().pretty_print()
                             );
@@ -131,8 +135,9 @@ impl Initializer {
         for (name, ty) in &self.types {
             if let Err(e) = env.add_type(Str::String(name.to_string()), ty.clone()) {
                 panic!(
-                    "Environment initialization failed when adding type '{}': {:?}",
-                    name, e
+                    "Environment initialization failed when adding type {}: {}",
+                    name.to_string().yellow(),
+                    e.inner.message
                 );
             }
         }

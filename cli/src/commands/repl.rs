@@ -40,11 +40,11 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // Force the parsing to stop after the first EOF token
     // and not try to read more tokens from the reader,
     // this prevents the parser to infinitely wait for more input.
-    parser.lexer().set_try_read_after_eof(false);
+    parser.get_lexer().set_try_read_after_eof(false);
     // Force the lexer to read only once from the reader,
     // this prevents another prompt appearing after the
     // user has entered an expression.
-    parser.lexer().set_read_only_once(true);
+    parser.get_lexer().set_read_only_once(true);
     let mut checker = TypeChecker::default();
     std.init_type_checker(&mut checker);
     let mut env = global_env();
@@ -61,7 +61,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
             &source,
         );
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
-        parser.lexer().reset();
+        parser.get_lexer().reset();
 
         if !found_expr {
             // move the cursor up one line and clear it

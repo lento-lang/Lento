@@ -1,16 +1,19 @@
+use colorful::Colorful;
+
 use crate::type_checker::types::Type;
 
-use super::token::LineInfo;
+use crate::util::error::{BaseError, LineInfo};
 
 #[derive(Debug, Clone)]
 pub struct LexerError {
-    pub message: String,
-    pub info: LineInfo,
+    pub inner: BaseError,
 }
 
 impl LexerError {
     pub fn new(message: String, info: LineInfo) -> Self {
-        Self { message, info }
+        Self {
+            inner: BaseError::new(message, info),
+        }
     }
 
     pub fn unexpected_end_of_file(info: LineInfo) -> Self {
@@ -18,18 +21,31 @@ impl LexerError {
     }
 
     pub fn unexpected_character(c: char, info: LineInfo) -> Self {
-        Self::new(format!("Unexpected character '{}'", c), info)
+        Self::new(
+            format!("Unexpected character {}", c.to_string().yellow()),
+            info,
+        )
     }
 
     pub fn invalid_char(c: String, info: LineInfo) -> Self {
-        Self::new(format!("Invalid character literal '{}'", c), info)
+        Self::new(
+            format!("Invalid character literal '{}'", c.to_string().yellow()),
+            info,
+        )
     }
 
     pub fn invalid_number_type(num: &str, ty: &Type, info: LineInfo) -> Self {
-        Self::new(format!("Invalid {} literal '{}'", ty, num), info)
+        Self::new(
+            format!(
+                "Invalid {} literal {}",
+                ty.pretty_print_color(),
+                num.yellow()
+            ),
+            info,
+        )
     }
 
     pub fn invalid_number(num: &str, info: LineInfo) -> Self {
-        Self::new(format!("Invalid number literal '{}'", num), info)
+        Self::new(format!("Invalid number literal {}", num.yellow()), info)
     }
 }

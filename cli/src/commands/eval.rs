@@ -1,3 +1,4 @@
+use core::str;
 use std::io::Read;
 
 use clap::{ArgMatches, Command};
@@ -57,7 +58,11 @@ pub fn eval_all<R: Read>(
                 let checked_ast = match checker.check_expr(ast) {
                     Ok(ast) => ast,
                     Err(err) => {
-                        print_type_error(err, source);
+                        print_type_error(
+                            err,
+                            str::from_utf8(parser.get_content()).unwrap(),
+                            source,
+                        );
                         break 'exprs; // Stop on error
                     }
                 };
@@ -83,13 +88,17 @@ pub fn eval_all<R: Read>(
                         }
                     }
                     Err(err) => {
-                        print_runtime_error(err, source);
+                        print_runtime_error(
+                            err,
+                            str::from_utf8(parser.get_content()).unwrap(),
+                            source,
+                        );
                         break 'exprs; // Stop on error
                     }
                 }
             }
         }
-        Err(err) => print_parse_error(err, source),
+        Err(err) => print_parse_error(err, str::from_utf8(parser.get_content()).unwrap(), source),
     }
     true
 }

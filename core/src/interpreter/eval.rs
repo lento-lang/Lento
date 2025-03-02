@@ -1,12 +1,14 @@
 use std::borrow::Borrow;
 
+use colorful::Colorful;
+
 use crate::{
     interpreter::value::NativeFunction,
-    lexer::token::LineInfo,
     type_checker::{
-        checked_ast::{CheckedAst, CheckedModule},
+        checked_ast::CheckedAst,
         types::{GetType, Type},
     },
+    util::error::LineInfo,
     util::str::Str,
 };
 
@@ -44,7 +46,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(_), Some(_)) => {
                 return Err(RuntimeError::new(
-                    format!("Ambiguous identifier '{}'", name),
+                    format!("Ambiguous identifier {}", name.clone().yellow()),
                     ast.info().clone(),
                 ))
             }
@@ -52,7 +54,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
             (None, None) => {
                 return Err(RuntimeError::new(
-                    format!("Unknown identifier '{}'", name),
+                    format!("Unknown identifier {}", name.clone().yellow()),
                     ast.info().clone(),
                 ))
             }
@@ -158,10 +160,10 @@ fn eval_call(
         if args.len() != native.params.len() {
             return Err(RuntimeError::new(
                 format!(
-                    "Expected {} arguments, found {} when calling native function '{}'",
-                    native.params.len(),
-                    args.len(),
-                    native.name
+                    "Expected {} arguments, found {} when calling native function {}",
+                    native.params.len().to_string().green(),
+                    args.len().to_string().green(),
+                    native.name.clone().yellow()
                 ),
                 info.clone(),
             ));

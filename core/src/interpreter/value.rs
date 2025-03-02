@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
 use crate::{
-    lexer::token::LineInfo,
     type_checker::{
         checked_ast::{CheckedAst, CheckedParam},
         types::{std_types, FunctionType, GetType, Type, TypeTrait},
     },
+    util::error::LineInfo,
 };
 
 use super::{env::Environment, eval::InterpretResult, number::Number};

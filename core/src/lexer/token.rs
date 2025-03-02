@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use crate::interpreter::number::Number;
+use crate::{interpreter::number::Number, util::error::LineInfo};
 
 // Token structure for the Lento programming language
 #[derive(Debug, Clone, PartialEq)]
@@ -98,7 +98,7 @@ impl TokenKind {
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EndOfFile => write!(f, "EndOfFile"),
+            Self::EndOfFile => write!(f, "end of file"),
             Self::Newline => write!(f, "newline"),
             Self::SemiColon => write!(f, ";"),
             Self::Colon => write!(f, ":"),
@@ -118,79 +118,6 @@ impl Display for TokenKind {
             Self::Let => write!(f, "let"),
             Self::Comment(s) => write!(f, "// {}", s),
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LocationInfo {
-    pub index: usize,
-    pub line: usize,
-    pub column: usize,
-    pub eof: bool,
-}
-
-impl LocationInfo {
-    pub fn new(index: usize, line: usize, column: usize) -> Self {
-        Self {
-            index,
-            line,
-            column,
-            eof: false,
-        }
-    }
-
-    pub fn eof(index: usize) -> Self {
-        Self {
-            index,
-            line: 0,
-            column: 0,
-            eof: true,
-        }
-    }
-}
-
-impl Default for LocationInfo {
-    fn default() -> Self {
-        Self {
-            index: 0,
-            line: 1,
-            column: 1,
-            eof: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct LineInfo {
-    pub start: LocationInfo,
-    pub end: LocationInfo,
-}
-
-impl LineInfo {
-    pub fn new(start: LocationInfo, end: LocationInfo) -> Self {
-        Self { start, end }
-    }
-
-    pub fn eof(start: LocationInfo, eof_index: usize) -> Self {
-        Self {
-            start,
-            end: LocationInfo::eof(eof_index),
-        }
-    }
-
-    pub fn join(&self, other: &LineInfo) -> LineInfo {
-        let start = if self.start.index < other.start.index {
-            self.start.clone()
-        } else {
-            other.start.clone()
-        };
-        let end = if self.end.index > other.end.index {
-            self.end.clone()
-        } else {
-            other.end.clone()
-        };
-
-        LineInfo { start, end }
     }
 }
 

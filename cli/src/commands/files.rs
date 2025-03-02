@@ -1,3 +1,4 @@
+use core::str;
 use std::{fs::File, path::Path, process::exit};
 
 use colorful::Colorful;
@@ -18,7 +19,10 @@ pub fn handle_command_file(file: &str) {
     let source = InputSource::File(file.to_path_buf());
     let std = stdlib();
     let Ok(file) = File::open(file) else {
-        print_error(format!("Could not open file '{}'", file.display()));
+        print_error(format!(
+            "Could not open file {}",
+            file.display().to_string().light_red()
+        ));
         exit(1);
     };
     let mut parser = from_file(file);
@@ -26,7 +30,7 @@ pub fn handle_command_file(file: &str) {
     let exprs = match parser.parse_all() {
         Ok(exprs) => exprs,
         Err(err) => {
-            print_parse_error(err, &source);
+            print_parse_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
             exit(1);
         }
     };
@@ -38,7 +42,7 @@ pub fn handle_command_file(file: &str) {
     let checked_exprs = match checker.check_top_exprs(&exprs) {
         Ok(exprs) => exprs,
         Err(err) => {
-            print_type_error(err, &source);
+            print_type_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
             exit(1);
         }
     };
@@ -54,7 +58,7 @@ pub fn handle_command_file(file: &str) {
             }
         }
         Err(err) => {
-            print_runtime_error(err, &source);
+            print_runtime_error(err, str::from_utf8(parser.get_content()).unwrap(), &source);
             exit(1);
         }
     };

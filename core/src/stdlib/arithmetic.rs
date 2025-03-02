@@ -30,15 +30,18 @@ pub fn add() -> Function {
             if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::add(&l, &r))),
-                    _ => panic!("add expects 2 arguments of type '{}'", ty_num),
+                    _ => panic!(
+                        "add expects 2 arguments of type {}",
+                        ty_num.pretty_print_color()
+                    ),
                 }
             } else {
                 Err(RuntimeError::new(
                     format!(
-                        "add expects 2 arguments of type '{}', got '{}' and '{}'",
-                        ty_num,
-                        lhs.get_type(),
-                        rhs.get_type()
+                        "add expects 2 arguments of type {}, but got {} and {}",
+                        ty_num.pretty_print_color(),
+                        lhs.get_type().pretty_print_color(),
+                        rhs.get_type().pretty_print_color()
                     ),
                     info.clone(),
                 ))
@@ -74,15 +77,18 @@ pub fn sub() -> Function {
             if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::sub(&l, &r))),
-                    _ => panic!("sub expects 2 arguments of type '{}'", ty_num),
+                    _ => panic!(
+                        "sub expects 2 arguments of type {}",
+                        ty_num.pretty_print_color()
+                    ),
                 }
             } else {
                 Err(RuntimeError::new(
                     format!(
-                        "sub expects 2 arguments of type '{}', got '{}' and '{}'",
-                        ty_num,
-                        lhs.get_type(),
-                        rhs.get_type()
+                        "sub expects 2 arguments of type {}, got {} and {}",
+                        ty_num.pretty_print_color(),
+                        lhs.get_type().pretty_print_color(),
+                        rhs.get_type().pretty_print_color()
                     ),
                     info.clone(),
                 ))
@@ -118,15 +124,18 @@ pub fn mul() -> Function {
             if lhs.get_type().subtype(&ty_num).success && rhs.get_type().subtype(&ty_num).success {
                 match (lhs, rhs) {
                     (Value::Number(l), Value::Number(r)) => Ok(Value::Number(Number::mul(&l, &r))),
-                    _ => panic!("mul expects 2 arguments of type '{}'", ty_num),
+                    _ => panic!(
+                        "mul expects 2 arguments of type {}",
+                        ty_num.pretty_print_color()
+                    ),
                 }
             } else {
                 Err(RuntimeError::new(
                     format!(
-                        "mul expects 2 arguments of type '{}', got '{}' and '{}'",
-                        ty_num,
-                        lhs.get_type(),
-                        rhs.get_type()
+                        "mul expects 2 arguments of type {}, got {} and {}",
+                        ty_num.pretty_print_color(),
+                        lhs.get_type().pretty_print_color(),
+                        rhs.get_type().pretty_print_color()
                     ),
                     info.clone(),
                 ))
@@ -164,15 +173,18 @@ pub fn div() -> Function {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(Number::div(&l, &r, info)?))
                     }
-                    _ => panic!("div expects 2 arguments of type '{}'", ty_num),
+                    _ => panic!(
+                        "div expects 2 arguments of type {}",
+                        ty_num.pretty_print_color()
+                    ),
                 }
             } else {
                 Err(RuntimeError::new(
                     format!(
-                        "div expects 2 arguments of type '{}', got '{}' and '{}'",
-                        ty_num,
-                        lhs.get_type(),
-                        rhs.get_type()
+                        "div expects 2 arguments of type {}, got {} and {}",
+                        ty_num.pretty_print_color(),
+                        lhs.get_type().pretty_print_color(),
+                        rhs.get_type().pretty_print_color()
                     ),
                     info.clone(),
                 ))

@@ -9,7 +9,7 @@ use malachite::{
 };
 
 use crate::{
-    lexer::token::LineInfo,
+    util::error::LineInfo,
     type_checker::types::{std_types, GetType, Type},
 };
 

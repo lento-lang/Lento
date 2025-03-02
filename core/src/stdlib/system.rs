@@ -86,16 +86,16 @@ pub fn exit() -> Function {
                         std::process::exit(*code);
                     } else {
                         panic!(
-                            "exit() expects 1 argument of type '{}', got '{}'",
-                            std_types::INT32,
-                            n.get_type()
+                            "exit() expects 1 argument of type {}, but got {}",
+                            std_types::INT32.pretty_print_color(),
+                            n.get_type().pretty_print_color()
                         );
                     }
                 }
                 _ => panic!(
-                    "exit() expects 1 argument of type '{}', got '{}'",
-                    std_types::INT32,
-                    values[0].get_type()
+                    "exit() expects 1 argument of type {}, got {}",
+                    std_types::INT32.pretty_print_color(),
+                    values[0].get_type().pretty_print_color()
                 ),
             }
         },

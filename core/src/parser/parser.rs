@@ -1,25 +1,27 @@
+use core::str;
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Cursor, Read},
 };
 
+use colorful::Colorful;
+
 use crate::{
     interpreter::value::{RecordKey, Value},
     lexer::{
         lexer::{self, LexResult},
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
-        token::{LineInfo, TokenInfo, TokenKind},
+        token::{TokenInfo, TokenKind},
     },
     parser::ast::{ParamAst, TypeAst},
-    stdlib::init::Initializer,
-    util::failable::Failable,
+    util::{error::LineInfo, failable::Failable},
 };
 
 use crate::lexer::lexer::Lexer;
 
 use super::{
-    ast::{Ast, Module},
+    ast::Ast,
     error::{ParseError, ParseOperatorError},
     op::{OperatorAssociativity, OperatorInfo, OperatorPosition, OperatorPrecedence},
 };
@@ -76,8 +78,20 @@ impl<R: Read> Parser<R> {
         }
     }
 
-    pub fn lexer(&mut self) -> &mut Lexer<R> {
+    pub fn get_lexer(&mut self) -> &mut Lexer<R> {
         &mut self.lexer
+    }
+
+    pub fn move_lexer(self) -> Lexer<R> {
+        self.lexer
+    }
+
+    pub fn get_content(&self) -> &[u8] {
+        self.lexer.get_content()
+    }
+
+    pub fn move_content(self) -> Vec<u8> {
+        self.lexer.move_content()
     }
 
     /// Define an operator in the parser.
@@ -333,7 +347,7 @@ impl<R: Read> Parser<R> {
                         let body = match self.parse_top_expr() {
                             Ok(body) => body,
                             Err(err) => {
-                                log::error!("Failed to parse function body: {}", err.message);
+                                log::error!("Failed to parse function body: {}", err.inner.message);
                                 return Some(Err(err));
                             }
                         };
@@ -398,9 +412,9 @@ impl<R: Read> Parser<R> {
             let ty = match self.try_parse_type() {
                 Some(Ok(t)) => t,
                 Some(Err(err)) => {
-                    log::error!("Failed to parse function parameter: {}", err.message);
+                    log::error!("Failed to parse function parameter: {}", err.inner.message);
                     return Err(ParseError::new(
-                        format!("Failed to parse function parameter: {}", err.message),
+                        format!("Failed to parse function parameter: {}", err.inner.message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
@@ -424,9 +438,9 @@ impl<R: Read> Parser<R> {
                     }
                 },
                 Err(err) => {
-                    log::error!("Failed to parse parameter name: {}", err.message);
+                    log::error!("Failed to parse parameter name: {}", err.inner.message);
                     return Err(ParseError::new(
-                        format!("Failed to parse parameter name: {}", err.message),
+                        format!("Failed to parse parameter name: {}", err.inner.message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
@@ -792,9 +806,9 @@ impl<R: Read> Parser<R> {
             Err(err) => Err(ParseError::new(
                 format!(
                     "Expected primary expression, but failed due to: {}",
-                    err.message
+                    err.inner.message
                 ),
-                err.info,
+                err.inner.info,
             )),
         }
     }
@@ -945,15 +959,20 @@ impl<R: Read> Parser<R> {
         match self.lexer.expect_next_token_not(pred::ignored) {
             Ok(t) if t.token == expected_token => Ok(t),
             Ok(t) => Err(ParseError::new(
-                format!("Expected '{}' but found {:?}", symbol, t),
+                format!(
+                    "Expected {} but found {}",
+                    symbol.yellow(),
+                    t.token.to_string().red()
+                ),
                 t.info,
             )),
             Err(err) => Err(ParseError::new(
                 format!(
-                    "Expected '{}', but failed due to: {:?}",
-                    symbol, err.message
+                    "Expected {}, but failed due to: {}",
+                    symbol.yellow(),
+                    err.inner.message
                 ),
-                err.info,
+                err.inner.info,
             )),
         }
     }
@@ -1100,81 +1119,98 @@ pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
 //                           Direct Parsing Helper Functions                            //
 //--------------------------------------------------------------------------------------//
 
-/// Returns a parsed module from a given source file or a parse error.
-pub type ModuleResult = Result<Module, ParseError>;
+// pub fn parse_string_one(source: String, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_string(source);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         vec![parser.parse_one()?],
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_string_one(source: String, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_string(source);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(
-        String::from("unnamed"),
-        vec![parser.parse_one()?],
-    ))
-}
+// pub fn parse_string_all(source: String, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_string(source);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         parser.parse_all()?,
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_string_all(source: String, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_string(source);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(String::from("unnamed"), parser.parse_all()?))
-}
+// pub fn parse_str_one(source: &str, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_str(source);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         vec![parser.parse_one()?],
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_str_one(source: &str, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_str(source);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(
-        String::from("unnamed"),
-        vec![parser.parse_one()?],
-    ))
-}
+// pub fn parse_str_all(source: &str, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_str(source);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         parser.parse_all()?,
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_str_all(source: &str, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_str(source);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(String::from("unnamed"), parser.parse_all()?))
-}
+// pub fn parse_stdin_one(init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_stdin();
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         vec![parser.parse_one()?],
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_stdin_one(init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_stdin();
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(
-        String::from("unnamed"),
-        vec![parser.parse_one()?],
-    ))
-}
+// pub fn parse_stdin_all(init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_stdin();
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         parser.parse_all()?,
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_stdin_all(init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_stdin();
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(String::from("unnamed"), parser.parse_all()?))
-}
+// pub fn parse_file_one(file: File, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_file(file);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         vec![parser.parse_one()?],
+//         parser.move_lexer().move_content(),
+//     ))
+// }
 
-pub fn parse_file_one(file: File, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_file(file);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(
-        String::from("unnamed"),
-        vec![parser.parse_one()?],
-    ))
-}
-
-pub fn parse_file_all(file: File, init: Option<&Initializer>) -> ModuleResult {
-    let mut parser = from_file(file);
-    if let Some(init) = init {
-        init.init_parser(&mut parser);
-    }
-    Ok(Module::new(String::from("unnamed"), parser.parse_all()?))
-}
+// pub fn parse_file_all(file: File, init: Option<&Initializer>) -> ModuleResult {
+//     let mut parser = from_file(file);
+//     if let Some(init) = init {
+//         init.init_parser(&mut parser);
+//     }
+//     Ok(Module::new(
+//         String::from("unnamed"),
+//         parser.parse_all()?,
+//         parser.move_lexer().move_content(),
+//     ))
+// }

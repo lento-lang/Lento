@@ -1,8 +1,9 @@
 use std::{borrow::Borrow, collections::HashMap};
 
+use colorful::Colorful;
+
 use crate::{
     interpreter::value::{RecordKey, Value},
-    lexer::token::LineInfo,
     parser::{
         ast::{Ast, ParamAst, TypeAst},
         op::{
@@ -10,6 +11,7 @@ use crate::{
             StaticOperatorHandler,
         },
     },
+    util::error::{BaseError, LineInfo},
 };
 
 use super::{
@@ -20,13 +22,26 @@ use super::{
 /// A type error is an error that occurs during type checking.
 #[derive(Debug)]
 pub struct TypeError {
-    pub message: String,
-    pub info: LineInfo,
+    pub inner: BaseError,
 }
 
 impl TypeError {
     pub fn new(message: String, info: LineInfo) -> Self {
-        Self { message, info }
+        Self {
+            inner: BaseError::new(message, info),
+        }
+    }
+
+    pub fn with_hint(self, hint: String) -> Self {
+        Self {
+            inner: self.inner.with_hint(hint),
+        }
+    }
+
+    pub fn with_label(self, message: String, info: LineInfo) -> Self {
+        Self {
+            inner: self.inner.with_label(message, info),
+        }
     }
 }
 
@@ -221,8 +236,8 @@ impl TypeChecker<'_> {
                             return_type: checked.get_type().clone(),
                         };
                         log::debug!(
-                            "Adding function '{}' with variation: {}",
-                            name,
+                            "Adding function {} with variation {}",
+                            name.clone().yellow(),
                             variation.pretty_print()
                         );
                         self.env.add_function(name.clone(), variation);
@@ -293,10 +308,11 @@ impl TypeChecker<'_> {
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier(name, info) => self
-                .lookup_type(name)
-                .cloned()
-                .ok_or_else(|| TypeError::new(format!("Unknown type '{}'", name), info.clone()))?,
+            TypeAst::Identifier(name, info) => {
+                self.lookup_type(name).cloned().ok_or_else(|| {
+                    TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
+                })?
+            }
         })
     }
 
@@ -305,7 +321,7 @@ impl TypeChecker<'_> {
             self.check_type_expr(ty)?
         } else {
             return Err(TypeError::new(
-                format!("Parameter type for '{}' is missing", param.name),
+                format!("Missing parameter type for {}", param.name.clone().yellow()),
                 param.info.clone(),
             ));
         };
@@ -329,12 +345,14 @@ impl TypeChecker<'_> {
         let return_type = if let Some(ty) = &return_type {
             let ty = self.check_type_expr(ty)?;
             if !ty.subtype(&body_type).success {
-                return Err(TypeError::new(format!(
-                        "Function body type does not match the return type. Expected '{}', found '{}'",
-                        ty, &body_type
+                return Err(TypeError::new(
+                    format!(
+                        "Function body type does not match the return type. Expected {}, found {}",
+                        ty.pretty_print_color(),
+                        body_type.pretty_print_color()
                     ),
-					body_info.clone(),
-				));
+                    body_info.clone(),
+                ));
             }
             ty
         } else {
@@ -444,14 +462,14 @@ impl TypeChecker<'_> {
                     }
                 } else {
                     return Err(TypeError::new(
-                        format!("Function '{}' has no variants", name),
+                        format!("Function {} has no variants", name.yellow()),
                         info.clone(),
                     ));
                 }
             }
             None => {
                 return Err(TypeError::new(
-                    format!("Unknown variable '{}'", name),
+                    format!("Unknown variable {}", name.yellow()),
                     info.clone(),
                 ));
             }
@@ -480,7 +498,7 @@ impl TypeChecker<'_> {
                 IdentifierType::Function(_) => "Function",
             };
             return Err(TypeError::new(
-                format!("{} '{}' already exists", ty_name, target),
+                format!("{} {} already exists", ty_name, target.clone().yellow()),
                 info.clone(),
             ));
         }
@@ -629,7 +647,10 @@ impl TypeChecker<'_> {
             }
         } else {
             Err(TypeError::new(
-                format!("Unknown accumulate operator '{}'", op_info.symbol),
+                format!(
+                    "Unknown accumulate operator {}",
+                    op_info.symbol.clone().yellow()
+                ),
                 info.clone(),
             ))
         }
@@ -666,6 +687,7 @@ impl TypeChecker<'_> {
         let checked_rhs = self.check_expr(rhs)?;
         let lhs_type = checked_lhs.get_type();
         let rhs_type = checked_rhs.get_type();
+        let mut closest_match = None;
         for op in self.lookup_operator(&op_info.symbol) {
             if !lhs_type.subtype(&op.signature().params[0].ty).success {
                 log::trace!(
@@ -674,6 +696,9 @@ impl TypeChecker<'_> {
                     lhs_type.pretty_print_color(),
                     op.signature().params[0].ty.pretty_print_color()
                 );
+                if closest_match.is_none() {
+                    closest_match = Some(op);
+                }
                 continue;
             }
             if !rhs_type.subtype(&op.signature().params[1].ty).success {
@@ -683,11 +708,12 @@ impl TypeChecker<'_> {
                     rhs_type.pretty_print_color(),
                     op.signature().params[1].ty.pretty_print_color()
                 );
+                closest_match = Some(op);
                 continue;
             }
             log::trace!(
-                "Found operator: '{}' : ({} <: {}) -> ({} <: {}) -> {}",
-                op.info.symbol,
+                "Found operator {} : ({} <: {}) -> ({} <: {}) -> {}",
+                op.info.symbol.clone().yellow(),
                 lhs_type.pretty_print_color(),
                 op.signature().params[0].ty.pretty_print_color(),
                 rhs_type.pretty_print_color(),
@@ -700,14 +726,17 @@ impl TypeChecker<'_> {
                         .lookup_function(function_name)
                         .ok_or_else(|| {
                             TypeError::new(
-                                format!("Unknown function '{}'", function_name),
+                                format!("Unknown function {}", function_name.clone().yellow()),
                                 info.clone(),
                             )
                         })?
                         .first()
                         .ok_or_else(|| {
                             TypeError::new(
-                                format!("Function '{}' has no variants", function_name),
+                                format!(
+                                    "Function {} has no variants",
+                                    function_name.clone().yellow()
+                                ),
                                 info.clone(),
                             )
                         })?
@@ -720,7 +749,10 @@ impl TypeChecker<'_> {
                     } = function_ty.borrow();
                     let Type::Function(inner_ty) = inner_ret else {
                         return Err(TypeError::new(
-                            format!("Expected function type, found '{}'", inner_ret),
+                            format!(
+                                "Expected function type, found {}",
+                                inner_ret.pretty_print_color()
+                            ),
                             info.clone(),
                         ));
                     };
@@ -761,10 +793,39 @@ impl TypeChecker<'_> {
                 }
             }
         }
-        Err(TypeError::new(
-            format!("Unknown binary operator '{}'", op_info.symbol),
+        let mut err = TypeError::new(
+            format!(
+                "Unknown binary operator {} {} {}",
+                lhs_type.pretty_print_color(),
+                op_info.symbol.clone().yellow(),
+                rhs_type.pretty_print_color()
+            ),
             info.clone(),
-        ))
+        )
+        .with_label(
+            format!(
+                "This is of type {}",
+                checked_lhs.get_type().pretty_print_color()
+            ),
+            lhs.info().clone(),
+        )
+        .with_label(
+            format!(
+                "This is of type {}",
+                checked_rhs.get_type().pretty_print_color()
+            ),
+            rhs.info().clone(),
+        );
+        if let Some(closest_match) = closest_match {
+            err = err.with_hint(format!(
+                "Did you mean {} {} {} returning {}?",
+                closest_match.signature().params[0].ty.pretty_print_color(),
+                closest_match.info.symbol.clone().yellow(),
+                closest_match.signature().params[1].ty.pretty_print_color(),
+                closest_match.signature().ret.pretty_print_color()
+            ));
+        }
+        Err(err)
     }
 
     fn check_unary(
@@ -799,7 +860,7 @@ impl TypeChecker<'_> {
             }
         }
         Err(TypeError::new(
-            format!("Unknown unary operator '{}'", op_info.symbol),
+            format!("Unknown unary operator {}", op_info.symbol.clone().yellow()),
             info.clone(),
         ))
     }

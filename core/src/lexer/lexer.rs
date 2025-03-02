@@ -1,7 +1,6 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
-    fmt::Display,
     fs::File,
     io::{BufReader, Cursor, ErrorKind, Read},
     path::PathBuf,
@@ -14,12 +13,13 @@ use malachite::{num::conversion::traits::FromSciString, Integer, Natural, Ration
 use crate::{
     interpreter::number::{BitSize, FloatingPoint, Number, SignedInteger, UnsignedInteger},
     type_checker::types::std_types,
+    util::error::LineInfo,
 };
 
 use super::{
     error::LexerError,
     readers::{bytes_reader::BytesReader, stdin::StdinReader},
-    token::{LineInfo, TokenInfo, TokenKind},
+    token::{TokenInfo, TokenKind},
 };
 
 /// The source type of the program input. \
@@ -39,13 +39,22 @@ pub enum InputSource {
     StdIn,
 }
 
-impl Display for InputSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl InputSource {
+    pub fn human_readable(&self) -> String {
         match self {
-            InputSource::File(path) => write!(f, "file '{}'", path.to_string_lossy()),
-            InputSource::String => write!(f, "string"),
-            InputSource::Stream(name) => write!(f, "stream '{}'", name),
-            InputSource::StdIn => write!(f, "stdin"),
+            InputSource::File(path) => format!("file '{}'", path.to_string_lossy()),
+            InputSource::String => "string".into(),
+            InputSource::Stream(name) => format!("stream '{}'", name),
+            InputSource::StdIn => "stdin".into(),
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            InputSource::File(path) => path.to_string_lossy().to_string(),
+            InputSource::String => "string".into(),
+            InputSource::Stream(name) => name.clone(),
+            InputSource::StdIn => "stdin".into(),
         }
     }
 }
@@ -180,6 +189,14 @@ impl<R: Read> Lexer<R> {
 
     pub fn get_reader(&mut self) -> &mut R {
         &mut self.reader
+    }
+
+    pub fn get_content(&self) -> &[u8] {
+        &self.content
+    }
+
+    pub fn move_content(self) -> Vec<u8> {
+        self.content
     }
 
     pub fn current_index(&self) -> usize {
@@ -506,9 +523,8 @@ impl<R: Read> Lexer<R> {
             },
             false,
         )?;
-        let t = build_token(self, Lexer::<R>::resolve_escape_sequence(s));
         self.next_char(); // Eat the last quote
-        t
+        build_token(self, Lexer::<R>::resolve_escape_sequence(s))
     }
 
     /// Read a string from the source code.

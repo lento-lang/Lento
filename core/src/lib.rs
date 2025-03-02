@@ -1,5 +1,5 @@
 #![allow(clippy::module_inception)]
-
+#![allow(clippy::result_large_err)]
 pub mod compiler;
 pub mod doc;
 pub mod interpreter;
