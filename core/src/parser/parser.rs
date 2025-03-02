@@ -457,7 +457,7 @@ impl<R: Read> Parser<R> {
                 },
                 Err(err) => {
                     return Err(ParseError::new(
-                        format!("Failed to parse parameter name: {}", err.inner.message),
+                        format!("Failed to parse parameter name: {}", err.base().message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
@@ -850,9 +850,9 @@ impl<R: Read> Parser<R> {
             Err(err) => Err(ParseError::new(
                 format!(
                     "Expected primary expression, but failed due to: {}",
-                    err.inner.message
+                    err.base().message
                 ),
-                err.inner.info,
+                err.base().info.clone(),
             )),
         }
     }
@@ -1014,9 +1014,9 @@ impl<R: Read> Parser<R> {
                 format!(
                     "Expected {}, but failed due to: {}",
                     symbol.yellow(),
-                    err.inner.message
+                    err.base().message
                 ),
-                err.inner.info,
+                err.base().info.clone(),
             )),
         }
     }

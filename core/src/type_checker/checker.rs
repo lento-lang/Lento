@@ -22,7 +22,7 @@ use super::{
 /// A type error is an error that occurs during type checking.
 #[derive(Debug)]
 pub struct TypeError {
-    pub inner: BaseError,
+    inner: BaseError,
 }
 
 impl BaseErrorExt for TypeError {

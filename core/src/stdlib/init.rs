@@ -23,7 +23,10 @@ use crate::{
         checker::TypeChecker,
         types::{std_types, Type, TypeTrait},
     },
-    util::{error::LineInfo, str::Str},
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        str::Str,
+    },
 };
 
 use super::{logical, system};
@@ -93,7 +96,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding value {}: {}",
                     name.to_string().yellow(),
-                    e.inner.message
+                    e.base().message
                 );
             }
         }
@@ -106,7 +109,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding function {}: {}",
                     name.to_string().yellow(),
-                    e.inner.message
+                    e.base().message
                 );
             }
         }
@@ -137,7 +140,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding type {}: {}",
                     name.to_string().yellow(),
-                    e.inner.message
+                    e.base().message
                 );
             }
         }

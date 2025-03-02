@@ -3,7 +3,7 @@ use crate::util::error::{BaseError, BaseErrorExt, LineInfo};
 /// Lexer error
 #[derive(Debug, Clone)]
 pub struct CompileError {
-    pub inner: BaseError,
+    inner: BaseError,
 }
 
 impl BaseErrorExt for CompileError {

@@ -3,7 +3,7 @@ use crate::util::error::{BaseError, BaseErrorExt, LineInfo};
 /// Runtime error
 #[derive(Debug, Clone)]
 pub struct RuntimeError {
-    pub inner: BaseError,
+    inner: BaseError,
 }
 
 impl BaseErrorExt for RuntimeError {
