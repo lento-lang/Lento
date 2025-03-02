@@ -1,17 +1,12 @@
 use std::borrow::Borrow;
 
-use colorful::Colorful;
-
 use crate::{
     interpreter::value::NativeFunction,
     type_checker::{
         checked_ast::CheckedAst,
         types::{GetType, Type},
     },
-    util::{
-        error::{BaseErrorExt, LineInfo},
-        str::Str,
-    },
+    util::{error::LineInfo, str::Str},
 };
 
 use super::{
@@ -46,31 +41,15 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
         CheckedAst::Tuple { exprs, .. } => eval_tuple(exprs, env)?,
         CheckedAst::Literal { value, .. } => value.clone(),
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
-            (Some(_), Some(_)) => {
-                return Err(RuntimeError::new(
-                    format!("Ambiguous identifier {}", name.clone().yellow()),
-                    ast.info().clone(),
-                ))
-            }
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
-            (None, None) => {
-                return Err(RuntimeError::new(
-                    format!("Unknown identifier {}", name.clone().yellow()),
-                    ast.info().clone(),
-                ))
-            }
+            (_, _) => unreachable!("This should have been checked by the type checker"),
         },
         CheckedAst::Assignment { target, expr, .. } => {
             let info = target.info();
             let target = match *target.to_owned() {
                 CheckedAst::Identifier { name, .. } => name,
-                _ => {
-                    return Err(RuntimeError::new(
-                        "Assignment expects an identifier".to_string(),
-                        ast.info().clone(),
-                    ))
-                }
+                _ => unreachable!("This should have been checked by the type checker"),
             };
             let value = eval_expr(expr, env)?;
             env.add_value(Str::String(target), value.clone(), info)?;
@@ -127,48 +106,17 @@ fn eval_call(
     env: &mut Environment,
     info: &LineInfo,
 ) -> InterpretResult {
-    /// Unwrap a native function call
-    /// Returns a tuple of the native function and the arguments
-    /// If the expression is not a native function, return None
-    ///
-    /// ## Memory
-    /// This function is recursive and will consume stack memory
-    /// proportional to the depth of the function call.
-    /// However it will *not* consume any heap memory due to the
-    /// use of references.
-    fn unwrap_native<'a, 'b>(
-        expr: &'b CheckedAst,
-        mut args: Vec<&'b CheckedAst>,
-        env: &'a mut Environment,
-    ) -> Option<(&'a NativeFunction, Vec<&'b CheckedAst>)> {
-        match expr {
-            CheckedAst::Identifier { name, .. } => match env.lookup_function(name) {
-                Some(Function::Native(native)) => Some((native, args)),
-                _ => None,
-            },
-            CheckedAst::FunctionCall { expr, arg, .. } => {
-                // This argument will be applied before the other arguments
-                args.insert(0, arg);
-                // Recurse until we find a native function (if any)
-                unwrap_native(expr, args, env)
-            }
-            _ => None,
-        }
-    }
-
     // First try to unwrap any native function call
-    if let Some((native, args)) = unwrap_native(function, vec![arg], env) {
+    if let Some((native, args)) = unwrap_native_call(function, vec![arg], env) {
         // We only allow fully-applied native functions
         if args.len() != native.params.len() {
-            return Err(RuntimeError::new(
-                format!(
-                    "Expected {} arguments, found {} when calling native function {}",
-                    native.params.len().to_string().green(),
-                    args.len().to_string().green(),
-                    native.name.clone().yellow()
-                ),
-                info.clone(),
-            ));
+            log::error!(
+                "Expected {} arguments, found {} when calling native function {}",
+                native.params.len(),
+                args.len(),
+                native.name.clone()
+            );
+            unreachable!("This should have been checked by the type checker");
         }
         // Extract the handler from the native function,
         // so that the lifetime of the `native` ref is
@@ -202,6 +150,35 @@ fn eval_call(
         Function::Native { .. } => {
             unreachable!("Native functions must not reach this!!!");
         }
+    }
+}
+
+/// Unwrap a native function call
+/// Returns a tuple of the native function and the arguments
+/// If the expression is not a native function, return None
+///
+/// ## Memory
+/// This function is recursive and will consume stack memory
+/// proportional to the depth of the function call.
+/// However it will *not* consume any heap memory due to the
+/// use of references.
+fn unwrap_native_call<'a, 'b>(
+    expr: &'b CheckedAst,
+    mut args: Vec<&'b CheckedAst>,
+    env: &'a mut Environment,
+) -> Option<(&'a NativeFunction, Vec<&'b CheckedAst>)> {
+    match expr {
+        CheckedAst::Identifier { name, .. } => match env.lookup_function(name) {
+            Some(Function::Native(native)) => Some((native, args)),
+            _ => None,
+        },
+        CheckedAst::FunctionCall { expr, arg, .. } => {
+            // This argument will be applied before the other arguments
+            args.insert(0, arg);
+            // Recurse until we find a native function (if any)
+            unwrap_native_call(expr, args, env)
+        }
+        _ => None,
     }
 }
 

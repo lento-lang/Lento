@@ -319,6 +319,7 @@ impl TypeChecker<'_> {
             TypeAst::Identifier(name, info) => {
                 self.lookup_type(name).cloned().ok_or_else(|| {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
+                        .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
         })
@@ -330,6 +331,10 @@ impl TypeChecker<'_> {
         } else {
             return Err(TypeError::new(
                 format!("Missing parameter type for {}", param.name.clone().yellow()),
+                param.info.clone(),
+            )
+            .with_label(
+                "Add a type to this parameter".to_string(),
                 param.info.clone(),
             ));
         };
@@ -517,7 +522,8 @@ impl TypeChecker<'_> {
             return Err(TypeError::new(
                 format!("{} {} already exists", ty_name, target.clone().yellow()),
                 info.clone(),
-            ));
+            )
+            .with_hint("Use a different name for the variable".to_string()));
         }
         let expr = self.check_expr(expr)?;
         let ty = expr.get_type().clone();

@@ -207,8 +207,9 @@ impl<R: Read> Parser<R> {
                             "Expected literal, but found {}",
                             token.to_string().light_red()
                         ),
-                        info,
-                    ));
+                        info.clone(),
+                    )
+                    .with_label("This is not a valid literal.".to_string(), info));
                 }
             },
             info,
@@ -270,6 +271,11 @@ impl<R: Read> Parser<R> {
                                         nt.token.to_string().light_red()
                                     ),
                                     info,
+                                )
+                                .with_label(
+                                    "This should be either a comma or a right parenthesis"
+                                        .to_string(),
+                                    nt.info,
                                 ));
                             }
                         }
@@ -305,6 +311,10 @@ impl<R: Read> Parser<R> {
                         ")".yellow(),
                         nt.token.to_string().light_red()
                     ),
+                    info,
+                )
+                .with_label(
+                    "This should be either a comma or a right parenthesis".to_string(),
                     nt.info,
                 ));
             } else {
@@ -435,7 +445,7 @@ impl<R: Read> Parser<R> {
                 None => {
                     return Err(ParseError::new(
                         format!(
-                            "Expected type identifier, but found {}",
+                            "Expected type expression, but found {}",
                             end.token.to_string().light_red()
                         ),
                         info,
@@ -452,14 +462,16 @@ impl<R: Read> Parser<R> {
                                 t.token.to_string().light_red()
                             ),
                             info,
-                        ));
+                        )
+                        .with_label("This is not a valid identifier".to_string(), t.info));
                     }
                 },
                 Err(err) => {
                     return Err(ParseError::new(
-                        format!("Failed to parse parameter name: {}", err.message()),
+                        "Failed to parse parameter name".to_string(),
                         LineInfo::eof(info.end, self.lexer.current_index()),
-                    ));
+                    )
+                    .with_label(err.message().to_owned(), err.info().clone()));
                 }
             };
             params.push(ParamAst {
@@ -483,6 +495,10 @@ impl<R: Read> Parser<R> {
                         ")".yellow(),
                         nt.token.to_string().light_red()
                     ),
+                    info,
+                )
+                .with_label(
+                    "This should be either a comma or a right parenthesis".to_string(),
                     nt.info,
                 ));
             } else {
@@ -598,6 +614,10 @@ impl<R: Read> Parser<R> {
                                 "}".yellow(),
                                 t.token.to_string().light_red()
                             ),
+                            first_info.join(&t.info),
+                        )
+                        .with_label(
+                            "This should be either a comma or a right brace".to_string(),
                             t.info,
                         )));
                     }
@@ -622,8 +642,9 @@ impl<R: Read> Parser<R> {
                             "Expected record key, but found {}",
                             t.token.to_string().light_red()
                         ),
-                        t.info,
-                    )));
+                        first_info.join(&t.info),
+                    )
+                    .with_label("This is not a valid record key".to_string(), t.info)));
                 }
             };
             let _ = Some(self.parse_expected(TokenKind::Colon, ":"))?;
@@ -647,6 +668,10 @@ impl<R: Read> Parser<R> {
                                 "}".yellow(),
                                 t.token.to_string().light_red()
                             ),
+                            first_info.join(&t.info),
+                        )
+                        .with_label(
+                            "This should be either a comma or a right brace".to_string(),
                             t.info,
                         )));
                     }
@@ -714,6 +739,10 @@ impl<R: Read> Parser<R> {
                         } else {
                             return Err(ParseError::new(
                                 format!("Expected prefix operator, but found {}", op.light_red()),
+                                t.info.clone(),
+                            )
+                            .with_label(
+                                "This is not a valid prefix operator".to_string(),
                                 t.info,
                             ));
                         }
@@ -754,6 +783,11 @@ impl<R: Read> Parser<R> {
                                                 ")".yellow(),
                                                 nt.token.to_string().light_red()
                                             ),
+                                            nt.info.clone(),
+                                        )
+                                        .with_label(
+                                            "This should be either a comma or a right parenthesis"
+                                                .to_string(),
                                             nt.info,
                                         ));
                                     } else {
@@ -818,6 +852,11 @@ impl<R: Read> Parser<R> {
                                                 "]".yellow(),
                                                 nt.token.to_string().light_red()
                                             ),
+                                            nt.info.clone(),
+                                        )
+                                        .with_label(
+                                            "This should be either a comma or a right bracket"
+                                                .to_string(),
                                             nt.info,
                                         ));
                                     } else {
@@ -848,12 +887,10 @@ impl<R: Read> Parser<R> {
                 })
             }
             Err(err) => Err(ParseError::new(
-                format!(
-                    "Expected primary expression, but failed due to: {}",
-                    err.message()
-                ),
+                "Expected primary expression".to_string(),
                 err.info().clone(),
-            )),
+            )
+            .with_label(err.message().to_owned(), err.info().clone())),
         }
     }
 
@@ -1008,16 +1045,14 @@ impl<R: Read> Parser<R> {
                     symbol.yellow(),
                     t.token.to_string().light_red()
                 ),
-                t.info,
-            )),
+                t.info.clone(),
+            )
+            .with_label(format!("This should be a {}", symbol), t.info)),
             Err(err) => Err(ParseError::new(
-                format!(
-                    "Expected {}, but failed due to: {}",
-                    symbol.yellow(),
-                    err.message()
-                ),
+                format!("Expected {}", symbol.yellow(),),
                 err.info().clone(),
-            )),
+            )
+            .with_label(err.message().to_owned(), err.info().clone())),
         }
     }
 }

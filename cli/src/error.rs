@@ -1,4 +1,4 @@
-use ariadne::{Label, Report, ReportKind, Source};
+use ariadne::{Config, Label, Report, ReportKind, Source};
 use clap::Command;
 use colorful::Colorful;
 use lento_core::{
@@ -27,6 +27,7 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
         ReportKind::Custom(kind, ariadne::Color::BrightRed),
         (source.name(), base.info.start.index..base.info.end.index),
     )
+    .with_config(Config::default().with_compact(true))
     .with_message(&base.message);
 
     if base.labels.is_empty() && !base.info.end.eof {
