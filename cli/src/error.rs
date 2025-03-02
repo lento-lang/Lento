@@ -33,7 +33,7 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
     )
     .with_message(&base.message);
 
-    if base.labels.is_empty() {
+    if base.labels.is_empty() && !base.info.end.eof {
         report = report.with_label(
             Label::new((source.name(), base.info.start.index..base.info.end.index))
                 .with_message(base.message)
@@ -56,7 +56,7 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
     if base.info.end.eof {
         report = report.with_label(
             Label::new((source.name(), base.info.start.index..base.info.end.index))
-                .with_message("to end of file")
+                .with_message(format!("end of {}", source.human_readable()))
                 .with_color(ariadne::Color::Yellow),
         );
     }

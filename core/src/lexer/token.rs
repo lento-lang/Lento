@@ -98,7 +98,7 @@ impl TokenKind {
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EndOfFile => write!(f, "end of file"),
+            Self::EndOfFile => write!(f, "end of program"),
             Self::Newline => write!(f, "newline"),
             Self::SemiColon => write!(f, ";"),
             Self::Colon => write!(f, ":"),
