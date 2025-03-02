@@ -149,7 +149,7 @@ impl Ast {
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join(", ")
             ),
             Ast::List {
                 exprs: elements,
@@ -160,11 +160,16 @@ impl Ast {
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join(", ")
             ),
-            Ast::Record {
-                fields: _elements, ..
-            } => todo!(),
+            Ast::Record { fields, .. } => format!(
+                "{{ {} }}",
+                fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
                 format!("{}({})", expr.print_sexpr(), arg.print_sexpr())
@@ -197,7 +202,7 @@ impl Ast {
                         .iter()
                         .map(|e| e.print_sexpr())
                         .collect::<Vec<String>>()
-                        .join(" ")
+                        .join(", ")
                 )
             }
             Ast::Binary {

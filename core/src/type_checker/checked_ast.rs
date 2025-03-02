@@ -282,7 +282,7 @@ impl CheckedAst {
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join(", ")
             ),
             CheckedAst::List {
                 exprs: elements,
@@ -294,13 +294,20 @@ impl CheckedAst {
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join(", ")
             ),
             CheckedAst::Record {
-                fields: _elements,
+                fields,
                 ty: _,
                 info: _,
-            } => todo!(),
+            } => format!(
+                "{{ {} }}",
+                fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
             CheckedAst::Identifier {
                 name,
                 ty: _,
@@ -349,12 +356,12 @@ impl CheckedAst {
                 ty: _,
                 info: _,
             } => format!(
-                "{{{}}}",
+                "{{ {} }}",
                 expressions
                     .iter()
                     .map(|e| e.print_sexpr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join("; ")
             ),
         }
     }
