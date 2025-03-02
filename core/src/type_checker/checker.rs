@@ -11,7 +11,7 @@ use crate::{
             StaticOperatorHandler,
         },
     },
-    util::error::{BaseError, LineInfo},
+    util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 
 use super::{
@@ -25,23 +25,31 @@ pub struct TypeError {
     pub inner: BaseError,
 }
 
-impl TypeError {
-    pub fn new(message: String, info: LineInfo) -> Self {
+impl BaseErrorExt for TypeError {
+    fn new(message: String, info: LineInfo) -> Self {
         Self {
             inner: BaseError::new(message, info),
         }
     }
 
-    pub fn with_hint(self, hint: String) -> Self {
+    fn with_hint(self, hint: String) -> Self {
         Self {
             inner: self.inner.with_hint(hint),
         }
     }
 
-    pub fn with_label(self, message: String, info: LineInfo) -> Self {
+    fn with_label(self, message: String, info: LineInfo) -> Self {
         Self {
             inner: self.inner.with_label(message, info),
         }
+    }
+
+    fn base(&self) -> &BaseError {
+        &self.inner
+    }
+
+    fn to_base(self) -> BaseError {
+        self.inner
     }
 }
 

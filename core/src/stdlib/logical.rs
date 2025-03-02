@@ -4,6 +4,7 @@ use crate::{
         value::{Function, Value},
     },
     type_checker::{checked_ast::CheckedParam, types::std_types},
+    util::error::BaseErrorExt,
 };
 
 pub fn eq() -> Function {

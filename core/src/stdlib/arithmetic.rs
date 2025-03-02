@@ -8,6 +8,7 @@ use crate::{
         checked_ast::CheckedParam,
         types::{std_types, GetType, TypeTrait},
     },
+    util::error::BaseErrorExt,
 };
 
 //--------------------------------------------------------------------------------------//

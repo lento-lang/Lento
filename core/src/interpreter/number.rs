@@ -9,8 +9,8 @@ use malachite::{
 };
 
 use crate::{
-    util::error::LineInfo,
     type_checker::types::{std_types, GetType, Type},
+    util::error::{BaseErrorExt, LineInfo},
 };
 
 use super::error::RuntimeError;

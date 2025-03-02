@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use colorful::Colorful;
 
 use crate::{
-    util::error::LineInfo,
     type_checker::types::Type,
-    util::{failable::Failable, str::Str},
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        failable::Failable,
+        str::Str,
+    },
 };
 
 use super::{

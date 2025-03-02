@@ -108,3 +108,11 @@ impl BaseError {
         Self { labels, ..self }
     }
 }
+
+pub trait BaseErrorExt {
+    fn new(message: String, info: LineInfo) -> Self;
+    fn with_hint(self, hint: String) -> Self;
+    fn with_label(self, message: String, info: LineInfo) -> Self;
+    fn base(&self) -> &BaseError;
+    fn to_base(self) -> BaseError;
+}

@@ -13,7 +13,7 @@ use malachite::{num::conversion::traits::FromSciString, Integer, Natural, Ration
 use crate::{
     interpreter::number::{BitSize, FloatingPoint, Number, SignedInteger, UnsignedInteger},
     type_checker::types::std_types,
-    util::error::LineInfo,
+    util::error::{BaseErrorExt, LineInfo},
 };
 
 use super::{

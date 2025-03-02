@@ -8,8 +8,10 @@ use crate::{
         checked_ast::CheckedAst,
         types::{GetType, Type},
     },
-    util::error::LineInfo,
-    util::str::Str,
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        str::Str,
+    },
 };
 
 use super::{

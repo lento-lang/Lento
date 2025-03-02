@@ -15,7 +15,10 @@ use crate::{
         token::{TokenInfo, TokenKind},
     },
     parser::ast::{ParamAst, TypeAst},
-    util::{error::LineInfo, failable::Failable},
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        failable::Failable,
+    },
 };
 
 use crate::lexer::lexer::Lexer;
@@ -359,7 +362,7 @@ impl<R: Read> Parser<R> {
                         let body = match self.parse_top_expr() {
                             Ok(body) => body,
                             Err(err) => {
-                                log::warn!("Failed to parse function body: {}", err.inner.message);
+                                log::warn!("Failed to parse function body: {}", err.base().message);
                                 return Some(Err(err));
                             }
                         };
@@ -425,7 +428,7 @@ impl<R: Read> Parser<R> {
                 Some(Ok(t)) => t,
                 Some(Err(err)) => {
                     return Err(ParseError::new(
-                        format!("Failed to parse function parameter: {}", err.inner.message),
+                        format!("Failed to parse function parameter: {}", err.base().message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
