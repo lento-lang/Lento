@@ -199,10 +199,6 @@ impl<R: Read> Parser<R> {
                 TokenKind::Char(c) => Value::Char(*c),
                 TokenKind::Boolean(b) => Value::Boolean(*b),
                 _ => {
-                    log::error!(
-                        "Expected literal, but found {}",
-                        token.to_string().light_red()
-                    );
                     return Err(ParseError::new(
                         format!(
                             "Expected literal, but found {}",
@@ -263,12 +259,6 @@ impl<R: Read> Parser<R> {
                                 // Continue parsing the function definition
                                 // The ) will be consumed by the `parse_func_def` function
                             } else {
-                                log::error!(
-                                    "Expected {} or {}, but found {}",
-                                    ",".yellow(),
-                                    ")".yellow(),
-                                    nt.token.to_string().light_red()
-                                );
                                 return Err(ParseError::new(
                                     format!(
                                         "Expected {} or {}, but found {}",
@@ -369,7 +359,7 @@ impl<R: Read> Parser<R> {
                         let body = match self.parse_top_expr() {
                             Ok(body) => body,
                             Err(err) => {
-                                log::error!("Failed to parse function body: {}", err.inner.message);
+                                log::warn!("Failed to parse function body: {}", err.inner.message);
                                 return Some(Err(err));
                             }
                         };
@@ -434,17 +424,12 @@ impl<R: Read> Parser<R> {
             let ty = match self.try_parse_type() {
                 Some(Ok(t)) => t,
                 Some(Err(err)) => {
-                    log::error!("Failed to parse function parameter: {}", err.inner.message);
                     return Err(ParseError::new(
                         format!("Failed to parse function parameter: {}", err.inner.message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
                 None => {
-                    log::error!(
-                        "Expected parameter type, but found {}",
-                        end.token.to_string().light_red()
-                    );
                     return Err(ParseError::new(
                         format!(
                             "Expected type identifier, but found {}",
@@ -458,10 +443,6 @@ impl<R: Read> Parser<R> {
                 Ok(t) => match t.token {
                     TokenKind::Identifier(id) => (id, t.info),
                     _ => {
-                        log::error!(
-                            "Expected parameter name, but found {}",
-                            t.token.to_string().light_red()
-                        );
                         return Err(ParseError::new(
                             format!(
                                 "Expected parameter name, but found {}",
@@ -472,7 +453,6 @@ impl<R: Read> Parser<R> {
                     }
                 },
                 Err(err) => {
-                    log::error!("Failed to parse parameter name: {}", err.inner.message);
                     return Err(ParseError::new(
                         format!("Failed to parse parameter name: {}", err.inner.message),
                         LineInfo::eof(info.end, self.lexer.current_index()),
@@ -608,7 +588,6 @@ impl<R: Read> Parser<R> {
                         }))
                     } // Just a single field
                     _ => {
-                        log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError::new(
                             format!(
                                 "Expected {} or {}, but found {}",
@@ -635,10 +614,6 @@ impl<R: Read> Parser<R> {
                 TokenKind::String(s) => RecordKey::String(s),
                 TokenKind::Char(c) => RecordKey::Char(c),
                 _ => {
-                    log::error!(
-                        "Expected record key, but found {}",
-                        t.token.to_string().light_red()
-                    );
                     return Some(Err(ParseError::new(
                         format!(
                             "Expected record key, but found {}",
@@ -662,7 +637,6 @@ impl<R: Read> Parser<R> {
                         break;
                     }
                     _ => {
-                        log::error!("Expected ',' or '}}', but found {:?}", t);
                         return Some(Err(ParseError::new(
                             format!(
                                 "Expected {} or {}, but found {}",
@@ -735,7 +709,6 @@ impl<R: Read> Parser<R> {
                                 info: t.info,
                             }
                         } else {
-                            log::error!("Expected prefix operator, but found {:?}", op);
                             return Err(ParseError::new(
                                 format!("Expected prefix operator, but found {}", op.light_red()),
                                 t.info,
@@ -834,10 +807,6 @@ impl<R: Read> Parser<R> {
                                             break;
                                         }
                                     }
-                                    log::error!(
-                                        "Expected ',' or ']', but found {:?}",
-                                        self.lexer.peek_token(0)
-                                    );
                                     if let Ok(nt) = self.lexer.peek_token(0) {
                                         return Err(ParseError::new(
                                             format!(
@@ -865,7 +834,6 @@ impl<R: Read> Parser<R> {
                         }
                     }
                     _ => {
-                        log::error!("Expected primary expression, but found {}", t.token);
                         return Err(ParseError::new(
                             format!(
                                 "Expected primary expression, but found {}",
