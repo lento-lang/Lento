@@ -3,19 +3,35 @@ mod tests {
     use crate::{
         interpreter::{
             env::{global_env, Environment},
-            eval::{eval_ast, eval_module},
+            eval::{eval_expr, eval_exprs},
             number::{FloatingPoint, Number, UnsignedInteger},
             value::Value,
         },
-        lexer::token::LineInfo,
-        parser::parser,
-        stdlib::init::stdlib,
+        util::error::LineInfo,
+        parser::parser::{self, ParseResult, ParseResults},
+        stdlib::init::{stdlib, Initializer},
         type_checker::{
             checked_ast::{CheckedAst, CheckedParam},
             checker::TypeChecker,
             types::{std_types, GetType, Type, TypeTrait},
         },
     };
+
+    fn parse_str_one(expr: &str, std: Option<&Initializer>) -> ParseResult {
+        let mut parser = parser::from_string(expr.into());
+        if let Some(std) = std {
+            std.init_parser(&mut parser);
+        }
+        parser.parse_one()
+    }
+
+    fn parse_str_all(expr: &str, std: Option<&Initializer>) -> ParseResults {
+        let mut parser = parser::from_string(expr.into());
+        if let Some(std) = std {
+            std.init_parser(&mut parser);
+        }
+        parser.parse_all()
+    }
 
     fn std_env() -> Environment<'static> {
         let mut env = global_env();
@@ -77,7 +93,7 @@ mod tests {
                 info: LineInfo::default(),
             },
         );
-        let result = eval_ast(&ast, &mut std_env());
+        let result = eval_expr(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8).success);
@@ -104,7 +120,7 @@ mod tests {
             expr_types: Type::Tuple(vec![std_types::UINT8; 3]),
             info: LineInfo::default(),
         };
-        let result = eval_ast(&ast, &mut std_env());
+        let result = eval_expr(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(
@@ -134,7 +150,7 @@ mod tests {
                 info: LineInfo::default(),
             },
         );
-        let result = eval_ast(&ast, &mut std_env());
+        let result = eval_expr(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8).success);
@@ -152,7 +168,7 @@ mod tests {
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
-        let result = eval_ast(&ast, &mut global_env());
+        let result = eval_expr(&ast, &mut global_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UNIT).success);
@@ -170,7 +186,7 @@ mod tests {
             return_type: std_types::UNIT,
             info: LineInfo::default(),
         };
-        let result = eval_ast(&ast, &mut global_env());
+        let result = eval_expr(&ast, &mut global_env());
         assert!(result.is_err());
     }
 
@@ -189,7 +205,7 @@ mod tests {
             ty: std_types::UINT8,
             info: LineInfo::default(),
         };
-        let result = eval_ast(&ast, &mut std_env());
+        let result = eval_expr(&ast, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8).success);
@@ -198,20 +214,20 @@ mod tests {
 
     #[test]
     fn arithmetic_complex() {
-        let result1 = parser::parse_str_one("8 / (1f32 / (3 * 3) - 1)", Some(&stdlib()))
+        let result1 = parse_str_one("8 / (1f32 / (3 * 3) - 1)", Some(&stdlib()))
             .expect("Failed to parse expression");
-        let result2 = parser::parse_str_one("8 / (1.0 / (3 * 3) - 1)", Some(&stdlib()))
+        let result2 = parse_str_one("8 / (1.0 / (3 * 3) - 1)", Some(&stdlib()))
             .expect("Failed to parse expression");
         let mut checker = TypeChecker::default();
         stdlib().init_type_checker(&mut checker);
         let result1 = checker
-            .check_module(&result1)
+            .check_expr(&result1)
             .expect("Failed to type check expression");
         let result2 = checker
-            .check_module(&result2)
+            .check_expr(&result2)
             .expect("Failed to type check expression");
-        let result1 = eval_module(&result1, &mut std_env());
-        let result2 = eval_module(&result2, &mut std_env());
+        let result1 = eval_expr(&result1, &mut std_env());
+        let result2 = eval_expr(&result2, &mut std_env());
         assert!(result1.is_ok());
         assert!(result2.is_ok());
         let result1 = result1.unwrap();
@@ -224,7 +240,7 @@ mod tests {
 
     #[test]
     fn module_assign_add() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			x = 1;
 			y = 2;
@@ -235,9 +251,9 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
-        let result = eval_module(&module, &mut std_env());
+        let result = eval_exprs(&module, &mut std_env());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.get_type().equals(&std_types::UINT8).success);
@@ -246,7 +262,7 @@ mod tests {
 
     #[test]
     fn function_decl_paren_explicit_args_and_ret() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add(x: u8, y: u8, z: u8) -> u8 {
 				x + y + z
@@ -257,17 +273,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_explicit_args_and_ret() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add x: u8 y: u8 z: u8 -> u8 {
 				x + y + z
@@ -278,17 +294,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_explicit_args() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add x: u8 y: u8 z: u8 {
 				x + y + z
@@ -299,17 +315,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_paren_implicit_args_and_ret() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add(x, y, z) {
 				x + y + z
@@ -320,17 +336,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_implicit_args_and_ret() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add x y z {
 				x + y + z
@@ -341,17 +357,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_implicit_random_parens() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add x y (z) a (b) (c) -> u8 {
 				x + y + z + a + b + c
@@ -362,17 +378,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_paren_explicit_signature_oneline() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add(x: u8, y: u8, z: u8) -> u8 = x + y + z;
 		"#,
@@ -381,17 +397,17 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }
 
     #[test]
     fn function_decl_explicit_signature_oneline() {
-        let module = parser::parse_str_all(
+        let module = parse_str_all(
             r#"
 			add x: u8 y: u8 z: u8 -> u8 = x + y + z;
 		"#,
@@ -400,10 +416,10 @@ mod tests {
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
         let module = checker
-            .check_module(&module)
+            .check_top_exprs(&module)
             .expect("Failed to type check module");
         let mut env = std_env();
-        let result = eval_module(&module, &mut env);
+        let result = eval_exprs(&module, &mut env);
         assert!(result.is_ok());
         assert!(env.lookup_function("add").is_some());
     }

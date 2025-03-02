@@ -1,6 +1,6 @@
 use std::io::{BufWriter, Write};
 
-use crate::{lexer::lexer::InputSource, parser::ast::Module};
+use crate::{lexer::lexer::InputSource, type_checker::checked_ast::CheckedAst};
 
 use super::error::CompileError;
 
@@ -80,7 +80,12 @@ pub trait Backend<Out: Write> {
     ///
     /// Compiles a module using the specified backend and options. \
     /// The method returns a `CompileResult` indicating whether the module compiled successfully.
-    fn compile_module(&mut self, module: &Module, options: CompileOptions<Out>) -> CompileResult
+    fn compile(
+        &mut self,
+        exprs: &[CheckedAst],
+        filename: Option<&str>,
+        options: CompileOptions<Out>,
+    ) -> CompileResult
     where
         Self: Sized;
 }
@@ -89,8 +94,9 @@ pub trait Backend<Out: Write> {
 /// The function returns a `CompileResult` indicating whether the module compiled successfully.
 pub fn compile<Out: Write, B: Backend<Out>>(
     backend: &mut B,
-    module: &Module,
+    exprs: &[CheckedAst],
+    filename: Option<&str>,
     options: CompileOptions<Out>,
 ) -> CompileResult {
-    backend.compile_module(module, options)
+    backend.compile(exprs, filename, options)
 }

@@ -23,16 +23,16 @@ use super::{
 pub type InterpretResult = Result<Value, RuntimeError>;
 
 /// Interpret a module
-pub fn eval_module(module: &CheckedModule, env: &mut Environment) -> InterpretResult {
+pub fn eval_exprs(exprs: &[CheckedAst], env: &mut Environment) -> InterpretResult {
     let mut result = Value::Unit;
-    for expr in &module.expressions {
-        result = eval_ast(expr, env)?;
+    for expr in exprs {
+        result = eval_expr(expr, env)?;
     }
     Ok(result)
 }
 
 /// Interpret a type-checked AST node
-pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
+pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     let result = match ast {
         CheckedAst::FunctionCall {
             expr: function,
@@ -68,21 +68,21 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
                     ))
                 }
             };
-            let value = eval_ast(expr, env)?;
+            let value = eval_expr(expr, env)?;
             env.add_value(Str::String(target), value.clone(), info)?;
             value
         }
         CheckedAst::List { exprs, ty, .. } => Value::List(
             exprs
                 .iter()
-                .map(|e| eval_ast(e, env))
+                .map(|e| eval_expr(e, env))
                 .collect::<Result<Vec<Value>, _>>()?,
             ty.clone(),
         ),
         CheckedAst::Record { fields, ty, .. } => {
             let mut record = Vec::new();
             for (key, value) in fields {
-                let value = eval_ast(value, env)?;
+                let value = eval_expr(value, env)?;
                 record.push((key.clone(), value));
             }
             Value::Record(record, ty.clone())
@@ -102,7 +102,7 @@ pub fn eval_ast(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             let mut result = Value::Unit;
             let mut scope = env.new_child(Str::Str("<block>"));
             for expr in exprs {
-                result = eval_ast(expr, &mut scope)?;
+                result = eval_expr(expr, &mut scope)?;
             }
             result
         }
@@ -173,7 +173,7 @@ fn eval_call(
         let handler = native.handler;
         let mut args = args
             .iter()
-            .map(|arg| eval_ast(arg, env))
+            .map(|arg| eval_expr(arg, env))
             .collect::<Result<Vec<Value>, _>>()?;
         // Invoke the native function
         return handler(&mut args, info);
@@ -181,7 +181,7 @@ fn eval_call(
 
     // TODO: Implement support for function overloading (multiple variations)
 
-    let function = eval_ast(function, env)?;
+    let function = eval_expr(function, env)?;
     let Value::Function(function) = function else {
         unreachable!("This should have been checked by the type checker");
     };
@@ -189,11 +189,11 @@ fn eval_call(
     // Evaluate the function body or invoke the native handler
     match function.borrow() {
         Function::User(UserFunction { body, param, .. }) => {
-            let arg = eval_ast(arg, env)?;
+            let arg = eval_expr(arg, env)?;
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
             closure.add_value(Str::String(param.name.clone()), arg.clone(), info)?;
-            eval_ast(body, &mut closure)
+            eval_expr(body, &mut closure)
         }
         Function::Native { .. } => {
             unreachable!("Native functions must not reach this!!!");
@@ -209,7 +209,7 @@ fn eval_tuple(exprs: &[CheckedAst], env: &mut Environment) -> InterpretResult {
     let (values, types): (Vec<Value>, Vec<Type>) = exprs
         .iter()
         .map(|e| {
-            let value = eval_ast(e, env)?;
+            let value = eval_expr(e, env)?;
             let ty = value.get_type().clone();
             Ok((value, ty))
         })

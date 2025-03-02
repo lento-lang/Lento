@@ -5,7 +5,7 @@ use colorful::Colorful;
 use lento_core::{
     interpreter::{
         env::{global_env, Environment},
-        eval::eval_ast,
+        eval::eval_expr,
         value::Value,
     },
     lexer::lexer::InputSource,
@@ -61,7 +61,7 @@ pub fn eval_all<R: Read>(
                         break 'exprs; // Stop on error
                     }
                 };
-                match eval_ast(&checked_ast, env) {
+                match eval_expr(&checked_ast, env) {
                     Ok(value) => {
                         if i == asts.len() - 1 && value != Value::Unit {
                             if colors {

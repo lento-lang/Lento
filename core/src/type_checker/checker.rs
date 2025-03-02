@@ -4,7 +4,7 @@ use crate::{
     interpreter::value::{RecordKey, Value},
     lexer::token::LineInfo,
     parser::{
-        ast::{Ast, Module, ParamAst, TypeAst},
+        ast::{Ast, ParamAst, TypeAst},
         op::{
             Operator, OperatorHandler, OperatorInfo, RuntimeOperatorHandler, StaticOperatorAst,
             StaticOperatorHandler,
@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedModule, CheckedParam},
+    checked_ast::{CheckedAst, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -238,13 +238,6 @@ impl TypeChecker<'_> {
     }
 
     // ================== Type checking functions ==================
-
-    pub fn check_module(&mut self, module: &Module) -> TypeResult<CheckedModule> {
-        Ok(CheckedModule {
-            name: module.name.clone(),
-            expressions: self.check_top_exprs(&module.expressions)?,
-        })
-    }
 
     pub fn check_top_exprs(&mut self, exprs: &[Ast]) -> TypeResult<Vec<CheckedAst>> {
         self.scan_forward(exprs)?;

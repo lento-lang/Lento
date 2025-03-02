@@ -318,17 +318,3 @@ impl PartialEq for Ast {
         }
     }
 }
-
-/// Module is the root program node of the AST
-/// It contains a list of all the expressions in the program
-#[derive(Debug, Clone)]
-pub struct Module {
-    pub name: String,
-    pub expressions: Vec<Ast>,
-}
-
-impl Module {
-    pub fn new(name: String, expressions: Vec<Ast>) -> Module {
-        Module { name, expressions }
-    }
-}

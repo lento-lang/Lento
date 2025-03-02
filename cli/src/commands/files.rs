@@ -3,9 +3,9 @@ use std::{fs::File, path::Path, process::exit};
 use colorful::Colorful;
 
 use lento_core::{
-    interpreter::{env::global_env, eval::eval_module, value::Value},
+    interpreter::{env::global_env, eval::eval_exprs, value::Value},
     lexer::lexer::InputSource,
-    parser::parser::parse_file_all,
+    parser::parser::from_file,
     stdlib::init::stdlib,
     type_checker::{checker::TypeChecker, types::GetType},
 };
@@ -21,8 +21,10 @@ pub fn handle_command_file(file: &str) {
         print_error(format!("Could not open file '{}'", file.display()));
         exit(1);
     };
-    let module = match parse_file_all(file, Some(&std)) {
-        Ok(module) => module,
+    let mut parser = from_file(file);
+    std.init_parser(&mut parser);
+    let exprs = match parser.parse_all() {
+        Ok(exprs) => exprs,
         Err(err) => {
             print_parse_error(err, &source);
             exit(1);
@@ -33,14 +35,14 @@ pub fn handle_command_file(file: &str) {
     std.init_type_checker(&mut checker);
     let mut env = global_env();
     std.init_environment(&mut env);
-    let checked_module = match checker.check_module(&module) {
-        Ok(module) => module,
+    let checked_exprs = match checker.check_top_exprs(&exprs) {
+        Ok(exprs) => exprs,
         Err(err) => {
             print_type_error(err, &source);
             exit(1);
         }
     };
-    match eval_module(&checked_module, &mut env) {
+    match eval_exprs(&checked_exprs, &mut env) {
         Ok(val) => {
             if val != Value::Unit {
                 println!("{} {}", "Result:".light_green(), val.pretty_print_color());

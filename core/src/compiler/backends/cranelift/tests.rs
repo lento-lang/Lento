@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
     use std::sync::Arc;
 
     use cranelift_codegen::isa::{lookup, Builder, LookupError};
@@ -7,11 +8,22 @@ mod tests {
     use target_lexicon::triple;
 
     use super::super::Cranelift;
-    use crate::parser::parser::parse_str_all;
+    use crate::parser::parser::{self, ParseResults};
+    use crate::stdlib::init::{stdlib, Initializer};
+
+    use crate::type_checker::checker::TypeChecker;
     use crate::{
         compiler::compiler::{Backend, CompileOptions, OptimizationLevel},
         lexer::lexer::InputSource,
     };
+
+    fn parse_str_all(input: &str, init: Option<&Initializer>) -> ParseResults {
+        let mut parser = parser::from_str(input);
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+        }
+        parser.parse_all()
+    }
 
     fn build_isa(
         target: target_lexicon::Triple,
@@ -32,10 +44,13 @@ mod tests {
         isa.unwrap()
     }
 
-    fn default_options(target: target_lexicon::Triple) -> CompileOptions<std::io::Sink> {
+    fn default_options<Out: Write>(
+        output_file: Out,
+        target: target_lexicon::Triple,
+    ) -> CompileOptions<Out> {
         CompileOptions::new(
             target,
-            std::io::sink(),
+            output_file,
             InputSource::String,
             OptimizationLevel::None,
             false,
@@ -53,9 +68,18 @@ mod tests {
         let target = triple!("x86_64-unknown-windows-msvc");
         let isa = build_isa(target.clone());
         let mut cranelift = Cranelift::new(isa, settings::Flags::new(settings::builder()));
-        let module = parse_str_all(r#"print("Hello, World!");"#, None).expect("Failed to parse");
-        let result = cranelift.compile_module(&module, default_options(target));
+        let exprs = parse_str_all(r#"print("Hello, World!");"#, None).expect("Failed to parse");
+        let mut checker = TypeChecker::default();
+        stdlib().init_type_checker(&mut checker);
+        let checked = checker.check_top_exprs(&exprs).expect("Failed to check");
+        let mut program_output = Vec::new();
+        let result = cranelift.compile(
+            &checked,
+            Some("example.o"),
+            default_options(&mut program_output, target),
+        );
         assert!(result.is_ok());
+        assert!(!program_output.is_empty());
     }
 
     /// Test that the Cranelift backend can compile a simple "Hello, World!" program on Linux.
@@ -65,8 +89,17 @@ mod tests {
         let target = triple!("x86_64-unknown-linux-gnu");
         let isa = build_isa(target.clone());
         let mut cranelift = Cranelift::new(isa, settings::Flags::new(settings::builder()));
-        let module = parse_str_all(r#"print("Hello, World!");"#, None).expect("Failed to parse");
-        let result = cranelift.compile_module(&module, default_options(target));
+        let exprs = parse_str_all(r#"print("Hello, World!");"#, None).expect("Failed to parse");
+        let mut checker = TypeChecker::default();
+        stdlib().init_type_checker(&mut checker);
+        let checked = checker.check_top_exprs(&exprs).expect("Failed to check");
+        let mut program_output = Vec::new();
+        let result = cranelift.compile(
+            &checked,
+            Some("example.o"),
+            default_options(&mut program_output, target),
+        );
         assert!(result.is_ok());
+        assert!(!program_output.is_empty());
     }
 }

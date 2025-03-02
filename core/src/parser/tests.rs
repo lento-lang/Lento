@@ -1,18 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, path::Path};
 
     use crate::{
         interpreter::{
             number::{Number, UnsignedInteger},
             value::{RecordKey, Value},
         },
-        lexer::token::LineInfo,
-        parser::{
-            ast::Ast,
-            parser::{parse_file_one, parse_str_all, parse_str_one},
-        },
-        stdlib::init::stdlib,
+        util::error::LineInfo,
+        parser::{ast::Ast, parser::from_string},
+        stdlib::init::{stdlib, Initializer},
     };
 
     fn make_u1(n: u8) -> Value {
@@ -30,13 +26,35 @@ mod tests {
         }
     }
 
+    fn parse_str_one(
+        input: &str,
+        init: Option<&Initializer>,
+    ) -> Result<Ast, crate::parser::error::ParseError> {
+        let mut parser = from_string(input.to_string());
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+        }
+        parser.parse_one()
+    }
+
+    fn parse_str_all(
+        input: &str,
+        init: Option<&Initializer>,
+    ) -> Result<Vec<Ast>, crate::parser::error::ParseError> {
+        let mut parser = from_string(input.to_string());
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+        }
+        parser.parse_all()
+    }
+
     #[test]
     fn number() {
         let result = parse_str_one("1", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == lit(make_u1(1)));
+
+        assert!(result == lit(make_u1(1)));
     }
 
     #[test]
@@ -44,12 +62,12 @@ mod tests {
         let result = parse_str_all("1 2 3 4 5", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 5);
-        assert!(result.expressions[0] == lit(make_u1(1)));
-        assert!(result.expressions[1] == lit(make_u8(2)));
-        assert!(result.expressions[2] == lit(make_u8(3)));
-        assert!(result.expressions[3] == lit(make_u8(4)));
-        assert!(result.expressions[4] == lit(make_u8(5)));
+        assert!(result.len() == 5);
+        assert!(result[0] == lit(make_u1(1)));
+        assert!(result[1] == lit(make_u8(2)));
+        assert!(result[2] == lit(make_u8(3)));
+        assert!(result[3] == lit(make_u8(4)));
+        assert!(result[4] == lit(make_u8(5)));
     }
 
     #[test]
@@ -57,10 +75,10 @@ mod tests {
         let result = parse_str_all("1; 2; 3;", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 3);
-        assert!(result.expressions[0] == lit(make_u1(1)));
-        assert!(result.expressions[1] == lit(make_u8(2)));
-        assert!(result.expressions[2] == lit(make_u8(3)));
+        assert!(result.len() == 3);
+        assert!(result[0] == lit(make_u1(1)));
+        assert!(result[1] == lit(make_u8(2)));
+        assert!(result[2] == lit(make_u8(3)));
     }
 
     #[test]
@@ -68,8 +86,8 @@ mod tests {
         let result = parse_str_one("(1)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == lit(make_u1(1)));
+
+        assert!(result == lit(make_u1(1)));
     }
 
     #[test]
@@ -77,9 +95,9 @@ mod tests {
         let result = parse_str_one("(1,)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result {
             assert_eq!(exprs.len(), 1);
             assert_eq!(exprs[0], lit(make_u1(1)));
         }
@@ -90,9 +108,9 @@ mod tests {
         let result = parse_str_one("(1, 2)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result {
             assert_eq!(exprs.len(), 2);
             assert_eq!(exprs[0], lit(make_u1(1)));
             assert_eq!(exprs[1], lit(make_u8(2)));
@@ -104,9 +122,9 @@ mod tests {
         let result = parse_str_one("(1, 2, 3)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result {
             assert_eq!(exprs.len(), 3);
             assert_eq!(exprs[0], lit(make_u1(1)));
             assert_eq!(exprs[1], lit(make_u8(2)));
@@ -119,9 +137,9 @@ mod tests {
         let result = parse_str_one("(1, 2, 3,)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, .. } = &result {
             assert_eq!(exprs.len(), 3);
             assert_eq!(exprs[0], lit(make_u1(1)));
             assert_eq!(exprs[1], lit(make_u8(2)));
@@ -134,11 +152,11 @@ mod tests {
         let result = parse_str_one("(1, 2) + (3, 4)", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
+
+        assert!(matches!(result, Ast::Binary { .. }));
         if let Ast::Binary {
             lhs, op_info, rhs, ..
-        } = &result.expressions[0]
+        } = &result
         {
             assert_eq!(op_info.name, "add".to_string());
             assert!(matches!(*lhs.to_owned(), Ast::Tuple { .. }));
@@ -151,12 +169,12 @@ mod tests {
         let result = parse_str_one("[1, 2, 3]", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::List { .. }));
+
+        assert!(matches!(result, Ast::List { .. }));
         if let Ast::List {
             exprs: elems,
             info: _,
-        } = &result.expressions[0]
+        } = &result
         {
             assert_eq!(elems.len(), 3);
             assert_eq!(elems[0], lit(make_u1(1)));
@@ -178,8 +196,8 @@ mod tests {
         };
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == expected);
+
+        assert!(result == expected);
     }
 
     #[test]
@@ -195,8 +213,8 @@ mod tests {
         };
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == expected);
+
+        assert!(result == expected);
     }
 
     #[test]
@@ -212,17 +230,13 @@ mod tests {
         };
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == expected);
+
+        assert!(result == expected);
     }
 
     #[test]
     fn hello_world_file() {
-        let path = Path::new("./examples/basic/hello_world.lt");
-        let result = parse_file_one(
-            File::open(path).expect("Failed to open example file!"),
-            None,
-        );
+        let result = parse_str_one(include_str!("../../../examples/basic/hello_world.lt"), None);
         let expected = Ast::FunctionCall {
             expr: Box::new(Ast::Identifier {
                 name: "println".to_string(),
@@ -233,8 +247,8 @@ mod tests {
         };
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == expected);
+
+        assert!(result == expected);
     }
 
     #[test]
@@ -242,13 +256,13 @@ mod tests {
         let result = parse_str_one("1 + 2", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
+
+        assert!(matches!(result, Ast::Binary { .. }));
         // Assert "add"
-        if let Ast::Binary { op_info, .. } = &result.expressions[0] {
+        if let Ast::Binary { op_info, .. } = &result {
             assert_eq!(op_info.name, "add".to_string());
         }
-        if let Ast::Binary { lhs, rhs, .. } = &result.expressions[0] {
+        if let Ast::Binary { lhs, rhs, .. } = &result {
             // Always true
             assert!(matches!(
                 *lhs.to_owned(),
@@ -272,13 +286,13 @@ mod tests {
         let result = parse_str_one("1 + 2 + 3", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
+
+        assert!(matches!(result, Ast::Binary { .. }));
         // Assert left side
-        if let Ast::Binary { lhs, .. } = &result.expressions[0] {
+        if let Ast::Binary { lhs, .. } = &result {
             assert!(matches!(**lhs, Ast::Binary { .. }));
         }
-        // dbg!(&result.expressions[0].print_sexpr());
+        // dbg!(&result.print_sexpr());
     }
 
     #[test]
@@ -286,8 +300,8 @@ mod tests {
         let result = parse_str_one("x = 1", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Assignment { .. }));
+
+        assert!(matches!(result, Ast::Assignment { .. }));
     }
 
     #[test]
@@ -295,9 +309,9 @@ mod tests {
         let result = parse_str_one("x = 1 + 2", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Assignment { .. }));
-        if let Ast::Assignment { target, expr, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Assignment { .. }));
+        if let Ast::Assignment { target, expr, .. } = &result {
             assert!(matches!(*target.to_owned(), Ast::Identifier { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Binary { .. }));
         }
@@ -308,8 +322,8 @@ mod tests {
         let result = parse_str_all("1; // This is a comment", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(result.expressions[0] == lit(make_u1(1)));
+
+        assert!(result[0] == lit(make_u1(1)));
     }
 
     #[test]
@@ -325,9 +339,9 @@ mod tests {
         );
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 2);
-        assert!(result.expressions[0] == lit(make_u1(1)));
-        assert!(result.expressions[1] == lit(make_u8(2)));
+        assert!(result.len() == 2);
+        assert!(result[0] == lit(make_u1(1)));
+        assert!(result[1] == lit(make_u8(2)));
     }
 
     #[test]
@@ -335,9 +349,9 @@ mod tests {
         let result = parse_str_one("5 * (10 - 2) / 2 + 1", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Binary { .. }));
-        if let Ast::Binary { lhs, rhs, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Binary { .. }));
+        if let Ast::Binary { lhs, rhs, .. } = &result {
             assert!(matches!(*lhs.to_owned(), Ast::Binary { .. }));
             assert!(matches!(*rhs.to_owned(), Ast::Literal { .. }));
             if let Ast::Binary { lhs, .. } = &**lhs {
@@ -355,9 +369,9 @@ mod tests {
         let result = parse_str_one("{}", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record { .. }));
-        if let Ast::Record { fields, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result {
             assert_eq!(fields.len(), 0);
         }
     }
@@ -367,9 +381,9 @@ mod tests {
         let result = parse_str_one("{ x: 1 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record { .. }));
-        if let Ast::Record { fields, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -386,9 +400,9 @@ mod tests {
         let result = parse_str_one("{ x: 1, y: 2 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record { .. }));
-        if let Ast::Record { fields, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result {
             assert_eq!(fields.len(), 2);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -411,9 +425,9 @@ mod tests {
         let result = parse_str_one("{ x: { y: 1 } }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record { .. }));
-        if let Ast::Record { fields, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -443,9 +457,9 @@ mod tests {
         let result = parse_str_one("{ x: { 1 + 2 } }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Record { .. }));
-        if let Ast::Record { fields, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Record { .. }));
+        if let Ast::Record { fields, .. } = &result {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
@@ -465,9 +479,9 @@ mod tests {
         let result = parse_str_one("{ 1 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 1);
             assert!(matches!(inner[0], Ast::Literal { .. }));
         }
@@ -478,9 +492,9 @@ mod tests {
         let result = parse_str_one("{ 1; 2 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 2);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -492,9 +506,9 @@ mod tests {
         let result = parse_str_one("{ 1; 2; 3 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 3);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -507,9 +521,9 @@ mod tests {
         let result = parse_str_one("{ 1 2 3 }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 3);
             assert!(matches!(inner[0], Ast::Literal { .. }));
             assert!(matches!(inner[1], Ast::Literal { .. }));
@@ -522,9 +536,9 @@ mod tests {
         let result = parse_str_one("{ { 1 } }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 1);
             assert!(matches!(inner[0], Ast::Block { .. }));
         }
@@ -535,9 +549,9 @@ mod tests {
         let result = parse_str_one("{ { 1; 2 } }", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.expressions.len() == 1);
-        assert!(matches!(result.expressions[0], Ast::Block { .. }));
-        if let Ast::Block { exprs: inner, .. } = &result.expressions[0] {
+
+        assert!(matches!(result, Ast::Block { .. }));
+        if let Ast::Block { exprs: inner, .. } = &result {
             assert_eq!(inner.len(), 1);
             assert!(matches!(inner[0], Ast::Block { .. }));
             if let Ast::Block {

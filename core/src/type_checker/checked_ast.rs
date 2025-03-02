@@ -1,7 +1,7 @@
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
-    lexer::token::LineInfo,
     type_checker::types::Type,
+    util::error::LineInfo,
 };
 
 use super::types::{FunctionType, GetType, TypeJudgements, TypeTrait};
@@ -430,19 +430,5 @@ impl CheckedAst {
                 result
             }
         }
-    }
-}
-
-/// Module is the root program node of the AST
-/// It contains a list of all the expressions in the program
-#[derive(Debug, Clone)]
-pub struct CheckedModule {
-    pub name: String,
-    pub expressions: Vec<CheckedAst>,
-}
-
-impl CheckedModule {
-    pub fn new(name: String, expressions: Vec<CheckedAst>) -> CheckedModule {
-        CheckedModule { name, expressions }
     }
 }
