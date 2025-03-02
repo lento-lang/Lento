@@ -362,7 +362,7 @@ impl<R: Read> Parser<R> {
                         let body = match self.parse_top_expr() {
                             Ok(body) => body,
                             Err(err) => {
-                                log::warn!("Failed to parse function body: {}", err.base().message);
+                                log::warn!("Failed to parse function body: {}", err.message());
                                 return Some(Err(err));
                             }
                         };
@@ -428,7 +428,7 @@ impl<R: Read> Parser<R> {
                 Some(Ok(t)) => t,
                 Some(Err(err)) => {
                     return Err(ParseError::new(
-                        format!("Failed to parse function parameter: {}", err.base().message),
+                        format!("Failed to parse function parameter: {}", err.message()),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
@@ -457,7 +457,7 @@ impl<R: Read> Parser<R> {
                 },
                 Err(err) => {
                     return Err(ParseError::new(
-                        format!("Failed to parse parameter name: {}", err.base().message),
+                        format!("Failed to parse parameter name: {}", err.message()),
                         LineInfo::eof(info.end, self.lexer.current_index()),
                     ));
                 }
@@ -850,9 +850,9 @@ impl<R: Read> Parser<R> {
             Err(err) => Err(ParseError::new(
                 format!(
                     "Expected primary expression, but failed due to: {}",
-                    err.base().message
+                    err.message()
                 ),
-                err.base().info.clone(),
+                err.info().clone(),
             )),
         }
     }
@@ -1014,9 +1014,9 @@ impl<R: Read> Parser<R> {
                 format!(
                     "Expected {}, but failed due to: {}",
                     symbol.yellow(),
-                    err.base().message
+                    err.message()
                 ),
-                err.base().info.clone(),
+                err.info().clone(),
             )),
         }
     }

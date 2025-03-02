@@ -115,4 +115,10 @@ pub trait BaseErrorExt {
     fn with_label(self, message: String, info: LineInfo) -> Self;
     fn base(&self) -> &BaseError;
     fn to_base(self) -> BaseError;
+    fn message(&self) -> &str {
+        &self.base().message
+    }
+    fn info(&self) -> &LineInfo {
+        &self.base().info
+    }
 }

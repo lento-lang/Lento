@@ -96,7 +96,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding value {}: {}",
                     name.to_string().yellow(),
-                    e.base().message
+                    e.message()
                 );
             }
         }
@@ -109,7 +109,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding function {}: {}",
                     name.to_string().yellow(),
-                    e.base().message
+                    e.message()
                 );
             }
         }
@@ -140,7 +140,7 @@ impl Initializer {
                 panic!(
                     "Environment initialization failed when adding type {}: {}",
                     name.to_string().yellow(),
-                    e.base().message
+                    e.message()
                 );
             }
         }
