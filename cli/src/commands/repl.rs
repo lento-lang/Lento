@@ -1,3 +1,4 @@
+use core::str;
 use std::io::{Read, Write};
 
 use clap::{ArgMatches, Command};
@@ -60,10 +61,14 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
             true,
             &source,
         );
+        let found_comment = str::from_utf8(parser.get_content())
+            .unwrap_or_default()
+            .trim()
+            .starts_with("//");
         // Instead of creating a new parser, lexer, and reader, we simply reset them to save memory
         parser.get_lexer().reset();
 
-        if !found_expr {
+        if !found_expr && !found_comment {
             // move the cursor up one line and clear it
             println!("\x1B[1A\x1B[K             	  ");
         }
