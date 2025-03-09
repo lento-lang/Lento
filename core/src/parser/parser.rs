@@ -883,6 +883,10 @@ impl<R: Read> Parser<R> {
                                 "Expected primary expression, but found {}",
                                 t.token.to_string().light_red()
                             ),
+                            t.info.clone(),
+                        )
+                        .with_label(
+                            format!("This {} is invalid here", t.token.to_string().yellow()),
                             t.info,
                         ));
                     }
