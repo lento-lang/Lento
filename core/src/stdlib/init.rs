@@ -175,6 +175,7 @@ pub fn stdlib() -> Initializer {
                     if let StaticOperatorAst::Infix(lhs, rhs) = op {
                         let info = lhs.info().join(rhs.info());
                         Ok(Ast::Assignment {
+                            annotation: None,
                             target: Box::new(lhs),
                             expr: Box::new(rhs),
                             info,

@@ -391,6 +391,7 @@ impl<R: Read> Parser<R> {
                         let function = syntax_sugar::roll_function_definition(params, body);
                         let assign_info = info.join(function.info());
                         return Some(Ok(Ast::Assignment {
+                            annotation: None,
                             target: Box::new(Ast::Identifier {
                                 name: func_name.to_string(),
                                 info: info.clone(),
@@ -423,7 +424,7 @@ impl<R: Read> Parser<R> {
     /// ```
     fn parse_func_def(
         &mut self,
-        ret_type: Option<String>,
+        ret_type: Option<TypeAst>,
         name: String,
         info: LineInfo,
         parsed_params: Vec<ParamAst>,
@@ -520,6 +521,7 @@ impl<R: Read> Parser<R> {
         let function = syntax_sugar::roll_function_definition(params, body);
         let assign_info = info.join(function.info());
         Ok(Ast::Assignment {
+            annotation: ret_type,
             target: Box::new(Ast::Identifier { name, info }),
             expr: Box::new(function),
             info: assign_info,
@@ -686,6 +688,24 @@ impl<R: Read> Parser<R> {
         }))
     }
 
+    fn parse_assignment(
+        &mut self,
+        annotation: Option<TypeAst>,
+        target: Ast,
+        info: LineInfo,
+    ) -> ParseResult {
+        log::trace!("Parsing assignment: {:?}", target);
+        self.parse_expected(TokenKind::Op("=".into()), "=")?;
+        let expr = self.parse_top_expr()?;
+        log::trace!("Parsed assignment: {:?} = {:?}", target, expr);
+        Ok(Ast::Assignment {
+            annotation,
+            target: Box::new(target),
+            expr: Box::new(expr),
+            info,
+        })
+    }
+
     fn parse_primary(&mut self) -> ParseResult {
         match self.lexer.expect_next_token_not(pred::ignored) {
             Ok(t) => {
@@ -704,10 +724,10 @@ impl<R: Read> Parser<R> {
                             }
                         }
                         // Check if function definition
-                        if let Ok(t) = self.lexer.peek_token(0) {
-                            if let TokenKind::Identifier(name) = t.token {
-                                if let Ok(t) = self.lexer.peek_token(1) {
-                                    if t.token
+                        if let Ok(nt) = self.lexer.peek_token(0) {
+                            if let TokenKind::Identifier(name) = nt.token {
+                                if let Ok(nnt) = self.lexer.peek_token(1) {
+                                    if nnt.token
                                         == (TokenKind::LeftParen {
                                             is_function_call: true,
                                         })
@@ -715,12 +735,17 @@ impl<R: Read> Parser<R> {
                                         self.lexer.next_token().unwrap(); // Consume the name identifier
                                         self.lexer.next_token().unwrap(); // Consume the left paren
                                                                           // Start parsing the params and body of the function
-                                        return self.parse_func_def(Some(id), name, t.info, vec![]);
+                                        return self.parse_func_def(
+                                            Some(TypeAst::Identifier(id, t.info)),
+                                            name,
+                                            nnt.info,
+                                            vec![],
+                                        );
                                     }
                                 }
-                            } else if let TokenKind::LeftParen { .. } = t.token {
+                            } else if let TokenKind::LeftParen { .. } = nt.token {
                                 self.lexer.next_token().unwrap(); // Consume the left paren
-                                return self.parse_paren_call(id, t.info);
+                                return self.parse_paren_call(id, nt.info);
                             }
                         }
                         Ast::Identifier {

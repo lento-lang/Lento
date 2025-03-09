@@ -244,12 +244,7 @@ impl TypeChecker<'_> {
 
     fn scan_forward(&mut self, expr: &[Ast]) -> TypeResult<()> {
         for e in expr {
-            if let Ast::Assignment {
-                target,
-                expr,
-                info: _,
-            } = e
-            {
+            if let Ast::Assignment { target, expr, .. } = e {
                 let Ast::Identifier { name, .. } = target.borrow() else {
                     continue;
                 };
@@ -338,7 +333,12 @@ impl TypeChecker<'_> {
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,
-            Ast::Assignment { target, expr, info } => self.check_assignment(target, expr, info)?,
+            Ast::Assignment {
+                annotation,
+                target,
+                expr,
+                info,
+            } => self.check_assignment(annotation, target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
         })
     }
@@ -583,6 +583,7 @@ impl TypeChecker<'_> {
 
     fn check_assignment(
         &mut self,
+        annotation: &Option<TypeAst>,
         target: &Ast,
         expr: &Ast,
         info: &LineInfo,
@@ -616,17 +617,41 @@ impl TypeChecker<'_> {
             .into());
         }
         let expr = self.check_expr(expr)?;
-        let ty = expr.get_type().clone();
+        let body_ty = expr.get_type().clone();
+        if let Some(ann) = annotation {
+            let ann_ty = self.check_type_expr(ann)?;
+            if !ann_ty.subtype(&body_ty).success {
+                return Err(TypeError::new(
+                    format!(
+						"Type annotation {} does not match the type of the expression {}. Expected {}, found {}",
+						ann_ty.pretty_print_color(),
+						expr.pretty_print(),
+						ann_ty.pretty_print_color(),
+						body_ty.pretty_print_color()
+					),
+                    info.clone(),
+                )
+                .with_label(
+                    "Type annotation does not match the expression".to_string(),
+                    ann.info().clone(),
+                )
+                .with_label(
+                    format!("This is of type {}", body_ty.pretty_print_color()),
+                    expr.info().clone(),
+                )
+                .into());
+            }
+        }
         let assign_info = info.join(expr.info());
-        self.env.add_variable(target, ty.clone());
+        self.env.add_variable(target, body_ty.clone());
         Ok(CheckedAst::Assignment {
             target: Box::new(CheckedAst::Identifier {
                 name: target.to_string(),
-                ty: ty.clone(),
+                ty: body_ty.clone(),
                 info: info.clone(),
             }),
             expr: Box::new(expr),
-            ty,
+            ty: body_ty,
             info: assign_info,
         })
     }

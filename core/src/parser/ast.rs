@@ -71,7 +71,11 @@ pub enum Ast {
     Identifier { name: String, info: LineInfo },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
     Assignment {
+        /// Any type annotation for the target expression.
+        annotation: Option<TypeAst>,
+        /// The target expression to assign to.
         target: Box<Ast>,
+        /// The source expression to assign to the target.
         expr: Box<Ast>,
         info: LineInfo,
     },
@@ -120,28 +124,12 @@ impl Ast {
             Ast::Record { info, .. } => info,
             Ast::FieldAccess { info, .. } => info,
             Ast::Identifier { info, .. } => info,
-            Ast::FunctionCall {
-                expr: _,
-                arg: _,
-                info,
-            } => info,
+            Ast::FunctionCall { info, .. } => info,
             Ast::FunctionDef { info, .. } => info,
-            Ast::Accumulate {
-                op_info: _,
-                exprs: _,
-                info,
-            } => info,
+            Ast::Accumulate { info, .. } => info,
             Ast::Binary { info, .. } => info,
-            Ast::Unary {
-                op_info: _,
-                expr: _,
-                info,
-            } => info,
-            Ast::Assignment {
-                target: _,
-                expr: _,
-                info,
-            } => info,
+            Ast::Unary { info, .. } => info,
+            Ast::Assignment { info, .. } => info,
             Ast::Block { info, .. } => info,
         }
     }
@@ -167,8 +155,7 @@ impl Ast {
                     .join(", ")
             ),
             Ast::List {
-                exprs: elements,
-                info: _,
+                exprs: elements, ..
             } => format!(
                 "[{}]",
                 elements
@@ -209,7 +196,7 @@ impl Ast {
             Ast::Accumulate {
                 op_info: op,
                 exprs: operands,
-                info: _,
+                ..
             } => {
                 format!(
                     "({} {})",
@@ -232,16 +219,26 @@ impl Ast {
             Ast::Unary {
                 op_info: op,
                 expr: operand,
-                info: _,
+                ..
             } => {
                 format!("({} {})", op.symbol.clone(), operand.print_sexpr())
             }
             Ast::Assignment {
+                annotation: ty,
                 target: lhs,
                 expr: rhs,
-                info: _,
+                ..
             } => {
-                format!("(= {} {})", lhs.print_sexpr(), rhs.print_sexpr())
+                if let Some(ty) = ty {
+                    format!(
+                        "(= {} {} {})",
+                        ty.print_sexpr(),
+                        lhs.print_sexpr(),
+                        rhs.print_sexpr()
+                    )
+                } else {
+                    format!("(= {} {})", lhs.print_sexpr(), rhs.print_sexpr())
+                }
             }
             Ast::Block { exprs, .. } => format!(
                 "({})",
@@ -267,14 +264,10 @@ impl PartialEq for Ast {
             }
             (
                 Self::FunctionCall {
-                    expr: l0,
-                    arg: l1,
-                    info: _,
+                    expr: l0, arg: l1, ..
                 },
                 Self::FunctionCall {
-                    expr: r0,
-                    arg: r1,
-                    info: _,
+                    expr: r0, arg: r1, ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
@@ -295,12 +288,12 @@ impl PartialEq for Ast {
                 Self::Accumulate {
                     op_info: l0,
                     exprs: l1,
-                    info: _,
+                    ..
                 },
                 Self::Accumulate {
                     op_info: r0,
                     exprs: r1,
-                    info: _,
+                    ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
@@ -321,26 +314,28 @@ impl PartialEq for Ast {
                 Self::Unary {
                     op_info: l0,
                     expr: l1,
-                    info: _,
+                    ..
                 },
                 Self::Unary {
                     op_info: r0,
                     expr: r1,
-                    info: _,
+                    ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
                 Self::Assignment {
-                    target: l0,
-                    expr: l1,
-                    info: _,
+                    annotation: l0,
+                    target: l1,
+                    expr: l2,
+                    ..
                 },
                 Self::Assignment {
-                    target: r0,
-                    expr: r1,
-                    info: _,
+                    annotation: r0,
+                    target: r1,
+                    expr: r2,
+                    ..
                 },
-            ) => l0 == r0 && l1 == r1,
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
             _ => false,
         }
