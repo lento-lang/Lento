@@ -29,6 +29,12 @@ impl TypeAst {
             TypeAst::Identifier(name, _) => name.clone(),
         }
     }
+
+    pub fn info(&self) -> &LineInfo {
+        match self {
+            TypeAst::Identifier(_, info) => info,
+        }
+    }
 }
 
 impl PartialEq for TypeAst {
