@@ -7,7 +7,6 @@ mod tests {
             number::{FloatingPoint, Number, UnsignedInteger},
             value::Value,
         },
-        util::error::LineInfo,
         parser::parser::{self, ParseResult, ParseResults},
         stdlib::init::{stdlib, Initializer},
         type_checker::{
@@ -15,6 +14,7 @@ mod tests {
             checker::TypeChecker,
             types::{std_types, GetType, Type, TypeTrait},
         },
+        util::error::LineInfo,
     };
 
     fn parse_str_one(expr: &str, std: Option<&Initializer>) -> ParseResult {
@@ -193,16 +193,14 @@ mod tests {
     #[test]
     fn assignment() {
         let ast = CheckedAst::Assignment {
-            target: Box::new(CheckedAst::Identifier {
-                name: "x".to_string(),
-                ty: std_types::UINT8,
+            target: crate::type_checker::checked_ast::CheckedBindPattern::Variable {
+                name: "x".into(),
                 info: LineInfo::default(),
-            }),
+            },
             expr: Box::new(CheckedAst::Literal {
                 value: make_u8(1),
                 info: LineInfo::default(),
             }),
-            ty: std_types::UINT8,
             info: LineInfo::default(),
         };
         let result = eval_expr(&ast, &mut std_env());

@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use crate::{
     interpreter::value::NativeFunction,
     type_checker::{
-        checked_ast::CheckedAst,
+        checked_ast::{CheckedAst, CheckedBindPattern},
         types::{GetType, Type},
     },
     util::{error::LineInfo, str::Str},
@@ -40,6 +40,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
         } => eval_call(function, arg, env, ast.info())?,
         CheckedAst::Tuple { exprs, .. } => eval_tuple(exprs, env)?,
         CheckedAst::Literal { value, .. } => value.clone(),
+        CheckedAst::LiteralType { value, .. } => Value::Type(value.clone()),
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
@@ -47,8 +48,8 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
         },
         CheckedAst::Assignment { target, expr, .. } => {
             let info = target.info();
-            let target = match *target.to_owned() {
-                CheckedAst::Identifier { name, .. } => name,
+            let target = match target.to_owned() {
+                CheckedBindPattern::Variable { name, .. } => name,
                 _ => unreachable!("This should have been checked by the type checker"),
             };
             let value = eval_expr(expr, env)?;

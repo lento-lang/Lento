@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedParam},
+    checked_ast::{CheckedAst, CheckedBindPattern, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -303,6 +303,7 @@ impl TypeChecker<'_> {
                 value: value.clone(),
                 info: info.clone(),
             },
+            Ast::LiteralType { expr } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -345,12 +346,40 @@ impl TypeChecker<'_> {
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier(name, info) => {
+            TypeAst::Identifier { name, info } => {
                 self.lookup_type(name).cloned().ok_or_else(|| {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
+            TypeAst::Constructor { expr, arg, info } => {
+                let expr_info = expr.info();
+                let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
+                    return Err(TypeError::new(
+                        format!(
+                            "Cannot use constructor on non-constructor type {}",
+                            expr.print_sexpr()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label(
+                        format!("This is not a constructable type {}", expr.print_sexpr()),
+                        expr_info.clone(),
+                    )
+                    .into());
+                };
+                let arg = self.check_type_expr(arg)?;
+                Type::Constructor(base_name, vec![arg], base_type)
+            }
+        })
+    }
+
+    fn check_literal_type(&self, expr: &TypeAst) -> TypeResult<CheckedAst> {
+        let info = expr.info();
+        let ty = self.check_type_expr(expr)?;
+        Ok(CheckedAst::LiteralType {
+            value: ty,
+            info: info.clone(),
         })
     }
 
@@ -645,13 +674,12 @@ impl TypeChecker<'_> {
         let assign_info = info.join(expr.info());
         self.env.add_variable(target, body_ty.clone());
         Ok(CheckedAst::Assignment {
-            target: Box::new(CheckedAst::Identifier {
+            target: CheckedBindPattern::Variable {
                 name: target.to_string(),
-                ty: body_ty.clone(),
                 info: info.clone(),
-            }),
+            },
             expr: Box::new(expr),
-            ty: body_ty,
+            // ty: body_ty,
             info: assign_info,
         })
     }

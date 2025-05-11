@@ -31,8 +31,6 @@ pub enum TokenKind {
     // All other operators will be implemented in a standard library at runtime in the future
     // leaving support for user-defined operators
     Op(String),
-    // Keywords
-    Let,
     // Comments
     Comment(String),
 }
@@ -115,7 +113,6 @@ impl Display for TokenKind {
             Self::LeftBracket => write!(f, "["),
             Self::RightBracket => write!(f, "]"),
             Self::Op(s) => write!(f, "{}", s),
-            Self::Let => write!(f, "let"),
             Self::Comment(s) => write!(f, "// {}", s),
         }
     }

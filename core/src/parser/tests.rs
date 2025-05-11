@@ -6,9 +6,12 @@ mod tests {
             number::{Number, UnsignedInteger},
             value::{RecordKey, Value},
         },
-        util::error::LineInfo,
-        parser::{ast::Ast, parser::from_string},
+        parser::{
+            ast::{Ast, TypeAst},
+            parser::from_string,
+        },
         stdlib::init::{stdlib, Initializer},
+        util::error::LineInfo,
     };
 
     fn make_u1(n: u8) -> Value {
@@ -296,7 +299,54 @@ mod tests {
     }
 
     #[test]
-    fn assignment() {
+    fn literal_type_identifier() {
+        let result = parse_str_one("int", None);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(matches!(result, Ast::LiteralType { .. }));
+        if let Ast::LiteralType { expr, .. } = &result {
+            assert!(matches!(expr, TypeAst::Identifier { .. }));
+            let TypeAst::Identifier { name, .. } = &expr else {
+                panic!("Expected identifier");
+            };
+            assert_eq!(name, "int");
+        }
+    }
+
+    #[test]
+    fn typed_assignment() {
+        let result = parse_str_one("int x = 1", None);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        println!("result: {:?}", result.print_sexpr());
+
+        assert!(matches!(result, Ast::Assignment { .. }));
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = &result
+        {
+            assert!(matches!(*target.to_owned(), Ast::Identifier { .. }));
+            assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
+            assert!(annotation.to_owned().is_some());
+            assert!(matches!(
+                annotation.to_owned().unwrap(),
+                TypeAst::Identifier { .. }
+            ));
+            if let Some(annotation) = annotation {
+                assert!(matches!(annotation, TypeAst::Identifier { .. }));
+                let TypeAst::Identifier { name, .. } = &annotation else {
+                    panic!("Expected identifier");
+                };
+                assert_eq!(name, "int");
+            }
+        }
+    }
+
+    #[test]
+    fn untyped_assignment() {
         let result = parse_str_one("x = 1", None);
         assert!(result.is_ok());
         let result = result.unwrap();

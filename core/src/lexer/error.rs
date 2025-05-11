@@ -38,6 +38,10 @@ impl BaseErrorExt for LexerError {
 }
 
 impl LexerError {
+    pub fn is_eof_error(&self) -> bool {
+        self.inner.info.end.eof
+    }
+
     pub fn unexpected_end_of_file(info: LineInfo) -> Self {
         Self::new("Unexpected end of program".to_string(), info)
     }

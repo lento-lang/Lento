@@ -367,12 +367,34 @@ impl<R: Read> Lexer<R> {
 
     /// Peek the next token from the source code, ignoring tokens that match the predicate.
     /// Or return the next peeked token.
-    pub fn peek_token_not(&mut self, predicate: impl Fn(&TokenKind) -> bool) -> LexResult {
+    pub fn peek_token_not(
+        &mut self,
+        predicate: impl Fn(&TokenKind) -> bool,
+        skip: usize,
+    ) -> LexResult {
         let mut idx = 0usize;
         let mut token = self.peek_token(idx);
-        while check_token(&token, &predicate) {
-            token = self.peek_token(idx + 1);
-            idx += 1;
+        for i in 0..skip {
+            // Find the next non-matching token
+            while check_token(&token, &predicate) {
+                idx += 1;
+                token = self.peek_token(idx);
+
+                // Optimize for EOF
+                if let Err(err) = &token {
+                    if err.is_eof_error() {
+                        return token; // Search no further!
+                    }
+                }
+            }
+            // We found a non-matching token!
+            if i < skip - 1 {
+                log::trace!("Skipping token ({}/{}): {:?}", i + 1, skip, token);
+                idx += 1;
+                token = self.peek_token(idx);
+            } else {
+                log::trace!("Found token ({}/{}): {:?}", i + 1, skip, token);
+            }
         }
         token
     }
@@ -1094,7 +1116,6 @@ impl<R: Read> Lexer<R> {
         match s.as_str() {
             "true" => TokenKind::Boolean(true),
             "false" => TokenKind::Boolean(false),
-            "let" => TokenKind::Let,
             sym => match self.operators.get(sym) {
                 Some(op) => TokenKind::Op(op.clone()),
                 None => TokenKind::Identifier(s),
@@ -1147,7 +1168,13 @@ impl<R: Read> Lexer<R> {
             ops = new_ops;
             self.next_char(); // Eat the peeked character
         }
-        let op = self.operators.get(&longest_match).unwrap(); // Safe because we know the operator exists
+        log::trace!("longest_match: {}", longest_match);
+        let Some(op) = self.operators.get(&longest_match) else {
+            return Err(LexerError::new(
+                format!("Unknown operator {}", longest_match),
+                self.line_info.clone(),
+            ));
+        };
         self.new_token_info(TokenKind::Op(op.clone()))
     }
 }

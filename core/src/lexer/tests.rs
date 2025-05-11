@@ -130,11 +130,10 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let mut lexer = from_str("true false let");
+        let mut lexer = from_str("true false");
         stdlib().init_lexer(&mut lexer);
         assert_next_token_eq(&mut lexer, TokenKind::Boolean(true));
         assert_next_token_eq(&mut lexer, TokenKind::Boolean(false));
-        assert_next_token_eq(&mut lexer, TokenKind::Let);
         assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
     }
 

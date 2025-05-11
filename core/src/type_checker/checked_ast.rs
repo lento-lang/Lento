@@ -4,7 +4,7 @@ use crate::{
     util::error::LineInfo,
 };
 
-use super::types::{FunctionType, GetType, TypeJudgements, TypeTrait};
+use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
 
 #[derive(Debug, Clone)]
 pub struct CheckedOperator {
@@ -36,6 +36,8 @@ impl CheckedParam {
 pub enum CheckedAst {
     /// A literal is a constant value that is directly represented in the source code.
     Literal { value: Value, info: LineInfo },
+    /// A literal type is a type that is directly represented in the source code.
+    LiteralType { value: Type, info: LineInfo },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple {
         exprs: Vec<CheckedAst>,
@@ -96,9 +98,8 @@ pub enum CheckedAst {
     },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
     Assignment {
-        target: Box<CheckedAst>,
+        target: CheckedBindPattern,
         expr: Box<CheckedAst>,
-        ty: Type,
         info: LineInfo,
     },
     /// Block expression evaluates all expressions in the block and returns the value of the last expression.
@@ -115,6 +116,7 @@ impl GetType for CheckedAst {
     fn get_type(&self) -> &Type {
         match self {
             CheckedAst::Literal { value: v, info: _ } => v.get_type(),
+            CheckedAst::LiteralType { .. } => &std_types::TYPE,
             CheckedAst::Tuple { expr_types: ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
@@ -122,12 +124,7 @@ impl GetType for CheckedAst {
             CheckedAst::Identifier { ty, .. } => ty,
             CheckedAst::FunctionCall { return_type, .. } => return_type,
             CheckedAst::FunctionDef { ty, .. } => ty,
-            CheckedAst::Assignment {
-                target: _,
-                expr: _,
-                ty,
-                ..
-            } => ty,
+            CheckedAst::Assignment { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
         }
     }
@@ -155,6 +152,7 @@ impl CheckedAst {
     pub fn info(&self) -> &LineInfo {
         match self {
             CheckedAst::Literal { info, .. } => info,
+            CheckedAst::LiteralType { info, .. } => info,
             CheckedAst::Tuple { info, .. } => info,
             CheckedAst::List { info, .. } => info,
             CheckedAst::Record { info, .. } => info,
@@ -170,6 +168,7 @@ impl CheckedAst {
     pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
         match self {
             CheckedAst::Literal { .. } => (),
+            CheckedAst::LiteralType { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
                 expr_types: ty,
@@ -237,12 +236,10 @@ impl CheckedAst {
             CheckedAst::Assignment {
                 target: lhs,
                 expr: rhs,
-                ty,
                 ..
             } => {
                 lhs.specialize(judgements, changed);
                 rhs.specialize(judgements, changed);
-                *ty = ty.specialize(judgements, changed);
             }
             CheckedAst::Block {
                 exprs: expressions,
@@ -260,6 +257,7 @@ impl CheckedAst {
     pub fn print_sexpr(&self) -> String {
         match self {
             CheckedAst::Literal { value, info: _ } => value.pretty_print(),
+            CheckedAst::LiteralType { value, info: _ } => value.pretty_print(),
             CheckedAst::Tuple {
                 exprs: elements, ..
             } => format!(
@@ -347,6 +345,7 @@ impl CheckedAst {
     pub fn pretty_print(&self) -> String {
         match self {
             Self::Literal { value: l, .. } => l.pretty_print(),
+            Self::LiteralType { value: l, .. } => l.pretty_print(),
             Self::Tuple { exprs: t, .. } => {
                 let mut result = "(".to_string();
                 for (i, v) in t.iter().enumerate() {
@@ -399,7 +398,6 @@ impl CheckedAst {
             Self::Assignment {
                 target: lhs,
                 expr: rhs,
-                ty: _,
                 ..
             } => {
                 format!("{} = {}", lhs.pretty_print(), rhs.pretty_print())
@@ -419,6 +417,182 @@ impl CheckedAst {
                 result.push('}');
                 result
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CheckedBindPattern {
+    /// A variable binding pattern.
+    Variable {
+        /// The name of the variable.
+        name: String,
+        /// The type annotation for the variable.
+        info: LineInfo,
+    },
+    /// A tuple binding pattern.
+    Tuple {
+        /// The elements of the tuple.
+        elements: Vec<CheckedBindPattern>,
+        info: LineInfo,
+    },
+    /// A record binding pattern.
+    Record {
+        /// The fields of the record.
+        fields: Vec<(RecordKey, CheckedBindPattern)>,
+        info: LineInfo,
+    },
+    /// A list binding pattern.
+    List {
+        /// The elements of the list.
+        elements: Vec<CheckedBindPattern>,
+        info: LineInfo,
+    },
+    /// A wildcard pattern that matches any value.
+    Wildcard,
+    /// A literal pattern that matches a specific value.
+    Literal {
+        /// The value to match.
+        value: Value,
+        info: LineInfo,
+    },
+    /// A rest of a collection pattern that matches the rest of a list.
+    Rest {
+        /// The name of the variable to bind the rest of the list.
+        name: String,
+        /// The type annotation for the variable.
+        info: LineInfo,
+    },
+}
+
+impl CheckedBindPattern {
+    pub fn info(&self) -> &LineInfo {
+        match self {
+            CheckedBindPattern::Variable { info, .. } => info,
+            CheckedBindPattern::Tuple { info, .. } => info,
+            CheckedBindPattern::Record { info, .. } => info,
+            CheckedBindPattern::List { info, .. } => info,
+            CheckedBindPattern::Wildcard => panic!("Wildcard pattern has no line info"),
+            CheckedBindPattern::Literal { info, .. } => info,
+            CheckedBindPattern::Rest { info, .. } => info,
+        }
+    }
+
+    pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
+        match self {
+            CheckedBindPattern::Variable { name: _, info: _ } => (),
+            CheckedBindPattern::Tuple { elements, info: _ } => {
+                for element in elements {
+                    element.specialize(judgements, changed);
+                }
+            }
+            CheckedBindPattern::Record { fields, info: _ } => {
+                for (_, element) in fields {
+                    element.specialize(judgements, changed);
+                }
+            }
+            CheckedBindPattern::List { elements, info: _ } => {
+                for element in elements {
+                    element.specialize(judgements, changed);
+                }
+            }
+            CheckedBindPattern::Wildcard => (),
+            CheckedBindPattern::Literal { value: _, info: _ } => (),
+            CheckedBindPattern::Rest { name: _, info: _ } => (),
+        }
+    }
+
+    pub fn print_sexpr(&self) -> String {
+        match self {
+            CheckedBindPattern::Variable { name, .. } => name.clone(),
+            CheckedBindPattern::Tuple { elements, .. } => format!(
+                "({})",
+                elements
+                    .iter()
+                    .map(|e| e.print_sexpr())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            CheckedBindPattern::Record { fields, .. } => format!(
+                "{{ {} }}",
+                fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            CheckedBindPattern::List { elements, .. } => format!(
+                "[{}]",
+                elements
+                    .iter()
+                    .map(|e| e.print_sexpr())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            CheckedBindPattern::Wildcard => "_".to_string(),
+            CheckedBindPattern::Literal { value, .. } => value.pretty_print(),
+            CheckedBindPattern::Rest { name, .. } => format!("...{}", name),
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        match self {
+            CheckedBindPattern::Variable { name, .. } => name.clone(),
+            CheckedBindPattern::Tuple { elements, .. } => {
+                let mut result = "(".to_string();
+                for (i, v) in elements.iter().enumerate() {
+                    result.push_str(&v.pretty_print());
+                    if i < elements.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push(')');
+                result
+            }
+            CheckedBindPattern::Record { fields, .. } => {
+                let mut result = "{ ".to_string();
+                for (i, (k, v)) in fields.iter().enumerate() {
+                    result.push_str(&format!("{}: {}", k, v.pretty_print()));
+                    if i < fields.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push_str(" }");
+                result
+            }
+            CheckedBindPattern::List { elements, .. } => {
+                let mut result = "[".to_string();
+                for (i, v) in elements.iter().enumerate() {
+                    result.push_str(&v.pretty_print());
+                    if i < elements.len() - 1 {
+                        result.push_str(", ");
+                    }
+                }
+                result.push(']');
+                result
+            }
+            CheckedBindPattern::Wildcard => "_".to_string(),
+            CheckedBindPattern::Literal { value, .. } => value.pretty_print(),
+            CheckedBindPattern::Rest { name, .. } => format!("...{}", name),
+        }
+    }
+
+    pub fn is_wildcard(&self) -> bool {
+        matches!(self, CheckedBindPattern::Wildcard)
+    }
+}
+
+impl PartialEq for CheckedBindPattern {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Variable { name: l0, .. }, Self::Variable { name: r0, .. }) => l0 == r0,
+            (Self::Tuple { elements: l0, .. }, Self::Tuple { elements: r0, .. }) => l0 == r0,
+            (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
+            (Self::List { elements: l0, .. }, Self::List { elements: r0, .. }) => l0 == r0,
+            (Self::Wildcard, Self::Wildcard) => true,
+            (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
+            (Self::Rest { name: l0, .. }, Self::Rest { name: r0, .. }) => l0 == r0,
+            _ => false,
         }
     }
 }
