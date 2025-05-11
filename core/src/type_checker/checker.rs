@@ -679,7 +679,6 @@ impl TypeChecker<'_> {
                 info: target.info().clone(),
             },
             expr: Box::new(expr),
-            // ty: body_ty,
             info: assign_info,
         })
     }
