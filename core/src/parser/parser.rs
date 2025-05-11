@@ -751,8 +751,15 @@ impl<R: Read> Parser<R> {
                 for _ in 0..skip {
                     self.lexer.next_token().unwrap();
                 }
+
+                //? From now we are sure that we are parsing an assignment!
+                //? No more peeking! Only consume and assert tokens!
+
                 // Parse the assignment expression
-                let expr = self.parse_top_expr().ok()?;
+                let expr = match self.parse_top_expr() {
+                    Ok(expr) => expr,
+                    Err(err) => return Some(Err(err)),
+                };
 
                 log::trace!("Parsed assignment: {:?} = {:?}", &name, &expr);
 
