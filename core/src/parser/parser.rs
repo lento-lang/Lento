@@ -722,6 +722,12 @@ impl<R: Read> Parser<R> {
     //     })
     // }
 
+    /// Parses a typed definition, such as a variable assignment with a type annotation.
+    /// 
+    /// # Parameters
+    /// - `annotation`: The type annotation for the definition.
+    /// - `nt`: The current token being processed.
+    /// - `skip`: The number of tokens to skip when peeking into the lexer to check for an assignment operator.
     fn parse_typed_def(
         &mut self,
         annotation: TypeAst,
