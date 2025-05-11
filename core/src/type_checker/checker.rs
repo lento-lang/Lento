@@ -615,7 +615,7 @@ impl TypeChecker<'_> {
         expr: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        let target = match target {
+        let target_name = match target {
             Ast::Identifier { name, .. } => name,
             _ => {
                 return Err(TypeError::new(
@@ -630,14 +630,18 @@ impl TypeChecker<'_> {
                 .into());
             }
         };
-        if let Some(existing) = self.lookup_local_identifier(target) {
+        if let Some(existing) = self.lookup_local_identifier(target_name) {
             let ty_name = match existing {
                 IdentifierType::Variable(_) => "Variable",
                 IdentifierType::Type(_) => "Type",
                 IdentifierType::Function(_) => "Function",
             };
             return Err(TypeError::new(
-                format!("{} {} already exists", ty_name, target.clone().yellow()),
+                format!(
+                    "{} {} already exists",
+                    ty_name,
+                    target_name.clone().yellow()
+                ),
                 info.clone(),
             )
             .with_hint("Use a different name for the variable".to_string())
@@ -668,11 +672,11 @@ impl TypeChecker<'_> {
             }
         }
         let assign_info = info.join(expr.info());
-        self.env.add_variable(target, body_ty.clone());
+        self.env.add_variable(target_name, body_ty.clone());
         Ok(CheckedAst::Assignment {
             target: CheckedBindPattern::Variable {
-                name: target.to_string(),
-                info: info.clone(),
+                name: target_name.to_string(),
+                info: target.info().clone(),
             },
             expr: Box::new(expr),
             // ty: body_ty,
