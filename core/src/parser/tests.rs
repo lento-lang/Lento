@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn tuple_addition() {
-        let result = parse_str_one("(1, 2) + (3, 4)", None);
+        let result = parse_str_one("(1, 2) + (3, 4)", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
 
@@ -188,10 +188,10 @@ mod tests {
 
     #[test]
     fn call_paren_apply() {
-        let result = parse_str_one("println(\"Hello, World!\")", None);
+        let result = parse_str_one("print(\"Hello, World!\")", Some(&stdlib()));
         let expected = Ast::FunctionCall {
             expr: Box::new(Ast::Identifier {
-                name: "println".to_string(),
+                name: "print".to_string(),
                 info: LineInfo::default(),
             }),
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
@@ -205,10 +205,10 @@ mod tests {
 
     #[test]
     fn call_no_paren_apply() {
-        let result = parse_str_one("println \"Hello, World!\"", None);
+        let result = parse_str_one("print \"Hello, World!\"", Some(&stdlib()));
         let expected = Ast::FunctionCall {
             expr: Box::new(Ast::Identifier {
-                name: "println".to_string(),
+                name: "print".to_string(),
                 info: LineInfo::default(),
             }),
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
@@ -239,10 +239,13 @@ mod tests {
 
     #[test]
     fn hello_world_file() {
-        let result = parse_str_one(include_str!("../../../examples/basic/hello_world.lt"), None);
+        let result = parse_str_all(
+            include_str!("../../../examples/basic/hello_world.lt"),
+            Some(&stdlib()),
+        );
         let expected = Ast::FunctionCall {
             expr: Box::new(Ast::Identifier {
-                name: "println".to_string(),
+                name: "print".to_string(),
                 info: LineInfo::default(),
             }),
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
@@ -250,13 +253,16 @@ mod tests {
         };
         assert!(result.is_ok());
         let result = result.unwrap();
-
-        assert!(result == expected);
+        assert!(result.len() == 3);
+        // All three should be the same
+        assert!(result[0] == expected);
+        assert!(result[1] == expected);
+        assert!(result[2] == expected);
     }
 
     #[test]
     fn arithmetic() {
-        let result = parse_str_one("1 + 2", None);
+        let result = parse_str_one("1 + 2", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
 
@@ -286,7 +292,7 @@ mod tests {
 
     #[test]
     fn arithmetic_tree() {
-        let result = parse_str_one("1 + 2 + 3", None);
+        let result = parse_str_one("1 + 2 + 3", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
 
@@ -300,7 +306,7 @@ mod tests {
 
     #[test]
     fn literal_type_identifier() {
-        let result = parse_str_one("int", None);
+        let result = parse_str_one("int", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(matches!(result, Ast::LiteralType { .. }));
@@ -315,10 +321,10 @@ mod tests {
 
     #[test]
     fn typed_assignment() {
-        let result = parse_str_one("int x = 1", None);
+        let result = parse_str_one("int x = 1", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
-        println!("result: {:?}", result.print_sexpr());
+        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
         if let Ast::Assignment {
@@ -347,18 +353,20 @@ mod tests {
 
     #[test]
     fn untyped_assignment() {
-        let result = parse_str_one("x = 1", None);
+        let result = parse_str_one("x = 1", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
+        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
     }
 
     #[test]
     fn assign_add() {
-        let result = parse_str_one("x = 1 + 2", None);
+        let result = parse_str_one("x = 1 + 2", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
+        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
         if let Ast::Assignment { target, expr, .. } = &result {
@@ -372,7 +380,8 @@ mod tests {
         let result = parse_str_all("1; // This is a comment", None);
         assert!(result.is_ok());
         let result = result.unwrap();
-
+        assert!(result.len() == 1);
+        assert!(matches!(result[0], Ast::Literal { .. }));
         assert!(result[0] == lit(make_u1(1)));
     }
 
@@ -504,7 +513,7 @@ mod tests {
 
     #[test]
     fn record_nested_block() {
-        let result = parse_str_one("{ x: { 1 + 2 } }", None);
+        let result = parse_str_one("{ x: { 1 + 2 } }", Some(&stdlib()));
         assert!(result.is_ok());
         let result = result.unwrap();
 
