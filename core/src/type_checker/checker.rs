@@ -649,23 +649,21 @@ impl TypeChecker<'_> {
         let body_ty = expr.get_type().clone();
         if let Some(ann) = annotation {
             let ann_ty = self.check_type_expr(ann)?;
-            if !ann_ty.subtype(&body_ty).success {
+            if !body_ty.subtype(&ann_ty).success {
                 return Err(TypeError::new(
                     format!(
-						"Type annotation {} does not match the type of the expression {}. Expected {}, found {}",
-						ann_ty.pretty_print_color(),
-						expr.pretty_print(),
-						ann_ty.pretty_print_color(),
-						body_ty.pretty_print_color()
-					),
+                        "{} is not a valid subtype of {}",
+                        expr.pretty_print(),
+                        ann_ty.pretty_print_color(),
+                    ),
                     info.clone(),
                 )
                 .with_label(
-                    "Type annotation does not match the expression".to_string(),
-                    ann.info().clone(),
-                )
-                .with_label(
-                    format!("This is of type {}", body_ty.pretty_print_color()),
+                    format!(
+                        "This should be of type {} but is {}",
+                        ann_ty.pretty_print_color(),
+                        body_ty.pretty_print_color()
+                    ),
                     expr.info().clone(),
                 )
                 .into());
