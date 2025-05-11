@@ -53,15 +53,23 @@ impl Initializer {
 
     pub fn init_parser(&self, parser: &mut Parser<impl Read>) {
         log::trace!(
-            "Initializing parser with {} operators",
-            self.operators.len()
+            "Initializing parser with {} operators and {} types",
+            self.operators.len(),
+            self.types.len()
         );
         for op in &self.operators {
-            if let Err(e) = parser.define_op(op.info.clone()) {
+            if let Err(e) = parser.define_op(op.clone()) {
                 panic!(
                     "Parser initialization failed when adding operator '{:?}': {:?}",
                     op, e
                 );
+            }
+        }
+        for ty in self.types.values() {
+            match ty {
+                Type::Literal(ref name) => parser.add_type(name.to_string()),
+                Type::Alias(ref name, _) => parser.add_type(name.to_string()),
+                _ => panic!("Expected literal or alias type but got {:?}", ty),
             }
         }
     }
@@ -134,6 +142,8 @@ impl Initializer {
                         }
                     }
                 }
+                // Skip static operators
+                OperatorHandler::Parse(_) => {}
                 OperatorHandler::Static(_) => {}
             }
         }
@@ -157,29 +167,22 @@ pub fn stdlib() -> Initializer {
         operators: vec![
             // Assignment operator, native to the language
             // TODO: Implement this operator statically in the parser instead of using an operator handler
-            Operator::new_static(
+            Operator::new_parse(
                 "assign".into(),
                 "=".into(),
                 OperatorPosition::Infix,
                 default_operator_precedence::ASSIGNMENT,
                 OperatorAssociativity::Right,
                 false,
-                OperatorSignature::new(
-                    vec![
-                        CheckedParam::from_str("target", std_types::ANY.clone()),
-                        CheckedParam::from_str("value", std_types::ANY.clone()),
-                    ],
-                    std_types::ANY.clone(),
-                ),
                 |op| {
                     if let StaticOperatorAst::Infix(lhs, rhs) = op {
                         let info = lhs.info().join(rhs.info());
-                        Ok(Ast::Assignment {
+                        Ast::Assignment {
                             annotation: None,
                             target: Box::new(lhs),
                             expr: Box::new(rhs),
                             info,
-                        })
+                        }
                     } else {
                         panic!("assign expects an infix operator");
                     }

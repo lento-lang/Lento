@@ -1,6 +1,6 @@
 use core::str;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufReader, Cursor, Read},
 };
@@ -26,7 +26,10 @@ use crate::lexer::lexer::Lexer;
 use super::{
     ast::Ast,
     error::{ParseError, ParseOperatorError},
-    op::{OperatorAssociativity, OperatorInfo, OperatorPosition, OperatorPrecedence},
+    op::{
+        Operator, OperatorAssociativity, OperatorHandler, OperatorInfo, OperatorPosition,
+        OperatorPrecedence, StaticOperatorAst,
+    },
 };
 
 /// Token predicates for parsing
@@ -70,7 +73,8 @@ where
     /// - They have different signatures
     /// - They have different positions
     /// - The symbol is a built-in operator that is overloadable
-    operators: HashMap<String, Vec<OperatorInfo>>,
+    operators: HashMap<String, Vec<Operator>>,
+    types: HashSet<String>,
 }
 
 impl<R: Read> Parser<R> {
@@ -78,6 +82,7 @@ impl<R: Read> Parser<R> {
         Self {
             lexer,
             operators: HashMap::new(),
+            types: HashSet::new(),
         }
     }
 
@@ -97,30 +102,34 @@ impl<R: Read> Parser<R> {
         self.lexer.move_content()
     }
 
+    /// Add a new type to the parser.
+    pub fn add_type(&mut self, name: String) {
+        self.types.insert(name);
+    }
+
+    /// Get a type by its name.
+    pub fn is_type(&self, name: &str) -> bool {
+        self.types.contains(name)
+    }
+
     /// Define an operator in the parser.
     /// If the operator already exists with the same signature,
-    pub fn define_op(&mut self, op: OperatorInfo) -> Failable<ParseOperatorError> {
-        if let Some(existing) = self.get_op(&op.symbol) {
-            if op.is_static && !existing.is_empty() {
-                return Err(ParseOperatorError::NonStaticOperatorExists);
-            }
-            if existing.iter().any(|e| e.is_static) {
-                return Err(ParseOperatorError::CannotOverrideStaticOperator);
-            }
-            if existing.iter().any(|e| e.position == op.position) {
+    pub fn define_op(&mut self, op: Operator) -> Failable<ParseOperatorError> {
+        if let Some(existing) = self.get_op(&op.info.symbol) {
+            if existing.iter().any(|e| e.info.position == op.info.position) {
                 // TODO: Compare signatures instead of positions
                 return Err(ParseOperatorError::PositionForSymbolExists);
             }
         }
-        self.lexer.operators.insert(op.symbol.clone());
+        self.lexer.operators.insert(op.info.symbol.clone());
         self.operators
-            .entry(op.symbol.clone())
+            .entry(op.info.symbol.clone())
             .or_default()
             .push(op);
         Ok(())
     }
 
-    pub fn get_op(&self, symbol: &str) -> Option<&Vec<OperatorInfo>> {
+    pub fn get_op(&self, symbol: &str) -> Option<&Vec<Operator>> {
         self.operators.get(symbol)
     }
 
@@ -128,12 +137,12 @@ impl<R: Read> Parser<R> {
         &self,
         symbol: &str,
         pred: impl Fn(&OperatorInfo) -> bool,
-    ) -> Option<&OperatorInfo> {
+    ) -> Option<&Operator> {
         self.get_op(symbol)
-            .and_then(|ops| ops.iter().find(|op| pred(op)))
+            .and_then(|ops| ops.iter().find(|op| pred(&op.info)))
     }
 
-    pub fn find_operator_pos(&self, symbol: &str, pos: OperatorPosition) -> Option<&OperatorInfo> {
+    pub fn find_operator_pos(&self, symbol: &str, pos: OperatorPosition) -> Option<&Operator> {
         self.find_operator(symbol, |op| op.position == pos)
     }
 
@@ -160,7 +169,7 @@ impl<R: Read> Parser<R> {
     pub fn parse_all(&mut self) -> ParseResults {
         let mut asts = Vec::new();
         loop {
-            if let Ok(t) = self.lexer.peek_token_not(pred::ignored) {
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
                 if pred::eof(&t.token) {
                     break;
                 }
@@ -183,7 +192,7 @@ impl<R: Read> Parser<R> {
     /// There may be remaining tokens in the stream after the expression is parsed.
     pub fn parse_one(&mut self) -> ParseResult {
         // Check if the next token is an EOF, then return an empty unit top-level expression
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignored) {
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
             if pred::eof(&t.token) {
                 return Ok(Ast::Literal {
                     value: Value::Unit,
@@ -295,7 +304,10 @@ impl<R: Read> Parser<R> {
                                 // Also add the current parameter
                                 .chain([ParamAst {
                                     name: param_name,
-                                    ty: Some(TypeAst::Identifier(param_type, param_info.clone())),
+                                    ty: Some(TypeAst::Identifier {
+                                        name: param_type,
+                                        info: param_info.clone(),
+                                    }),
                                     info: param_info,
                                 }])
                                 .collect(),
@@ -435,14 +447,14 @@ impl<R: Read> Parser<R> {
             if end.token == TokenKind::RightParen {
                 break;
             }
-            let ty = match self.try_parse_type() {
-                Some(Ok(t)) => t,
-                Some(Err(err)) => {
-                    return Err(ParseError::new(
-                        format!("Failed to parse function parameter: {}", err.message()),
-                        LineInfo::eof(info.end, self.lexer.current_index()),
-                    ));
-                }
+            let nt = self
+                .lexer
+                .expect_next_token_not(pred::ignored)
+                .map_err(|err| {
+                    ParseError::new("Expected type expression".to_string(), err.info().clone())
+                })?;
+            let ty = match self.try_parse_type(&nt) {
+                Some(t) => t,
                 None => {
                     return Err(ParseError::new(
                         format!(
@@ -522,24 +534,13 @@ impl<R: Read> Parser<R> {
         let assign_info = info.join(function.info());
         Ok(Ast::Assignment {
             annotation: ret_type,
-            target: Box::new(Ast::Identifier { name, info }),
+            target: Box::new(Ast::Identifier {
+                name,
+                info: info.clone(),
+            }),
             expr: Box::new(function),
             info: assign_info,
         })
-    }
-
-    fn try_parse_type(&mut self) -> Option<Result<TypeAst, ParseError>> {
-        if let Ok(t) = self.lexer.peek_token(0) {
-            match t.token {
-                TokenKind::Identifier(id) => {
-                    self.lexer.next_token().unwrap();
-                    Some(Ok(TypeAst::Identifier(id, t.info)))
-                }
-                _ => None,
-            }
-        } else {
-            None
-        }
     }
 
     /// Parses the fields of a record from the lexer.
@@ -688,240 +689,360 @@ impl<R: Read> Parser<R> {
         }))
     }
 
-    fn parse_assignment(
+    fn try_parse_type(&mut self, t: &TokenInfo) -> Option<TypeAst> {
+        match &t.token {
+            TokenKind::Identifier(id) => {
+                if self.is_type(id) {
+                    return Some(TypeAst::Identifier {
+                        name: id.clone(),
+                        info: t.info.clone(),
+                    });
+                }
+            }
+            _ => (),
+        }
+
+        None
+    }
+    // fn parse_assignment(
+    //     &mut self,
+    //     annotation: Option<TypeAst>,
+    //     target: Ast,
+    //     info: LineInfo,
+    // ) -> ParseResult {
+    //     log::trace!("Parsing assignment: {:?}", target);
+    //     self.parse_expected(TokenKind::Op("=".into()), "=")?;
+    //     let expr = self.parse_top_expr()?;
+    //     log::trace!("Parsed assignment: {:?} = {:?}", target, expr);
+    //     Ok(Ast::Assignment {
+    //         annotation,
+    //         target: Box::new(target),
+    //         expr: Box::new(expr),
+    //         info,
+    //     })
+    // }
+
+    /// Parses a typed definition, such as a variable assignment with a type annotation.
+    /// 
+    /// # Parameters
+    /// - `annotation`: The type annotation for the definition.
+    /// - `nt`: The current token being processed.
+    /// - `skip`: The number of tokens to skip when peeking into the lexer to check for an assignment operator.
+    fn parse_typed_def(
         &mut self,
-        annotation: Option<TypeAst>,
-        target: Ast,
-        info: LineInfo,
-    ) -> ParseResult {
-        log::trace!("Parsing assignment: {:?}", target);
-        self.parse_expected(TokenKind::Op("=".into()), "=")?;
-        let expr = self.parse_top_expr()?;
-        log::trace!("Parsed assignment: {:?} = {:?}", target, expr);
-        Ok(Ast::Assignment {
-            annotation,
-            target: Box::new(target),
-            expr: Box::new(expr),
-            info,
-        })
+        annotation: TypeAst,
+        nt: &TokenInfo,
+        mut skip: usize,
+    ) -> Option<ParseResult> {
+        match &nt.token {
+            TokenKind::Identifier(name) => {
+                log::trace!(
+                    "Looking for variable assignment: {} {} = ...",
+                    annotation.print_sexpr(),
+                    name,
+                );
+                // Check if the token after the identifier is an assignment operator
+                skip += 1;
+                let Ok(nt) = self.lexer.peek_token_not(pred::ignored, skip) else {
+                    return None; // Not a valid assignment
+                };
+                if nt.token != TokenKind::Op("=".into()) {
+                    log::trace!("Not an assignment: {:?}", nt.token);
+                    return None; // Not a valid assignment
+                }
+                // Consume all skipped tokens
+                for _ in 0..skip {
+                    self.lexer.next_token().unwrap();
+                }
+
+                //? From now we are sure that we are parsing an assignment!
+                //? No more peeking! Only consume and assert tokens!
+
+                // Parse the assignment expression
+                let expr = match self.parse_top_expr() {
+                    Ok(expr) => expr,
+                    Err(err) => return Some(Err(err)),
+                };
+
+                log::trace!("Parsed assignment: {:?} = {:?}", &name, &expr);
+
+                Some(Ok(Ast::Assignment {
+                    info: nt.info.join(expr.info()),
+                    annotation: Some(annotation),
+                    target: Box::new(Ast::Identifier {
+                        name: name.clone(),
+                        info: nt.info.clone(),
+                    }),
+                    expr: Box::new(expr),
+                }))
+            }
+            // TODO: Support for other types of typed definitions (e.g. tuple, lists, records, etc.)
+            _ => None, // Not a valid assignment
+        }
     }
 
     fn parse_primary(&mut self) -> ParseResult {
-        match self.lexer.expect_next_token_not(pred::ignored) {
-            Ok(t) => {
-                Ok(match t.token {
-                    lit if lit.is_literal() => self.parse_literal(&lit, t.info)?,
-                    TokenKind::Identifier(id) => {
-                        // Check if function call
-                        if let Ok(t) = self.lexer.peek_token(0) {
-                            if t.token
+        let t = self
+            .lexer
+            .expect_next_token_not(pred::ignored)
+            .map_err(|err| {
+                ParseError::new(
+                    "Expected primary expression".to_string(),
+                    err.info().clone(),
+                )
+                .with_label(err.message().to_owned(), err.info().clone())
+            })?;
+
+        if let Some(ty) = self.try_parse_type(&t) {
+            log::trace!("Parsed type: {:?}", ty);
+            let mut skip = 0;
+            let nt = self
+                .lexer
+                .peek_token_not(pred::ignored, skip)
+                .unwrap_or(TokenInfo {
+                    token: TokenKind::EndOfFile,
+                    info: LineInfo::default(),
+                });
+            if nt.token.is_terminator() {
+                return Ok(Ast::LiteralType { expr: ty });
+            }
+            skip += 1; // Skip the next token when parsing next steps...
+
+            // Try parse type construction (`List int` or `List<int>`)
+            if let Some(app) = self.try_parse_type(&nt) {
+                // TODO: Support multiple arguments
+                return Ok(Ast::LiteralType {
+                    expr: TypeAst::Constructor {
+                        expr: Box::new(ty),
+                        arg: Box::new(app),
+                        info: t.info.join(&nt.info),
+                    },
+                });
+            }
+            // Try parse typed definition
+            else if let Some(res) = self.parse_typed_def(ty, &nt, skip) {
+                return res;
+            }
+            // No other expression should include a type identifier
+            return Err(ParseError::new(
+                format!(
+                    "Expected variable assignment, function definition or type construction after {}, but found {}",
+                    t.token.to_string().yellow(),
+                    nt.token.to_string().light_red()
+                ),
+                nt.info.clone(),
+            )
+            .with_label("This is not a valid type".to_string(), nt.info));
+        }
+
+        match t.token {
+            lit if lit.is_literal() => self.parse_literal(&lit, t.info),
+            TokenKind::Identifier(id) => {
+                // Check if function call
+                if let Ok(t) = self.lexer.peek_token(0) {
+                    if t.token
+                        == (TokenKind::LeftParen {
+                            is_function_call: true,
+                        })
+                    {
+                        self.lexer.next_token().unwrap(); // Consume the left paren
+                        return self.parse_paren_call(id, t.info);
+                    }
+                }
+                // Check if function definition
+                if let Ok(nt) = self.lexer.peek_token(0) {
+                    if let TokenKind::Identifier(name) = nt.token {
+                        if let Ok(nnt) = self.lexer.peek_token(1) {
+                            if nnt.token
                                 == (TokenKind::LeftParen {
                                     is_function_call: true,
                                 })
                             {
+                                self.lexer.next_token().unwrap(); // Consume the name identifier
                                 self.lexer.next_token().unwrap(); // Consume the left paren
-                                return self.parse_paren_call(id, t.info);
+                                                                  // Start parsing the params and body of the function
+                                return self.parse_func_def(
+                                    Some(TypeAst::Identifier {
+                                        name: id.clone(),
+                                        info: t.info.clone(),
+                                    }),
+                                    name,
+                                    nnt.info,
+                                    vec![],
+                                );
                             }
                         }
-                        // Check if function definition
-                        if let Ok(nt) = self.lexer.peek_token(0) {
-                            if let TokenKind::Identifier(name) = nt.token {
-                                if let Ok(nnt) = self.lexer.peek_token(1) {
-                                    if nnt.token
-                                        == (TokenKind::LeftParen {
-                                            is_function_call: true,
-                                        })
-                                    {
-                                        self.lexer.next_token().unwrap(); // Consume the name identifier
-                                        self.lexer.next_token().unwrap(); // Consume the left paren
-                                                                          // Start parsing the params and body of the function
-                                        return self.parse_func_def(
-                                            Some(TypeAst::Identifier(id, t.info)),
-                                            name,
-                                            nnt.info,
-                                            vec![],
-                                        );
-                                    }
-                                }
-                            } else if let TokenKind::LeftParen { .. } = nt.token {
-                                self.lexer.next_token().unwrap(); // Consume the left paren
-                                return self.parse_paren_call(id, nt.info);
-                            }
-                        }
-                        Ast::Identifier {
-                            name: id,
-                            info: t.info,
-                        }
+                    } else if let TokenKind::LeftParen { .. } = nt.token {
+                        self.lexer.next_token().unwrap(); // Consume the left paren
+                        return self.parse_paren_call(id, nt.info);
                     }
-                    TokenKind::Op(op) => {
-                        // TODO: Don't lookup operators in the parser, do this in the type checker!
-                        if let Some(op) = self.find_operator_pos(&op, OperatorPosition::Prefix) {
-                            let op = op.clone();
-                            let rhs = self.parse_primary()?;
-                            Ast::Unary {
-                                op_info: op.clone(),
-                                expr: Box::new(rhs),
-                                info: t.info,
-                            }
-                        } else {
-                            return Err(ParseError::new(
-                                format!("Expected prefix operator, but found {}", op.light_red()),
-                                t.info.clone(),
-                            )
-                            .with_label(
-                                "This is not a valid prefix operator".to_string(),
-                                t.info,
-                            ));
-                        }
-                    }
-                    start if start.is_grouping_start() => {
-                        match start {
-                            // Tuples, Units and Parentheses: ()
-                            TokenKind::LeftParen {
-                                is_function_call: false,
-                            } => {
-                                // Tuples are defined by a comma-separated list of expressions
-                                let mut explicit_single = false;
-                                let mut exprs = Vec::new();
-                                while let Ok(end) = self.lexer.peek_token(0) {
-                                    if end.token == TokenKind::RightParen {
-                                        break;
-                                    }
-                                    exprs.push(self.parse_top_expr()?);
-                                    if let Ok(nt) = self.lexer.peek_token(0) {
-                                        if nt.token == TokenKind::Comma {
-                                            self.lexer.next_token().unwrap();
-                                            if self.lexer.peek_token(0).unwrap().token
-                                                == TokenKind::RightParen
-                                            {
-                                                explicit_single = true;
-                                                // Break in the next iteration
-                                            }
-                                            continue;
-                                        } else if nt.token == TokenKind::RightParen {
-                                            break;
-                                        }
-                                    }
-                                    if let Ok(nt) = self.lexer.peek_token(0) {
-                                        return Err(ParseError::new(
-                                            format!(
-                                                "Expected {} or {}, but found {}",
-                                                ",".yellow(),
-                                                ")".yellow(),
-                                                nt.token.to_string().light_red()
-                                            ),
-                                            nt.info.clone(),
-                                        )
-                                        .with_label(
-                                            "This should be either a comma or a right parenthesis"
-                                                .to_string(),
-                                            nt.info,
-                                        ));
-                                    } else {
-                                        return Err(ParseError::new(
-                                            "Unexpected end of program".to_string(),
-                                            LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                        ));
-                                    }
-                                }
-                                let end = self.parse_expected(TokenKind::RightParen, ")")?;
-                                if exprs.len() == 1 && !explicit_single {
-                                    exprs.pop().unwrap()
-                                } else {
-                                    Ast::Tuple {
-                                        exprs,
-                                        info: t.info.join(&end.info),
-                                    }
-                                }
-                            }
-                            // Records and Blocks: {}
-                            TokenKind::LeftBrace => {
-                                // Try to parse as record
-                                if let Some(res) = self.parse_record_fields(&t.info) {
-                                    res?
-                                } else {
-                                    // Parse as block
-                                    let mut exprs = Vec::new();
-                                    while let Ok(end) = self.lexer.peek_token(0) {
-                                        if end.token == TokenKind::RightBrace {
-                                            break;
-                                        }
-                                        exprs.push(self.parse_top_expr()?);
-                                    }
-                                    let last = self.parse_expected(TokenKind::RightBrace, "}")?;
-                                    Ast::Block {
-                                        exprs,
-                                        info: t.info.join(&last.info),
-                                    }
-                                }
-                            }
-                            // Lists: []
-                            TokenKind::LeftBracket => {
-                                let mut exprs = Vec::new();
-                                while let Ok(end) = self.lexer.peek_token(0) {
-                                    if end.token == TokenKind::RightBracket {
-                                        break;
-                                    }
-                                    exprs.push(self.parse_top_expr()?);
-                                    if let Ok(nt) = self.lexer.peek_token(0) {
-                                        if nt.token == TokenKind::Comma {
-                                            self.lexer.next_token().unwrap();
-                                            continue;
-                                        } else if nt.token == TokenKind::RightBracket {
-                                            break;
-                                        }
-                                    }
-                                    if let Ok(nt) = self.lexer.peek_token(0) {
-                                        return Err(ParseError::new(
-                                            format!(
-                                                "Expected {} or {}, but found {}",
-                                                ",".yellow(),
-                                                "]".yellow(),
-                                                nt.token.to_string().light_red()
-                                            ),
-                                            nt.info.clone(),
-                                        )
-                                        .with_label(
-                                            "This should be either a comma or a right bracket"
-                                                .to_string(),
-                                            nt.info,
-                                        ));
-                                    } else {
-                                        return Err(ParseError::new(
-                                            "Unexpected end of program".to_string(),
-                                            LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                        ));
-                                    }
-                                }
-                                let last = self.parse_expected(TokenKind::RightBracket, "]")?;
-                                Ast::List {
-                                    exprs,
-                                    info: t.info.join(&last.info),
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => {
-                        return Err(ParseError::new(
-                            format!(
-                                "Expected primary expression, but found {}",
-                                t.token.to_string().light_red()
-                            ),
-                            t.info.clone(),
-                        )
-                        .with_label(
-                            format!("This {} is invalid here", t.token.to_string().yellow()),
-                            t.info,
-                        ));
-                    }
+                }
+                Ok(Ast::Identifier {
+                    name: id,
+                    info: t.info,
                 })
             }
-            Err(err) => Err(ParseError::new(
-                "Expected primary expression".to_string(),
-                err.info().clone(),
-            )
-            .with_label(err.message().to_owned(), err.info().clone())),
+            TokenKind::Op(op) => {
+                // TODO: Don't lookup operators in the parser, do this in the type checker!
+                if let Some(op) = self.find_operator_pos(&op, OperatorPosition::Prefix) {
+                    let op_info = op.info.clone();
+                    let rhs = self.parse_primary()?;
+                    Ok(Ast::Unary {
+                        op_info,
+                        expr: Box::new(rhs),
+                        info: t.info,
+                    })
+                } else {
+                    return Err(ParseError::new(
+                        format!("Expected prefix operator, but found {}", op.light_red()),
+                        t.info.clone(),
+                    )
+                    .with_label("This is not a valid prefix operator".to_string(), t.info));
+                }
+            }
+            start if start.is_grouping_start() => {
+                match start {
+                    // Tuples, Units and Parentheses: ()
+                    TokenKind::LeftParen {
+                        is_function_call: false,
+                    } => {
+                        // Tuples are defined by a comma-separated list of expressions
+                        let mut explicit_single = false;
+                        let mut exprs = Vec::new();
+                        while let Ok(end) = self.lexer.peek_token(0) {
+                            if end.token == TokenKind::RightParen {
+                                break;
+                            }
+                            exprs.push(self.parse_top_expr()?);
+                            if let Ok(nt) = self.lexer.peek_token(0) {
+                                if nt.token == TokenKind::Comma {
+                                    self.lexer.next_token().unwrap();
+                                    if self.lexer.peek_token(0).unwrap().token
+                                        == TokenKind::RightParen
+                                    {
+                                        explicit_single = true;
+                                        // Break in the next iteration
+                                    }
+                                    continue;
+                                } else if nt.token == TokenKind::RightParen {
+                                    break;
+                                }
+                            }
+                            if let Ok(nt) = self.lexer.peek_token(0) {
+                                return Err(ParseError::new(
+                                    format!(
+                                        "Expected {} or {}, but found {}",
+                                        ",".yellow(),
+                                        ")".yellow(),
+                                        nt.token.to_string().light_red()
+                                    ),
+                                    nt.info.clone(),
+                                )
+                                .with_label(
+                                    "This should be either a comma or a right parenthesis"
+                                        .to_string(),
+                                    nt.info,
+                                ));
+                            } else {
+                                return Err(ParseError::new(
+                                    "Unexpected end of program".to_string(),
+                                    LineInfo::eof(t.info.end, self.lexer.current_index()),
+                                ));
+                            }
+                        }
+                        let end = self.parse_expected(TokenKind::RightParen, ")")?;
+                        if exprs.len() == 1 && !explicit_single {
+                            exprs.pop().ok_or(ParseError::new(
+                                "Expected a single expression".to_string(),
+                                t.info.clone(),
+                            ))
+                        } else {
+                            Ok(Ast::Tuple {
+                                exprs,
+                                info: t.info.join(&end.info),
+                            })
+                        }
+                    }
+                    // Records and Blocks: {}
+                    TokenKind::LeftBrace => {
+                        // Try to parse as record
+                        if let Some(res) = self.parse_record_fields(&t.info) {
+                            res
+                        } else {
+                            // Parse as block
+                            let mut exprs = Vec::new();
+                            while let Ok(end) = self.lexer.peek_token(0) {
+                                if end.token == TokenKind::RightBrace {
+                                    break;
+                                }
+                                exprs.push(self.parse_top_expr()?);
+                            }
+                            let last = self.parse_expected(TokenKind::RightBrace, "}")?;
+                            Ok(Ast::Block {
+                                exprs,
+                                info: t.info.join(&last.info),
+                            })
+                        }
+                    }
+                    // Lists: []
+                    TokenKind::LeftBracket => {
+                        let mut exprs = Vec::new();
+                        while let Ok(end) = self.lexer.peek_token(0) {
+                            if end.token == TokenKind::RightBracket {
+                                break;
+                            }
+                            exprs.push(self.parse_top_expr()?);
+                            if let Ok(nt) = self.lexer.peek_token(0) {
+                                if nt.token == TokenKind::Comma {
+                                    self.lexer.next_token().unwrap();
+                                    continue;
+                                } else if nt.token == TokenKind::RightBracket {
+                                    break;
+                                }
+                            }
+                            if let Ok(nt) = self.lexer.peek_token(0) {
+                                return Err(ParseError::new(
+                                    format!(
+                                        "Expected {} or {}, but found {}",
+                                        ",".yellow(),
+                                        "]".yellow(),
+                                        nt.token.to_string().light_red()
+                                    ),
+                                    nt.info.clone(),
+                                )
+                                .with_label(
+                                    "This should be either a comma or a right bracket".to_string(),
+                                    nt.info,
+                                ));
+                            } else {
+                                return Err(ParseError::new(
+                                    "Unexpected end of program".to_string(),
+                                    LineInfo::eof(t.info.end, self.lexer.current_index()),
+                                ));
+                            }
+                        }
+                        let last = self.parse_expected(TokenKind::RightBracket, "]")?;
+                        Ok(Ast::List {
+                            exprs,
+                            info: t.info.join(&last.info),
+                        })
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            _ => {
+                return Err(ParseError::new(
+                    format!(
+                        "Expected primary expression, but found {}",
+                        t.token.to_string().light_red()
+                    ),
+                    t.info.clone(),
+                )
+                .with_label(
+                    format!("This {} is invalid here", t.token.to_string().yellow()),
+                    t.info,
+                ));
+            }
         }
     }
 
@@ -942,7 +1063,7 @@ impl<R: Read> Parser<R> {
         nt: &LexResult,
         min_prec: OperatorPrecedence,
         allow_eq: bool,
-    ) -> Option<OperatorInfo> {
+    ) -> Option<Operator> {
         let t = nt.as_ref().ok()?;
         let op = if let TokenKind::Op(op) = &t.token {
             op
@@ -953,10 +1074,10 @@ impl<R: Read> Parser<R> {
             op.position == OperatorPosition::Infix
                 || op.position == OperatorPosition::InfixAccumulate
         })?;
-        let is_infix = op.position.is_infix();
-        let is_greater = op.precedence > min_prec;
-        let is_right_assoc = op.associativity == OperatorAssociativity::Right;
-        let is_equal = op.precedence == min_prec;
+        let is_infix = op.info.position.is_infix();
+        let is_greater = op.info.precedence > min_prec;
+        let is_right_assoc = op.info.associativity == OperatorAssociativity::Right;
+        let is_equal = op.info.precedence == min_prec;
         if is_infix && (is_greater || ((is_right_assoc || allow_eq) && is_equal)) {
             Some(op.clone())
         } else {
@@ -992,26 +1113,30 @@ impl<R: Read> Parser<R> {
             self.check_op(&nt, min_prec, false)
         } {
             let curr_info = self.lexer.next_token().unwrap().info; // Consume the operator token
-            if curr_op.position.is_accumulate() {
+            if curr_op.info.position.is_accumulate() {
                 expr = self.parse_expr_accum(&curr_op, expr, curr_info)?;
                 continue;
             }
             let mut rhs = self.parse_primary()?;
             while let Some(next_op) = {
                 let nt = self.lexer.peek_token(0);
-                self.check_op(&nt, curr_op.precedence, false)
+                self.check_op(&nt, curr_op.info.precedence, false)
             } {
-                rhs = self.parse_expr(rhs, Self::next_prec(&curr_op, &next_op))?;
+                rhs = self.parse_expr(rhs, Self::next_prec(&curr_op.info, &next_op.info))?;
             }
-            if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op, &rhs) {
+            if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op.info, &rhs) {
                 expr = desugar;
             } else {
                 let info = expr.info().join(rhs.info());
-                expr = Ast::Binary {
-                    lhs: Box::new(expr),
-                    op_info: curr_op.clone(),
-                    rhs: Box::new(rhs),
-                    info,
+                expr = if let OperatorHandler::Parse(handler) = curr_op.handler {
+                    handler(StaticOperatorAst::Infix(expr, rhs))
+                } else {
+                    Ast::Binary {
+                        lhs: Box::new(expr),
+                        op_info: curr_op.info.clone(),
+                        rhs: Box::new(rhs),
+                        info,
+                    }
                 };
             }
         }
@@ -1020,21 +1145,21 @@ impl<R: Read> Parser<R> {
 
     /// Expect the parser state to be at the end of [expr, op] sequence.
     /// Next token should be a new expression or a terminator.
-    fn parse_expr_accum(&mut self, op: &OperatorInfo, first: Ast, info: LineInfo) -> ParseResult {
+    fn parse_expr_accum(&mut self, op: &Operator, first: Ast, info: LineInfo) -> ParseResult {
         let mut exprs = vec![first];
-        while let Ok(t) = self.lexer.peek_token_not(pred::ignored) {
-            if op.allow_trailing && t.token.is_terminator() {
+        while let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
+            if op.info.allow_trailing && t.token.is_terminator() {
                 break;
             }
 
             // Parse the next nested expression in the sequence
             let lhs = self.parse_primary()?;
-            exprs.push(self.parse_expr(lhs, op.precedence)?);
+            exprs.push(self.parse_expr(lhs, op.info.precedence)?);
 
             // Expect the next token to be the same operator or another expression
-            let nt = self.lexer.peek_token_not(pred::ignored);
-            if let Some(next_op) = self.check_op(&nt, op.precedence, true) {
-                if !next_op.eq(op) {
+            let nt = self.lexer.peek_token_not(pred::ignored, 0);
+            if let Some(next_op) = self.check_op(&nt, op.info.precedence, true) {
+                if !next_op.info.eq(&op.info) {
                     break;
                 }
                 self.lexer.read_next_token_not(pred::ignored).unwrap(); // Consume the operator token
@@ -1042,12 +1167,18 @@ impl<R: Read> Parser<R> {
                 break;
             }
         }
-        let info = info.join(exprs.last().unwrap().info());
-        Ok(Ast::Accumulate {
-            op_info: op.clone(),
-            exprs,
-            info,
-        })
+        let expr = if let OperatorHandler::Parse(handler) = &op.handler {
+            handler(StaticOperatorAst::Accumulate(exprs))
+        } else {
+            let info = info.join(exprs.last().unwrap().info());
+            Ast::Accumulate {
+                op_info: op.info.clone(),
+                exprs,
+                info,
+            }
+        };
+
+        Ok(expr)
     }
 
     /// Parse a top-level expression.

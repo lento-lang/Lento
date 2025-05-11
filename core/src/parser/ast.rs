@@ -20,19 +20,33 @@ impl PartialEq for ParamAst {
 
 #[derive(Debug, Clone)]
 pub enum TypeAst {
-    Identifier(String, LineInfo),
+    Identifier {
+        /// The name of the type.
+        name: String,
+        /// The line information for the type.
+        info: LineInfo,
+    },
+    Constructor {
+        expr: Box<TypeAst>,
+        arg: Box<TypeAst>,
+        info: LineInfo,
+    },
 }
 
 impl TypeAst {
     pub fn print_sexpr(&self) -> String {
         match self {
-            TypeAst::Identifier(name, _) => name.clone(),
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor { expr, arg, .. } => {
+                format!("({} {})", expr.print_sexpr(), arg.print_sexpr())
+            }
         }
     }
 
     pub fn info(&self) -> &LineInfo {
         match self {
-            TypeAst::Identifier(_, info) => info,
+            TypeAst::Identifier { info, .. } => info,
+            TypeAst::Constructor { info, .. } => info,
         }
     }
 }
@@ -40,7 +54,20 @@ impl TypeAst {
 impl PartialEq for TypeAst {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Identifier(l0, _), Self::Identifier(r0, _)) => l0 == r0,
+            (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
+            (
+                Self::Constructor {
+                    expr: l_expr,
+                    arg: l_arg,
+                    info: _,
+                },
+                Self::Constructor {
+                    expr: r_expr,
+                    arg: r_arg,
+                    info: _,
+                },
+            ) => l_expr == r_expr && l_arg == r_arg,
+            _ => false,
         }
     }
 }
@@ -50,6 +77,11 @@ impl PartialEq for TypeAst {
 pub enum Ast {
     /// A literal is a constant value that is directly represented in the source code.
     Literal { value: Value, info: LineInfo },
+    /// A literal type expression
+    LiteralType {
+        /// The literal type value.
+        expr: TypeAst,
+    },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple { exprs: Vec<Ast>, info: LineInfo },
     /// A dynamic list of elements.
@@ -123,6 +155,7 @@ impl Ast {
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
             Ast::FieldAccess { info, .. } => info,
+            Ast::LiteralType { expr, .. } => expr.info(),
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall { info, .. } => info,
             Ast::FunctionDef { info, .. } => info,
@@ -144,6 +177,7 @@ impl Ast {
     pub fn print_sexpr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
+            Ast::LiteralType { expr, .. } => expr.print_sexpr(),
             Ast::Tuple {
                 exprs: elements, ..
             } => format!(

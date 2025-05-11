@@ -148,7 +148,8 @@ impl<'a> Environment<'a> {
             Err(RuntimeError::new(
                 format!("Variable {} already exists", name.clone().yellow()),
                 info.clone(),
-            ))
+            )
+            .with_label("This is defined somewhere else".to_string(), info.clone()))
         } else {
             match value {
                 Value::Function(func) => {

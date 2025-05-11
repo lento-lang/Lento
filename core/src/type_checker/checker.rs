@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedParam},
+    checked_ast::{CheckedAst, CheckedBindPattern, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -226,14 +226,12 @@ impl TypeChecker<'_> {
 
     fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOperatorHandler> {
         let operator: Option<&StaticOperatorHandler> = self.env.operators.iter().find_map(|o| {
-            if o.info.symbol == symbol && o.info.is_static {
-                let OperatorHandler::Static(op) = &o.handler else {
-                    unreachable!("Operator is not static");
-                };
-                Some(op)
-            } else {
-                None
+            if o.info.symbol == symbol {
+                if let OperatorHandler::Static(op) = &o.handler {
+                    return Some(op);
+                }
             }
+            None
         });
         let operator =
             operator.or_else(|| self.parent.and_then(|p| p.lookup_static_operator(symbol)));
@@ -303,6 +301,7 @@ impl TypeChecker<'_> {
                 value: value.clone(),
                 info: info.clone(),
             },
+            Ast::LiteralType { expr } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -345,12 +344,40 @@ impl TypeChecker<'_> {
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier(name, info) => {
+            TypeAst::Identifier { name, info } => {
                 self.lookup_type(name).cloned().ok_or_else(|| {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
+            TypeAst::Constructor { expr, arg, info } => {
+                let expr_info = expr.info();
+                let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
+                    return Err(TypeError::new(
+                        format!(
+                            "Cannot use constructor on non-constructor type {}",
+                            expr.print_sexpr()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label(
+                        format!("This is not a constructable type {}", expr.print_sexpr()),
+                        expr_info.clone(),
+                    )
+                    .into());
+                };
+                let arg = self.check_type_expr(arg)?;
+                Type::Constructor(base_name, vec![arg], base_type)
+            }
+        })
+    }
+
+    fn check_literal_type(&self, expr: &TypeAst) -> TypeResult<CheckedAst> {
+        let info = expr.info();
+        let ty = self.check_type_expr(expr)?;
+        Ok(CheckedAst::LiteralType {
+            value: ty,
+            info: info.clone(),
         })
     }
 
@@ -588,7 +615,7 @@ impl TypeChecker<'_> {
         expr: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        let target = match target {
+        let target_name = match target {
             Ast::Identifier { name, .. } => name,
             _ => {
                 return Err(TypeError::new(
@@ -603,14 +630,18 @@ impl TypeChecker<'_> {
                 .into());
             }
         };
-        if let Some(existing) = self.lookup_local_identifier(target) {
+        if let Some(existing) = self.lookup_local_identifier(target_name) {
             let ty_name = match existing {
                 IdentifierType::Variable(_) => "Variable",
                 IdentifierType::Type(_) => "Type",
                 IdentifierType::Function(_) => "Function",
             };
             return Err(TypeError::new(
-                format!("{} {} already exists", ty_name, target.clone().yellow()),
+                format!(
+                    "{} {} already exists",
+                    ty_name,
+                    target_name.clone().yellow()
+                ),
                 info.clone(),
             )
             .with_hint("Use a different name for the variable".to_string())
@@ -620,38 +651,34 @@ impl TypeChecker<'_> {
         let body_ty = expr.get_type().clone();
         if let Some(ann) = annotation {
             let ann_ty = self.check_type_expr(ann)?;
-            if !ann_ty.subtype(&body_ty).success {
+            if !body_ty.subtype(&ann_ty).success {
                 return Err(TypeError::new(
                     format!(
-						"Type annotation {} does not match the type of the expression {}. Expected {}, found {}",
-						ann_ty.pretty_print_color(),
-						expr.pretty_print(),
-						ann_ty.pretty_print_color(),
-						body_ty.pretty_print_color()
-					),
+                        "{} is not a valid subtype of {}",
+                        expr.pretty_print(),
+                        ann_ty.pretty_print_color(),
+                    ),
                     info.clone(),
                 )
                 .with_label(
-                    "Type annotation does not match the expression".to_string(),
-                    ann.info().clone(),
-                )
-                .with_label(
-                    format!("This is of type {}", body_ty.pretty_print_color()),
+                    format!(
+                        "This should be of type {} but is {}",
+                        ann_ty.pretty_print_color(),
+                        body_ty.pretty_print_color()
+                    ),
                     expr.info().clone(),
                 )
                 .into());
             }
         }
         let assign_info = info.join(expr.info());
-        self.env.add_variable(target, body_ty.clone());
+        self.env.add_variable(target_name, body_ty.clone());
         Ok(CheckedAst::Assignment {
-            target: Box::new(CheckedAst::Identifier {
-                name: target.to_string(),
-                ty: body_ty.clone(),
-                info: info.clone(),
-            }),
+            target: CheckedBindPattern::Variable {
+                name: target_name.to_string(),
+                info: target.info().clone(),
+            },
             expr: Box::new(expr),
-            ty: body_ty,
             info: assign_info,
         })
     }
@@ -784,6 +811,9 @@ impl TypeChecker<'_> {
                         };
                     }
                     self.check_expr(&call)
+                }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in accumulate expressions");
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
@@ -955,6 +985,9 @@ impl TypeChecker<'_> {
 
                     return Ok(result);
                 }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in binary expressions");
+                }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
@@ -1025,6 +1058,9 @@ impl TypeChecker<'_> {
                         info: info.clone(),
                     };
                     return self.check_expr(&call);
+                }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in unary expressions");
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
