@@ -478,22 +478,22 @@ impl CheckedBindPattern {
         }
     }
 
-    pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
+    pub fn specialize(&mut self, _judgements: &TypeJudgements, _changed: &mut bool) {
         match self {
             CheckedBindPattern::Variable { name: _, info: _ } => (),
             CheckedBindPattern::Tuple { elements, info: _ } => {
                 for element in elements {
-                    element.specialize(judgements, changed);
+                    element.specialize(_judgements, _changed);
                 }
             }
             CheckedBindPattern::Record { fields, info: _ } => {
                 for (_, element) in fields {
-                    element.specialize(judgements, changed);
+                    element.specialize(_judgements, _changed);
                 }
             }
             CheckedBindPattern::List { elements, info: _ } => {
                 for element in elements {
-                    element.specialize(judgements, changed);
+                    element.specialize(_judgements, _changed);
                 }
             }
             CheckedBindPattern::Wildcard => (),
