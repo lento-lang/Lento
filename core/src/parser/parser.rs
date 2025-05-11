@@ -26,7 +26,10 @@ use crate::lexer::lexer::Lexer;
 use super::{
     ast::Ast,
     error::{ParseError, ParseOperatorError},
-    op::{OperatorAssociativity, OperatorInfo, OperatorPosition, OperatorPrecedence},
+    op::{
+        Operator, OperatorAssociativity, OperatorHandler, OperatorInfo, OperatorPosition,
+        OperatorPrecedence, StaticOperatorAst,
+    },
 };
 
 /// Token predicates for parsing
@@ -70,7 +73,7 @@ where
     /// - They have different signatures
     /// - They have different positions
     /// - The symbol is a built-in operator that is overloadable
-    operators: HashMap<String, Vec<OperatorInfo>>,
+    operators: HashMap<String, Vec<Operator>>,
     types: HashSet<String>,
 }
 
@@ -111,28 +114,22 @@ impl<R: Read> Parser<R> {
 
     /// Define an operator in the parser.
     /// If the operator already exists with the same signature,
-    pub fn define_op(&mut self, op: OperatorInfo) -> Failable<ParseOperatorError> {
-        if let Some(existing) = self.get_op(&op.symbol) {
-            if op.is_static && !existing.is_empty() {
-                return Err(ParseOperatorError::NonStaticOperatorExists);
-            }
-            if existing.iter().any(|e| e.is_static) {
-                return Err(ParseOperatorError::CannotOverrideStaticOperator);
-            }
-            if existing.iter().any(|e| e.position == op.position) {
+    pub fn define_op(&mut self, op: Operator) -> Failable<ParseOperatorError> {
+        if let Some(existing) = self.get_op(&op.info.symbol) {
+            if existing.iter().any(|e| e.info.position == op.info.position) {
                 // TODO: Compare signatures instead of positions
                 return Err(ParseOperatorError::PositionForSymbolExists);
             }
         }
-        self.lexer.operators.insert(op.symbol.clone());
+        self.lexer.operators.insert(op.info.symbol.clone());
         self.operators
-            .entry(op.symbol.clone())
+            .entry(op.info.symbol.clone())
             .or_default()
             .push(op);
         Ok(())
     }
 
-    pub fn get_op(&self, symbol: &str) -> Option<&Vec<OperatorInfo>> {
+    pub fn get_op(&self, symbol: &str) -> Option<&Vec<Operator>> {
         self.operators.get(symbol)
     }
 
@@ -140,12 +137,12 @@ impl<R: Read> Parser<R> {
         &self,
         symbol: &str,
         pred: impl Fn(&OperatorInfo) -> bool,
-    ) -> Option<&OperatorInfo> {
+    ) -> Option<&Operator> {
         self.get_op(symbol)
-            .and_then(|ops| ops.iter().find(|op| pred(op)))
+            .and_then(|ops| ops.iter().find(|op| pred(&op.info)))
     }
 
-    pub fn find_operator_pos(&self, symbol: &str, pos: OperatorPosition) -> Option<&OperatorInfo> {
+    pub fn find_operator_pos(&self, symbol: &str, pos: OperatorPosition) -> Option<&Operator> {
         self.find_operator(symbol, |op| op.position == pos)
     }
 
@@ -882,10 +879,10 @@ impl<R: Read> Parser<R> {
             TokenKind::Op(op) => {
                 // TODO: Don't lookup operators in the parser, do this in the type checker!
                 if let Some(op) = self.find_operator_pos(&op, OperatorPosition::Prefix) {
-                    let op = op.clone();
+                    let op_info = op.info.clone();
                     let rhs = self.parse_primary()?;
                     Ok(Ast::Unary {
-                        op_info: op.clone(),
+                        op_info,
                         expr: Box::new(rhs),
                         info: t.info,
                     })
@@ -1060,7 +1057,7 @@ impl<R: Read> Parser<R> {
         nt: &LexResult,
         min_prec: OperatorPrecedence,
         allow_eq: bool,
-    ) -> Option<OperatorInfo> {
+    ) -> Option<Operator> {
         let t = nt.as_ref().ok()?;
         let op = if let TokenKind::Op(op) = &t.token {
             op
@@ -1071,10 +1068,10 @@ impl<R: Read> Parser<R> {
             op.position == OperatorPosition::Infix
                 || op.position == OperatorPosition::InfixAccumulate
         })?;
-        let is_infix = op.position.is_infix();
-        let is_greater = op.precedence > min_prec;
-        let is_right_assoc = op.associativity == OperatorAssociativity::Right;
-        let is_equal = op.precedence == min_prec;
+        let is_infix = op.info.position.is_infix();
+        let is_greater = op.info.precedence > min_prec;
+        let is_right_assoc = op.info.associativity == OperatorAssociativity::Right;
+        let is_equal = op.info.precedence == min_prec;
         if is_infix && (is_greater || ((is_right_assoc || allow_eq) && is_equal)) {
             Some(op.clone())
         } else {
@@ -1110,26 +1107,30 @@ impl<R: Read> Parser<R> {
             self.check_op(&nt, min_prec, false)
         } {
             let curr_info = self.lexer.next_token().unwrap().info; // Consume the operator token
-            if curr_op.position.is_accumulate() {
+            if curr_op.info.position.is_accumulate() {
                 expr = self.parse_expr_accum(&curr_op, expr, curr_info)?;
                 continue;
             }
             let mut rhs = self.parse_primary()?;
             while let Some(next_op) = {
                 let nt = self.lexer.peek_token(0);
-                self.check_op(&nt, curr_op.precedence, false)
+                self.check_op(&nt, curr_op.info.precedence, false)
             } {
-                rhs = self.parse_expr(rhs, Self::next_prec(&curr_op, &next_op))?;
+                rhs = self.parse_expr(rhs, Self::next_prec(&curr_op.info, &next_op.info))?;
             }
-            if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op, &rhs) {
+            if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op.info, &rhs) {
                 expr = desugar;
             } else {
                 let info = expr.info().join(rhs.info());
-                expr = Ast::Binary {
-                    lhs: Box::new(expr),
-                    op_info: curr_op.clone(),
-                    rhs: Box::new(rhs),
-                    info,
+                expr = if let OperatorHandler::Parse(handler) = curr_op.handler {
+                    handler(StaticOperatorAst::Infix(expr, rhs))
+                } else {
+                    Ast::Binary {
+                        lhs: Box::new(expr),
+                        op_info: curr_op.info.clone(),
+                        rhs: Box::new(rhs),
+                        info,
+                    }
                 };
             }
         }
@@ -1138,21 +1139,21 @@ impl<R: Read> Parser<R> {
 
     /// Expect the parser state to be at the end of [expr, op] sequence.
     /// Next token should be a new expression or a terminator.
-    fn parse_expr_accum(&mut self, op: &OperatorInfo, first: Ast, info: LineInfo) -> ParseResult {
+    fn parse_expr_accum(&mut self, op: &Operator, first: Ast, info: LineInfo) -> ParseResult {
         let mut exprs = vec![first];
         while let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
-            if op.allow_trailing && t.token.is_terminator() {
+            if op.info.allow_trailing && t.token.is_terminator() {
                 break;
             }
 
             // Parse the next nested expression in the sequence
             let lhs = self.parse_primary()?;
-            exprs.push(self.parse_expr(lhs, op.precedence)?);
+            exprs.push(self.parse_expr(lhs, op.info.precedence)?);
 
             // Expect the next token to be the same operator or another expression
             let nt = self.lexer.peek_token_not(pred::ignored, 0);
-            if let Some(next_op) = self.check_op(&nt, op.precedence, true) {
-                if !next_op.eq(op) {
+            if let Some(next_op) = self.check_op(&nt, op.info.precedence, true) {
+                if !next_op.info.eq(&op.info) {
                     break;
                 }
                 self.lexer.read_next_token_not(pred::ignored).unwrap(); // Consume the operator token
@@ -1160,12 +1161,18 @@ impl<R: Read> Parser<R> {
                 break;
             }
         }
-        let info = info.join(exprs.last().unwrap().info());
-        Ok(Ast::Accumulate {
-            op_info: op.clone(),
-            exprs,
-            info,
-        })
+        let expr = if let OperatorHandler::Parse(handler) = &op.handler {
+            handler(StaticOperatorAst::Accumulate(exprs))
+        } else {
+            let info = info.join(exprs.last().unwrap().info());
+            Ast::Accumulate {
+                op_info: op.info.clone(),
+                exprs,
+                info,
+            }
+        };
+
+        Ok(expr)
     }
 
     /// Parse a top-level expression.

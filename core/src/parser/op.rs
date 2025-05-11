@@ -155,8 +155,6 @@ pub struct OperatorInfo {
     pub precedence: OperatorPrecedence,
     /// The associativity of the operator
     pub associativity: OperatorAssociativity,
-    /// If the operator is static (compile-time) or runtime (execution-time)
-    pub is_static: bool,
     /// If the operator allows trailing arguments
     ///
     /// ## Note
@@ -179,6 +177,8 @@ pub struct RuntimeOperatorHandler {
     pub signature: OperatorSignature,
 }
 
+pub type ParseOperatorHandler = fn(StaticOperatorAst) -> Ast;
+
 #[derive(Clone, Debug)]
 pub struct StaticOperatorHandler {
     pub signature: OperatorSignature,
@@ -189,6 +189,8 @@ pub struct StaticOperatorHandler {
 pub enum OperatorHandler {
     /// Runtime operators (functions)
     Runtime(RuntimeOperatorHandler),
+    /// Parse-time operators (macros)
+    Parse(ParseOperatorHandler),
     /// The compile-time handler for the operator
     /// (macros or syntax extensions/sugar)
     /// 1. The signature of the operator. This is used for type checking and inference on the operator in expressions.
@@ -207,13 +209,12 @@ pub struct Operator {
 
 impl Operator {
     pub fn signature(&self) -> OperatorSignature {
-        match self.handler {
-            OperatorHandler::Runtime(RuntimeOperatorHandler { ref signature, .. }) => {
-                signature.clone()
+        match &self.handler {
+            OperatorHandler::Runtime(RuntimeOperatorHandler { signature, .. }) => signature.clone(),
+            OperatorHandler::Parse(_) => {
+                panic!("Parse operator does not have a signature")
             }
-            OperatorHandler::Static(StaticOperatorHandler { ref signature, .. }) => {
-                signature.clone()
-            }
+            OperatorHandler::Static(StaticOperatorHandler { signature, .. }) => signature.clone(),
         }
     }
 
@@ -234,7 +235,6 @@ impl Operator {
                 precedence,
                 associativity,
                 allow_trailing,
-                is_static: false,
             },
             handler: OperatorHandler::Runtime(RuntimeOperatorHandler {
                 function_name,
@@ -262,9 +262,30 @@ impl Operator {
                 precedence,
                 associativity,
                 allow_trailing,
-                is_static: true,
             },
             handler: OperatorHandler::Static(StaticOperatorHandler { signature, handler }),
+        }
+    }
+
+    pub fn new_parse(
+        name: String,
+        symbol: String,
+        position: OperatorPosition,
+        precedence: OperatorPrecedence,
+        associativity: OperatorAssociativity,
+        allow_trailing: bool,
+        handler: ParseOperatorHandler,
+    ) -> Self {
+        Self {
+            info: OperatorInfo {
+                name,
+                symbol,
+                position,
+                precedence,
+                associativity,
+                allow_trailing,
+            },
+            handler: OperatorHandler::Parse(handler),
         }
     }
 }

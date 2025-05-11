@@ -226,14 +226,12 @@ impl TypeChecker<'_> {
 
     fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOperatorHandler> {
         let operator: Option<&StaticOperatorHandler> = self.env.operators.iter().find_map(|o| {
-            if o.info.symbol == symbol && o.info.is_static {
-                let OperatorHandler::Static(op) = &o.handler else {
-                    unreachable!("Operator is not static");
-                };
-                Some(op)
-            } else {
-                None
+            if o.info.symbol == symbol {
+                if let OperatorHandler::Static(op) = &o.handler {
+                    return Some(op);
+                }
             }
+            None
         });
         let operator =
             operator.or_else(|| self.parent.and_then(|p| p.lookup_static_operator(symbol)));
@@ -811,6 +809,9 @@ impl TypeChecker<'_> {
                     }
                     self.check_expr(&call)
                 }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in accumulate expressions");
+                }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
                     self.check_expr(&handler(StaticOperatorAst::Accumulate(operands.to_vec()))?)
@@ -981,6 +982,9 @@ impl TypeChecker<'_> {
 
                     return Ok(result);
                 }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in binary expressions");
+                }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
@@ -1051,6 +1055,9 @@ impl TypeChecker<'_> {
                         info: info.clone(),
                     };
                     return self.check_expr(&call);
+                }
+                OperatorHandler::Parse(_) => {
+                    unreachable!("Parse operators are not supported in unary expressions");
                 }
                 OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
