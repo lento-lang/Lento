@@ -10,11 +10,11 @@ use colorful::Colorful;
 use crate::{
     interpreter::value::{RecordKey, Value},
     lexer::{
-        lexer::{self, LexResult},
+        lexer,
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{TokenInfo, TokenKind},
     },
-    parser::ast::{ParamAst, TypeAst},
+    parser::op::prec,
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -25,12 +25,54 @@ use crate::lexer::lexer::Lexer;
 
 use super::{
     ast::Ast,
-    error::{ParseError, ParseOperatorError},
-    op::{
-        Operator, OperatorAssociativity, OperatorHandler, OperatorInfo, OperatorPosition,
-        OperatorPrecedence, StaticOperatorAst,
-    },
+    error::{ParseError, ParserOpError},
+    op::{OpAssoc, OpInfo, OpPos, OpPrec},
 };
+
+const SEMICOLON: &str = ";";
+const COMMA: &str = ",";
+const ASSIGNMENT: &str = "=";
+const MEMBER_ACCESS: &str = ".";
+
+/// Default operators used in the language grammar and required for parsing. \
+/// These operators are defined in the parser and are required to produce valid ASTs. \
+/// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top_expr` expression.
+/// - `semicolon`: `;` - Used to separate statements becomes an `Ast::Block` node.
+/// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
+/// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Assignment` node.
+/// - `member access`: `.` - Used to access members of records becomes an `Ast::MemberAccess` node.
+pub fn default_operators() -> Vec<OpInfo> {
+    vec![
+        OpInfo {
+            symbol: SEMICOLON.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::SEMICOLON,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: COMMA.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::COMMA,
+            associativity: OpAssoc::Left,
+            allow_trailing: true,
+        },
+        OpInfo {
+            symbol: ASSIGNMENT.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::ASSIGNMENT,
+            associativity: OpAssoc::Right,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: MEMBER_ACCESS.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::MEMBER_ACCESS,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+    ]
+}
 
 /// Token predicates for parsing
 mod pred {
@@ -47,6 +89,30 @@ mod pred {
     pub fn ignored(t: &TokenKind) -> bool {
         matches!(t, TokenKind::Comment(_) | TokenKind::Newline)
     }
+}
+
+//--------------------------------------------------------------------------------------//
+//                               Parser Factory Functions                               //
+//--------------------------------------------------------------------------------------//
+
+pub fn from_file(file: File) -> Parser<BufReader<File>> {
+    Parser::new(lexer::from_file(file))
+}
+
+pub fn from_string(source: String) -> Parser<Cursor<String>> {
+    Parser::new(lexer::from_string(source))
+}
+
+pub fn from_str(source: &str) -> Parser<BytesReader<'_>> {
+    Parser::new(lexer::from_str(source))
+}
+
+pub fn from_stdin() -> Parser<StdinReader> {
+    Parser::new(lexer::from_stdin())
+}
+
+pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
+    Parser::new(lexer::from_stream(reader))
 }
 
 //--------------------------------------------------------------------------------------//
@@ -73,7 +139,7 @@ where
     /// - They have different signatures
     /// - They have different positions
     /// - The symbol is a built-in operator that is overloadable
-    operators: HashMap<String, Vec<Operator>>,
+    operators: HashMap<String, Vec<OpInfo>>,
     types: HashSet<String>,
 }
 
@@ -84,6 +150,7 @@ impl<R: Read> Parser<R> {
             operators: HashMap::new(),
             types: HashSet::new(),
         }
+        .init_default_operators()
     }
 
     pub fn get_lexer(&mut self) -> &mut Lexer<R> {
@@ -112,37 +179,41 @@ impl<R: Read> Parser<R> {
         self.types.contains(name)
     }
 
+    /// Initialize the parser with default operators.
+    fn init_default_operators(mut self) -> Self {
+        default_operators().into_iter().for_each(|op| {
+            self.define_op(op)
+                .expect("Failed to define default operator")
+        });
+        self
+    }
+
     /// Define an operator in the parser.
     /// If the operator already exists with the same signature,
-    pub fn define_op(&mut self, op: Operator) -> Failable<ParseOperatorError> {
-        if let Some(existing) = self.get_op(&op.info.symbol) {
-            if existing.iter().any(|e| e.info.position == op.info.position) {
-                // TODO: Compare signatures instead of positions
-                return Err(ParseOperatorError::PositionForSymbolExists);
+    pub fn define_op(&mut self, op: OpInfo) -> Failable<ParserOpError> {
+        if let Some(existing) = self.get_op(&op.symbol) {
+            if existing.iter().any(|e| e.position == op.position) {
+                return Err(ParserOpError::AlreadyExists);
             }
         }
-        self.lexer.operators.insert(op.info.symbol.clone());
+        self.lexer.add_operator(op.symbol.clone());
         self.operators
-            .entry(op.info.symbol.clone())
+            .entry(op.symbol.clone())
             .or_default()
             .push(op);
         Ok(())
     }
 
-    pub fn get_op(&self, symbol: &str) -> Option<&Vec<Operator>> {
+    pub fn get_op(&self, symbol: &str) -> Option<&Vec<OpInfo>> {
         self.operators.get(symbol)
     }
 
-    pub fn find_operator(
-        &self,
-        symbol: &str,
-        pred: impl Fn(&OperatorInfo) -> bool,
-    ) -> Option<&Operator> {
+    pub fn find_operator(&self, symbol: &str, pred: impl Fn(&OpInfo) -> bool) -> Option<&OpInfo> {
         self.get_op(symbol)
-            .and_then(|ops| ops.iter().find(|op| pred(&op.info)))
+            .and_then(|ops| ops.iter().find(|op| pred(op)))
     }
 
-    pub fn find_operator_pos(&self, symbol: &str, pos: OperatorPosition) -> Option<&Operator> {
+    pub fn find_operator_pos(&self, symbol: &str, pos: OpPos) -> Option<&OpInfo> {
         self.find_operator(symbol, |op| op.position == pos)
     }
 
@@ -164,45 +235,41 @@ impl<R: Read> Parser<R> {
         Ok(ast)
     }
 
-    /// Parse a global AST from the stream of tokens.
-    /// A global AST is a list of **all** top-level AST nodes (expressions).
-    pub fn parse_all(&mut self) -> ParseResults {
-        let mut asts = Vec::new();
-        loop {
-            if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
-                if pred::eof(&t.token) {
-                    break;
-                }
-            }
-            match self.parse_top_expr() {
-                Ok(expr) => asts.push(expr),
-                Err(e) => return Err(e),
-            }
+    fn parse_expected(
+        &mut self,
+        condition: impl FnOnce(&TokenKind) -> bool,
+        symbol: &'static str,
+    ) -> Result<TokenInfo, ParseError> {
+        match self.lexer.expect_next_token_not(pred::ignored) {
+            Ok(t) if condition(&t.token) => Ok(t),
+            Ok(t) => Err(ParseError::new(
+                format!(
+                    "Expected {} but found {}",
+                    symbol.yellow(),
+                    t.token.to_string().light_red()
+                ),
+                t.info.clone(),
+            )
+            .with_label(format!("This should be a {}", symbol), t.info)),
+            Err(err) => Err(ParseError::new(
+                format!("Expected {}", symbol.yellow(),),
+                err.info().clone(),
+            )
+            .with_label(err.message().to_owned(), err.info().clone())),
         }
-        Ok(asts)
     }
 
-    /// Parse **a single** expression from the stream of tokens.
-    /// Returns an AST node or an error.
-    /// If the first token is an EOF, then the parser will return an empty unit expression.
-    ///
-    /// # Note
-    /// The parser will not necessarily consume all tokens from the stream.
-    /// It will **ONLY** consume a whole complete expression.
-    /// There may be remaining tokens in the stream after the expression is parsed.
-    pub fn parse_one(&mut self) -> ParseResult {
-        // Check if the next token is an EOF, then return an empty unit top-level expression
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
-            if pred::eof(&t.token) {
-                return Ok(Ast::Literal {
-                    value: Value::Unit,
-                    info: t.info,
-                });
-            }
-        }
-        self.parse_top_expr()
+    fn parse_expected_eq(
+        &mut self,
+        expected_token: TokenKind,
+        symbol: &'static str,
+    ) -> Result<TokenInfo, ParseError> {
+        self.parse_expected(|t| t == &expected_token, symbol)
     }
 
+    // ======================================== EXPRESSION PARSING ======================================== //
+
+    /// Parse a literal `Value` from the lexer.
     fn parse_literal(&mut self, token: &TokenKind, info: LineInfo) -> ParseResult {
         Ok(Ast::Literal {
             value: match token {
@@ -225,94 +292,31 @@ impl<R: Read> Parser<R> {
         })
     }
 
-    /// Parse a parenthesized function call.
-    /// This function is called when the parser encounters an identifier followed by a left parenthesis.
-    /// The parser will then attempt to parse the function call.
+    /// Parse a tuple from the lexer.
+    ///
+    /// ## Examples
     /// ```ignored
-    /// func(a, b, c)
+    /// x = (1, 2, 3)
     /// ```
-    /// If the next token is an assignment operator `=`, then the parser will attempt to parse a function definition.
-    /// ```ignored
-    /// func(a, str b, int c) = expr
-    /// ```
-    fn parse_paren_call_or_def(&mut self, id: String, info: LineInfo) -> ParseResult {
-        log::trace!("Parsing parenthesized function call: {}", id);
-        let mut args = Vec::new();
+    fn parse_tuple(&mut self, start_info: LineInfo) -> ParseResult {
+        // Tuples are defined by a comma-separated list of expressions
+        let mut explicit_single = false;
+        let mut exprs = Vec::new();
         while let Ok(end) = self.lexer.peek_token(0) {
             if end.token == TokenKind::RightParen {
                 break;
             }
-            args.push(self.parse_top_expr()?);
+            exprs.push(self.parse_top_expr()?);
             if let Ok(nt) = self.lexer.peek_token(0) {
                 if nt.token == TokenKind::Comma {
                     self.lexer.next_token().unwrap();
+                    if self.lexer.peek_token(0).unwrap().token == TokenKind::RightParen {
+                        explicit_single = true;
+                        // Break in the next iteration
+                    }
                     continue;
                 } else if nt.token == TokenKind::RightParen {
                     break;
-                } else if let TokenKind::Identifier(param_name) = nt.token {
-                    // Found (..., ty id) in an argument list.
-                    // Check if `ty` is an identifier
-                    if args.iter().all(|arg| matches!(arg, Ast::Identifier { .. })) {
-                        let Ast::Identifier {
-                            name: param_type,
-                            info: param_info,
-                        } = args.pop().unwrap()
-                        else {
-                            unreachable!("All arguments should be identifiers");
-                        };
-                        // Found a type identifier in a function call.
-                        // Try to parse the rest as a function definition if all args are identifiers.
-                        self.lexer.next_token().unwrap(); // Consume the `param_name` identifier
-                                                          // Remove the last argument
-                                                          // Expect the next token to be a comma or right paren
-                        if let Ok(nt) = self.lexer.peek_token(0) {
-                            if nt.token == TokenKind::Comma {
-                                self.lexer.next_token().unwrap();
-                            } else if nt.token == TokenKind::RightParen {
-                                // Continue parsing the function definition
-                                // The ) will be consumed by the `parse_func_def` function
-                            } else {
-                                return Err(ParseError::new(
-                                    format!(
-                                        "Expected {} or {}, but found {}",
-                                        ",".yellow(),
-                                        ")".yellow(),
-                                        nt.token.to_string().light_red()
-                                    ),
-                                    info,
-                                )
-                                .with_label(
-                                    "This should be either a comma or a right parenthesis"
-                                        .to_string(),
-                                    nt.info,
-                                ));
-                            }
-                        }
-                        return self.parse_func_def_paren(
-                            None,
-                            id,
-                            info,
-                            args.iter()
-                                .map(|arg| match arg {
-                                    Ast::Identifier { name: id, info } => ParamAst {
-                                        name: id.clone(),
-                                        ty: None,
-                                        info: info.clone(),
-                                    },
-                                    _ => unreachable!(),
-                                })
-                                // Also add the current parameter
-                                .chain([ParamAst {
-                                    name: param_name,
-                                    ty: Some(TypeAst::Identifier {
-                                        name: param_type,
-                                        info: param_info.clone(),
-                                    }),
-                                    info: param_info,
-                                }])
-                                .collect(),
-                        );
-                    }
                 }
             }
             if let Ok(nt) = self.lexer.peek_token(0) {
@@ -323,7 +327,7 @@ impl<R: Read> Parser<R> {
                         ")".yellow(),
                         nt.token.to_string().light_red()
                     ),
-                    info,
+                    nt.info.clone(),
                 )
                 .with_label(
                     "This should be either a comma or a right parenthesis".to_string(),
@@ -332,415 +336,82 @@ impl<R: Read> Parser<R> {
             } else {
                 return Err(ParseError::new(
                     "Unexpected end of program".to_string(),
-                    LineInfo::eof(info.start, self.lexer.current_index()),
+                    LineInfo::eof(start_info.end, self.lexer.current_index()),
                 ));
             }
         }
-        self.parse_expected(TokenKind::RightParen, ")")?;
-
-        if let Some(func_def) = self.try_parse_func_def_no_types(&id, &info, &args) {
-            return func_def;
-        }
-
-        log::trace!(
-            "Parsed function call: {}({})",
-            id,
-            args.iter()
-                .map(Ast::print_sexpr)
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-        Ok(syntax_sugar::roll_function_call(id, args, info))
-        // Ok(Ast::Call(id, args))
-    }
-
-    /// If we encountered an expression like:
-    /// ```lento
-    /// func(a, b, c)
-    /// ```
-    /// Check if the subsequent token is an assignment operator `=`.
-    /// If it is, then we have a function definition of the form:
-    /// ```lento
-    /// func(a, b, c) = expr
-    /// ```
-    fn try_parse_func_def_no_types(
-        &mut self,
-        func_name: &str,
-        info: &LineInfo,
-        args: &[Ast],
-    ) -> Option<ParseResult> {
-        if let Ok(ref nt) = self.lexer.peek_token(0) {
-            if let TokenKind::Op(ref op) = nt.token {
-                if op == "=" {
-                    // If all arguments are identifiers, then this is a function definition
-                    if args.iter().all(|arg| matches!(arg, Ast::Identifier { .. })) {
-                        log::trace!(
-                            "Parsed function definition: {}({:?}) -> {:?}",
-                            func_name,
-                            args,
-                            nt
-                        );
-                        self.lexer.next_token().unwrap();
-                        let body = match self.parse_top_expr() {
-                            Ok(body) => body,
-                            Err(err) => {
-                                log::warn!("Failed to parse function body: {}", err.message());
-                                return Some(Err(err));
-                            }
-                        };
-                        let params = args
-                            .iter()
-                            .map(|arg| match arg {
-                                Ast::Identifier { name: id, info } => ParamAst {
-                                    name: id.clone(),
-                                    ty: None,
-                                    info: info.clone(),
-                                },
-                                _ => unreachable!(),
-                            })
-                            .collect::<Vec<_>>();
-                        // Roll functions into single param definitions
-                        let function = syntax_sugar::roll_function_definition(params, body);
-                        let assign_info = info.join(function.info());
-                        return Some(Ok(Ast::Assignment {
-                            annotation: None,
-                            target: Box::new(Ast::Identifier {
-                                name: func_name.to_string(),
-                                info: info.clone(),
-                            }),
-                            expr: Box::new(function),
-                            info: assign_info,
-                        }));
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// Parse a function definition without parentheses, like:
-    /// ```lento
-    /// int f int x = x + 5
-    /// f x = x + 5
-    /// f int x, int y = x + y
-    /// ```
-    fn parse_func_def_no_parens(
-        &mut self,
-        ret_type: Option<TypeAst>,
-        name: String,
-        info: LineInfo,
-    ) -> Option<ParseResult> {
-        log::trace!(
-            "Parsing function definition without parentheses: {} -> {:?}",
-            name,
-            ret_type
-        );
-        let mut params = Vec::new();
-
-        // Parse parameters until we find an equals sign or block start
-        while let Ok(nt) = self.lexer.peek_token(0) {
-            if nt.token == TokenKind::Op("=".into()) || nt.token == TokenKind::LeftBrace {
-                break;
-            }
-
-            // Handle optional parentheses around parameters
-            let has_parens = if matches!(nt.token, TokenKind::LeftParen { .. }) {
-                self.lexer.next_token().unwrap(); // Consume the left paren
-                true
-            } else {
-                false
-            };
-
-            // Try to parse a type if present
-            let ty = if let Some(t) = self.try_parse_type_expr(&nt) {
-                self.lexer.next_token().unwrap(); // Consume the type token
-                Some(t)
-            } else {
-                None
-            };
-
-            // Parse parameter name
-            let (param_name, param_info) = match self.lexer.next_token() {
-                Ok(t) => match t.token {
-                    TokenKind::Identifier(id) => (id, t.info),
-                    _ => {
-                        return Some(Err(ParseError::new(
-                            format!(
-                                "Expected parameter name, but found {}",
-                                t.token.to_string().light_red()
-                            ),
-                            info,
-                        )
-                        .with_label("This is not a valid identifier".to_string(), t.info)));
-                    }
-                },
-                Err(err) => {
-                    return Some(Err(ParseError::new(
-                        "Failed to parse parameter name".to_string(),
-                        LineInfo::eof(info.end, self.lexer.current_index()),
-                    )
-                    .with_label(err.message().to_owned(), err.info().clone())));
-                }
-            };
-
-            params.push(ParamAst {
-                name: param_name,
-                ty,
-                info: param_info,
-            });
-
-            // Check for comma or end
-            if let Ok(nt) = self.lexer.peek_token(0) {
-                if nt.token == TokenKind::Comma {
-                    self.lexer.next_token().unwrap();
-                    continue;
-                } else if has_parens && nt.token == TokenKind::RightParen {
-                    self.lexer.next_token().unwrap(); // Consume the right paren
-                    break;
-                } else if nt.token == TokenKind::Op("=".into()) || nt.token == TokenKind::LeftBrace
-                {
-                    break;
-                } else {
-                    return Some(Err(ParseError::new(
-											format!(
-												"Expected {}, {}, {} or {}, but found {}",
-												",".yellow(),
-												")".yellow(),
-												"=".yellow(),
-												"{".yellow(),
-												nt.token.to_string().light_red()
-											),
-											info,
-										)
-										.with_label(
-											"This should be either a comma, right parenthesis, equals sign or block start".to_string(),
-											nt.info,
-										)));
-                }
-            }
-        }
-
-        // Parse body
-        let body = if let Ok(nt) = self.lexer.peek_token(0) {
-            if nt.token == TokenKind::LeftBrace {
-                self.lexer.next_token().unwrap(); // Consume the left brace
-                let mut exprs = Vec::new();
-                while let Ok(end) = self.lexer.peek_token(0) {
-                    if end.token == TokenKind::RightBrace {
-                        self.lexer.next_token().unwrap(); // Consume the right brace
-                        break;
-                    }
-                    let expr = match self.parse_top_expr() {
-                        Ok(expr) => expr,
-                        Err(err) => {
-                            log::warn!("Failed to parse function body: {}", err.message());
-                            return Some(Err(err));
-                        }
-                    };
-                    exprs.push(expr);
-                    if let Ok(nt) = self.lexer.peek_token(0) {
-                        if nt.token == TokenKind::RightBrace {
-                            self.lexer.next_token().unwrap(); // Consume the right brace
-                            break;
-                        }
-                    }
-                }
-                Ast::Block {
-                    exprs,
-                    info: info.clone(),
-                }
-            } else {
-                Some(self.parse_expected(TokenKind::Op("=".into()), "="))?;
-                match self.parse_top_expr() {
-                    Ok(body) => body,
-                    Err(err) => {
-                        log::warn!("Failed to parse function body: {}", err.message());
-                        return Some(Err(err));
-                    }
-                }
-            }
+        let end = self.parse_expected_eq(TokenKind::RightParen, ")")?;
+        if exprs.len() == 1 && !explicit_single {
+            Ok(exprs.pop().unwrap())
         } else {
-            return Some(Err(ParseError::new(
-                "Unexpected end of program".to_string(),
-                LineInfo::eof(info.end, self.lexer.current_index()),
-            )));
-        };
-
-        log::trace!(
-            "Parsed function definition: {}({:?}) -> {:?}",
-            name,
-            params,
-            body
-        );
-
-        let function = syntax_sugar::roll_function_definition(params, body);
-        let assign_info = info.join(function.info());
-        Some(Ok(Ast::Assignment {
-            annotation: ret_type,
-            target: Box::new(Ast::Identifier {
-                name,
-                info: info.clone(),
-            }),
-            expr: Box::new(function),
-            info: assign_info,
-        }))
+            Ok(Ast::Tuple {
+                exprs,
+                info: start_info.join(&end.info),
+            })
+        }
     }
 
-    /// If we encountered an expression like:
-    /// ```lento
-    /// int func(
-    /// ```
-    /// or
-    /// ```lento
-    /// func(int a
-    /// ```
-    /// Then we have a function definition of the form:
-    /// ```lento
-    /// int func(...) = expr
-    /// ```
-    /// or
-    /// ```lento
-    /// func(int a, ...) = expr
-    /// ```
-    fn parse_func_def_paren(
-        &mut self,
-        ret_type: Option<TypeAst>,
-        name: String,
-        info: LineInfo,
-        parsed_params: Vec<ParamAst>,
-        parenthesis: bool,
-    ) -> ParseResult {
-        log::trace!("Parsing function definition: {} -> {:?}", name, ret_type);
-        let mut params = parsed_params;
+    fn parse_record_or_block(&mut self, start_info: LineInfo) -> ParseResult {
+        // Try to parse as record
+        if let Some(res) = self.parse_record_fields(&start_info) {
+            res
+        } else {
+            // Parse as block
+            let mut exprs = Vec::new();
+            while let Ok(end) = self.lexer.peek_token(0) {
+                if end.token == TokenKind::RightBrace {
+                    break;
+                }
+                exprs.push(self.parse_top_expr()?);
+            }
+            let last = self.parse_expected_eq(TokenKind::RightBrace, "}")?;
+            Ok(Ast::Block {
+                exprs,
+                info: start_info.join(&last.info),
+            })
+        }
+    }
+
+    fn parse_list(&mut self, start_info: LineInfo) -> ParseResult {
+        let mut exprs = Vec::new();
         while let Ok(end) = self.lexer.peek_token(0) {
-            if parenthesis && end.token == TokenKind::RightParen {
+            if end.token == TokenKind::RightBracket {
                 break;
             }
-            let nt = self
-                .lexer
-                .expect_next_token_not(pred::ignored)
-                .map_err(|err| {
-                    ParseError::new("Expected type expression".to_string(), err.info().clone())
-                })?;
-            let ty = self.try_parse_type_expr(&nt);
-            let param_token = if ty.is_some() {
-                match self.lexer.next_token() {
-                    Ok(t) => t,
-                    Err(err) => {
-                        return Err(ParseError::new(
-                            "Failed to parse parameter name".to_string(),
-                            LineInfo::eof(info.end, self.lexer.current_index()),
-                        )
-                        .with_label(err.message().to_owned(), err.info().clone()));
-                    }
-                }
-            } else {
-                // Re-try parsing the same token as a parameter name
-                nt
-            };
-            let (param_name, param_info) = match param_token.token {
-                TokenKind::Identifier(id) => (id, param_token.info),
-                _ => {
-                    return Err(ParseError::new(
-                        format!(
-                            "Expected parameter name, but found {}",
-                            param_token.token.to_string().light_red()
-                        ),
-                        info,
-                    )
-                    .with_label(
-                        "This is not a valid identifier".to_string(),
-                        param_token.info,
-                    ));
-                }
-            };
-            params.push(ParamAst {
-                name: param_name,
-                ty,
-                info: param_info,
-            });
+            exprs.push(self.parse_top_expr()?);
             if let Ok(nt) = self.lexer.peek_token(0) {
                 if nt.token == TokenKind::Comma {
                     self.lexer.next_token().unwrap();
                     continue;
-                } else if parenthesis && nt.token == TokenKind::RightParen {
+                } else if nt.token == TokenKind::RightBracket {
                     break;
-                } else {
-                    return Err(ParseError::new(
-                        format!(
-                            "Expected {} or {}, but found {}",
-                            ",".yellow(),
-                            ")".yellow(),
-                            nt.token.to_string().light_red()
-                        ),
-                        info,
-                    )
-                    .with_label(
-                        format!("This should be either {} or {}", ",".yellow(), ")".yellow()),
-                        nt.info,
-                    ));
                 }
+            }
+            if let Ok(nt) = self.lexer.peek_token(0) {
+                return Err(ParseError::new(
+                    format!(
+                        "Expected {} or {}, but found {}",
+                        ",".yellow(),
+                        "]".yellow(),
+                        nt.token.to_string().light_red()
+                    ),
+                    nt.info.clone(),
+                )
+                .with_label(
+                    "This should be either a comma or a right bracket".to_string(),
+                    nt.info,
+                ));
             } else {
                 return Err(ParseError::new(
                     "Unexpected end of program".to_string(),
-                    LineInfo::eof(info.end, self.lexer.current_index()),
+                    LineInfo::eof(start_info.end, self.lexer.current_index()),
                 ));
             }
         }
-        if parenthesis {
-            self.parse_expected(TokenKind::RightParen, ")")?;
-        }
-
-        // Parse body
-        let body = if let Ok(nt) = self.lexer.peek_token(0) {
-            if nt.token == TokenKind::LeftBrace {
-                self.lexer.next_token().unwrap(); // Consume the left brace
-                let mut exprs = Vec::new();
-                while let Ok(end) = self.lexer.peek_token(0) {
-                    if end.token == TokenKind::RightBrace {
-                        self.lexer.next_token().unwrap(); // Consume the right brace
-                        break;
-                    }
-                    exprs.push(self.parse_top_expr()?);
-                    if let Ok(nt) = self.lexer.peek_token(0) {
-                        if nt.token == TokenKind::RightBrace {
-                            self.lexer.next_token().unwrap(); // Consume the right brace
-                            break;
-                        }
-                    }
-                }
-                Ast::Block {
-                    exprs,
-                    info: info.clone(),
-                }
-            } else {
-                self.parse_expected(TokenKind::Op("=".into()), "=")?;
-                self.parse_top_expr()?
-            }
-        } else {
-            return Err(ParseError::new(
-                "Unexpected end of program".to_string(),
-                LineInfo::eof(info.end, self.lexer.current_index()),
-            ));
-        };
-
-        log::trace!(
-            "Parsed function definition: {}({:?}) -> {:?}",
-            name,
-            params,
-            body
-        );
-
-        let function = syntax_sugar::roll_function_definition(params, body);
-        let assign_info = info.join(function.info());
-        Ok(Ast::Assignment {
-            annotation: ret_type,
-            target: Box::new(Ast::Identifier {
-                name,
-                info: info.clone(),
-            }),
-            expr: Box::new(function),
-            info: assign_info,
+        let last = self.parse_expected_eq(TokenKind::RightBracket, "]")?;
+        Ok(Ast::List {
+            exprs,
+            info: start_info.join(&last.info),
         })
     }
 
@@ -760,7 +431,7 @@ impl<R: Read> Parser<R> {
     /// the expected tokens.
     ///
     /// # Examples
-    /// ```
+    /// ```d
     /// let mut parser = Parser::new(lexer);
     /// if let Some(result) = parser.parse_record_fields() {
     ///     match result {
@@ -772,7 +443,7 @@ impl<R: Read> Parser<R> {
     /// }
     /// ```
     #[allow(clippy::type_complexity)]
-    fn parse_record_fields(&mut self, first_info: &LineInfo) -> Option<Result<Ast, ParseError>> {
+    fn parse_record_fields(&mut self, start_info: &LineInfo) -> Option<Result<Ast, ParseError>> {
         let mut fields = Vec::new();
         // Initial soft parse to check if the record is empty
         // Or if it is a block
@@ -798,7 +469,7 @@ impl<R: Read> Parser<R> {
             }
             // If we found both a valid key and a colon, we found a record!
             self.lexer.next_token().unwrap();
-            self.parse_expected(TokenKind::Colon, ":").ok()?;
+            self.parse_expected_eq(TokenKind::Colon, ":").ok()?;
             let value = self.parse_top_expr().ok()?;
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
@@ -818,7 +489,7 @@ impl<R: Read> Parser<R> {
                                 "}".yellow(),
                                 t.token.to_string().light_red()
                             ),
-                            first_info.join(&t.info),
+                            start_info.join(&t.info),
                         )
                         .with_label(
                             "This should be either a comma or a right brace".to_string(),
@@ -846,12 +517,12 @@ impl<R: Read> Parser<R> {
                             "Expected record key, but found {}",
                             t.token.to_string().light_red()
                         ),
-                        first_info.join(&t.info),
+                        start_info.join(&t.info),
                     )
                     .with_label("This is not a valid record key".to_string(), t.info)));
                 }
             };
-            if let Err(err) = self.parse_expected(TokenKind::Colon, ":") {
+            if let Err(err) = self.parse_expected_eq(TokenKind::Colon, ":") {
                 return Some(Err(err));
             }
             let value = match self.parse_top_expr() {
@@ -874,7 +545,7 @@ impl<R: Read> Parser<R> {
                                 "}".yellow(),
                                 t.token.to_string().light_red()
                             ),
-                            first_info.join(&t.info),
+                            start_info.join(&t.info),
                         )
                         .with_label(
                             "This should be either a comma or a right brace".to_string(),
@@ -886,138 +557,8 @@ impl<R: Read> Parser<R> {
         }
         Some(Ok(Ast::Record {
             fields,
-            info: first_info.join(&last_info),
+            info: start_info.join(&last_info),
         }))
-    }
-
-    fn try_parse_type_expr(&mut self, t: &TokenInfo) -> Option<TypeAst> {
-        match &t.token {
-            TokenKind::Identifier(id) if self.is_type(id) => {
-                self.lexer.next_token().unwrap(); // Consume the type identifier
-
-                // Check to see if the next token is a type constructor
-                let nt = self
-                    .lexer
-                    .peek_token_not(pred::ignored, 0)
-                    .unwrap_or(TokenInfo {
-                        token: TokenKind::EndOfFile,
-                        info: LineInfo::default(),
-                    });
-                // Try parse type construction type argument e.g. `List int`
-                if let Some(app) = self.try_parse_type_expr(&nt) {
-                    let (args, app_info) = if let TypeAst::Constructor { expr, args, info } = app {
-                        // Unwrap the nested constructor
-                        let mut args = args;
-                        args.insert(0, *expr);
-                        (args, info)
-                    } else {
-                        (vec![app], nt.info)
-                    };
-                    return Some(TypeAst::Constructor {
-                        expr: Box::new(TypeAst::Identifier {
-                            name: id.clone(),
-                            info: t.info.clone(),
-                        }),
-                        args,
-                        info: t.info.join(&app_info),
-                    });
-                } else {
-                    // No type constructor, just return the identifier
-                    // This is a type identifier
-                    return Some(TypeAst::Identifier {
-                        name: id.clone(),
-                        info: t.info.clone(),
-                    });
-                }
-            }
-            _ => (),
-        }
-
-        None
-    }
-
-    /// Parses a typed definition binding, such as a **variable assignment** with a type annotation or **function definition** with a return type annotation.
-    ///
-    /// ```lento
-    /// int x = 5
-    /// int f(int x) = x + 5
-    /// ```
-    ///
-    /// ## Parameters
-    /// - `annotation`: The type annotation for the definition.
-    /// - `nt`: The current token being processed.
-    /// - `skip`: The number of tokens to skip when peeking into the lexer to check for an assignment operator.
-    fn try_parse_typed_def(&mut self, annotation: TypeAst) -> Option<ParseResult> {
-        let Ok(nt) = self.lexer.peek_token_not(pred::ignored, 0) else {
-            return None; // Not a valid assignment
-        };
-
-        if let TokenKind::Identifier(name) = &nt.token {
-            log::trace!(
-                "Looking for variable assignment or function definition: {} {}...",
-                annotation.print_sexpr(),
-                name,
-            );
-            // Check if the token after the identifier is an assignment operator
-            let Ok(nnt) = self.lexer.peek_token_not(pred::ignored, 1) else {
-                return None; // Not a valid assignment
-            };
-            if matches!(nnt.token, TokenKind::LeftParen { .. }) {
-                log::trace!(
-                    "Found a function definition with parentheses: {} {}(...",
-                    annotation.print_sexpr(),
-                    name
-                );
-                //? This is a function definition, not an assignment or a function call!
-                //? Parse a paren function definition.
-
-                // Consume all skipped tokens
-                self.lexer.expect_next_token_not(pred::ignored).unwrap(); // Consume the name identifier
-                self.lexer.expect_next_token_not(pred::ignored).unwrap(); // Consume the left paren
-
-                // Parse the function definition
-                return Some(self.parse_func_def_paren(
-                    Some(annotation),
-                    name.clone(),
-                    nnt.info,
-                    vec![],
-                ));
-            } else if nnt.token == TokenKind::Op("=".into()) {
-                log::trace!(
-                    "Found an assignment: {} {} = ...",
-                    annotation.print_sexpr(),
-                    name
-                );
-
-                self.lexer.expect_next_token_not(pred::ignored).unwrap(); // Consume the name identifier
-                self.lexer.expect_next_token_not(pred::ignored).unwrap(); // Consume the = operator
-
-                //? From now we are sure that we are parsing an assignment!
-                //? No more peeking! Only consume and assert tokens!
-
-                // Parse the assignment expression
-                let expr = match self.parse_top_expr() {
-                    Ok(expr) => expr,
-                    Err(err) => return Some(Err(err)),
-                };
-
-                log::trace!("Parsed assignment: {:?} = {:?}", &name, &expr);
-
-                return Some(Ok(Ast::Assignment {
-                    info: nnt.info.join(expr.info()),
-                    annotation: Some(annotation),
-                    target: Box::new(Ast::Identifier {
-                        name: name.clone(),
-                        info: nnt.info.clone(),
-                    }),
-                    expr: Box::new(expr),
-                }));
-            } else {
-                log::trace!("Not an assignment: {:?}", nnt.token);
-                return None; // Not a valid assignment
-            }
-        }
-        None
     }
 
     fn parse_primary(&mut self) -> ParseResult {
@@ -1032,280 +573,68 @@ impl<R: Read> Parser<R> {
                 .with_label(err.message().to_owned(), err.info().clone())
             })?;
 
-        if let Some(ty) = self.try_parse_type_expr(&t) {
-            log::trace!("Parsed type: {:?}", ty);
-            // Try parse typed definition
-            if let Some(res) = self.try_parse_typed_def(ty) {
-                return res;
-            }
-            log::warn!(
-                "Expected variable assignment, function definition or type construction after {}. Returning literal type.",
-                t.token.to_string().yellow()
-            );
-            return Ok(Ast::LiteralType { expr: ty });
-        }
-
-        //? `t` token **cannot be part of a type** at this point!
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
             TokenKind::Identifier(id) => {
-                // Check if function call or function definition with parentheses and no return type annotation!
-                //? OBS: Annotated definitions are all caught in the first `try_parse_type` check.
-                // ```ignored
-                // f(int x) = x + 5
-                // f(5)
-                // ```
+                // Check if function call with parentheses like `f(5, 6, 7)`, **NOT** `f (5, 6, 7)`
                 if let Ok(nt) = self.lexer.peek_token(0) {
-                    if matches!(nt.token, TokenKind::LeftParen { .. }) {
-                        self.lexer.next_token().unwrap(); // Consume the left paren
-                        return self.parse_paren_call_or_def(id, nt.info);
-                    }
-                }
-
-                // Try parse function definition without parentheses and no return type annotation!
-                //? OBS: Annotated definitions are all caught in the first `try_parse_type` check.
-                // ```ignored
-                // f int x = x + 5
-                // f x = x + 5
-                // ```
-                if let Ok(nt) = self.lexer.peek_token(0) {
-                    if let Some(param_ty) = self.try_parse_type_expr(&nt) {
-                        //? We are 100% sure that this is a function definition with a parameter type annotation.
-                        //? We are not parsing a function call!
-                        let (param_name, param_info) = match self.lexer.next_token() {
-                            Ok(t) => {
-                                if let TokenKind::Identifier(param_name) = t.token {
-                                    (param_name, t.info)
-                                } else {
-                                    return Err(ParseError::new(
-                                        format!(
-                                            "Expected parameter name, but found {}",
-                                            nt.token.to_string().light_red()
-                                        ),
-                                        nt.info.clone(),
-                                    )
-                                    .with_label(
-                                        "This is not a valid identifier".to_string(),
-                                        nt.info,
-                                    ));
-                                }
-                            }
-                            Err(err) => {
-                                return Err(ParseError::new(
-                                    "Failed to parse parameter name".to_string(),
-                                    LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                )
-                                .with_label(err.message().to_owned(), err.info().clone()));
-                            }
+                    if matches!(
+                        nt.token,
+                        TokenKind::LeftParen {
+                            is_function_call: true
+                        }
+                    ) {
+                        self.lexer.next_token().unwrap();
+                        let args: Vec<Ast> = match self.parse_tuple(nt.info)? {
+                            Ast::Tuple { exprs, .. } => exprs,
+                            single_expr => vec![single_expr],
                         };
-                        return self.parse_no_paren_def(id, param_ty, param_name, nt.info);
-                    } else if let TokenKind::Identifier(param_name) = nt.token {
-                        // if let Ok(nnt) = self.lexer.peek_token(1) {
-                        //     if nnt.token
-                        //         == (TokenKind::LeftParen {
-                        //             is_function_call: true,
-                        //         })
-                        //     {
-                        //         self.lexer.next_token().unwrap(); // Consume the name identifier
-                        //         self.lexer.next_token().unwrap(); // Consume the left paren
-                        //                                           // Start parsing the params and body of the function
-                        //         return self.parse_func_def_paren(
-                        //             Some(TypeAst::Identifier {
-                        //                 name: id.clone(),
-                        //                 info: t.info.clone(),
-                        //             }),
-                        //             param_name,
-                        //             nnt.info,
-                        //             vec![],
-                        //         );
-                        //     }
-                        // }
-                        //? This must be a function application or a function definition without parentheses or a return type annotation!
-                        return self.parse_no_paren_call_or_def(id, info);
+                        return Ok(syntax_sugar::roll_function_call(id, args, t.info));
                     }
-                    // else if let TokenKind::LeftParen { .. } = nt.token {
-                    //     self.lexer.next_token().unwrap(); // Consume the left paren
-                    //     return self.parse_paren_call_or_def(id, nt.info);
-                    // }
                 }
-                // Try parsing function definition without parentheses
-                if let TokenKind::Identifier(name) = nt.token {
-                    self.lexer.next_token().unwrap(); // Consume the name identifier
-                    return self.parse_func_def_no_parens(
-                        Some(TypeAst::Identifier {
-                            name: id.clone(),
-                            info: t.info.clone(),
-                        }),
-                        name,
-                        nt.info,
-                    );
-                }
+                // Else, just return the identifier as is
                 Ok(Ast::Identifier {
                     name: id,
                     info: t.info,
                 })
             }
             TokenKind::Op(op) => {
-                // TODO: Don't lookup operators in the parser, do this in the type checker!
-                if let Some(op) = self.find_operator_pos(&op, OperatorPosition::Prefix) {
-                    let op_info = op.info.clone();
-                    let rhs = self.parse_primary()?;
+                if let Some(op) = self.find_operator_pos(&op, OpPos::Prefix) {
                     Ok(Ast::Unary {
-                        op_info,
-                        expr: Box::new(rhs),
+                        op_info: op.clone(),
+                        expr: Box::new(self.parse_primary()?),
                         info: t.info,
                     })
                 } else {
-                    return Err(ParseError::new(
+                    Err(ParseError::new(
                         format!("Expected prefix operator, but found {}", op.light_red()),
                         t.info.clone(),
                     )
-                    .with_label("This is not a valid prefix operator".to_string(), t.info));
+                    .with_label("This is not a valid prefix operator".to_string(), t.info))
                 }
             }
+
             start if start.is_grouping_start() => {
                 match start {
-                    // Tuples, Units and Parentheses: ()
                     TokenKind::LeftParen {
                         is_function_call: false,
-                    } => {
-                        // Tuples are defined by a comma-separated list of expressions
-                        let mut explicit_single = false;
-                        let mut exprs = Vec::new();
-                        while let Ok(end) = self.lexer.peek_token(0) {
-                            if end.token == TokenKind::RightParen {
-                                break;
-                            }
-                            exprs.push(self.parse_top_expr()?);
-                            if let Ok(nt) = self.lexer.peek_token(0) {
-                                if nt.token == TokenKind::Comma {
-                                    self.lexer.next_token().unwrap();
-                                    if self.lexer.peek_token(0).unwrap().token
-                                        == TokenKind::RightParen
-                                    {
-                                        explicit_single = true;
-                                        // Break in the next iteration
-                                    }
-                                    continue;
-                                } else if nt.token == TokenKind::RightParen {
-                                    break;
-                                }
-                            }
-                            if let Ok(nt) = self.lexer.peek_token(0) {
-                                return Err(ParseError::new(
-                                    format!(
-                                        "Expected {} or {}, but found {}",
-                                        ",".yellow(),
-                                        ")".yellow(),
-                                        nt.token.to_string().light_red()
-                                    ),
-                                    nt.info.clone(),
-                                )
-                                .with_label(
-                                    "This should be either a comma or a right parenthesis"
-                                        .to_string(),
-                                    nt.info,
-                                ));
-                            } else {
-                                return Err(ParseError::new(
-                                    "Unexpected end of program".to_string(),
-                                    LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                ));
-                            }
-                        }
-                        let end = self.parse_expected(TokenKind::RightParen, ")")?;
-                        if exprs.len() == 1 && !explicit_single {
-                            exprs.pop().ok_or(ParseError::new(
-                                "Expected a single expression".to_string(),
-                                t.info.clone(),
-                            ))
-                        } else {
-                            Ok(Ast::Tuple {
-                                exprs,
-                                info: t.info.join(&end.info),
-                            })
-                        }
-                    }
-                    // Records and Blocks: {}
-                    TokenKind::LeftBrace => {
-                        // Try to parse as record
-                        if let Some(res) = self.parse_record_fields(&t.info) {
-                            res
-                        } else {
-                            // Parse as block
-                            let mut exprs = Vec::new();
-                            while let Ok(end) = self.lexer.peek_token(0) {
-                                if end.token == TokenKind::RightBrace {
-                                    break;
-                                }
-                                exprs.push(self.parse_top_expr()?);
-                            }
-                            let last = self.parse_expected(TokenKind::RightBrace, "}")?;
-                            Ok(Ast::Block {
-                                exprs,
-                                info: t.info.join(&last.info),
-                            })
-                        }
-                    }
-                    // Lists: []
-                    TokenKind::LeftBracket => {
-                        let mut exprs = Vec::new();
-                        while let Ok(end) = self.lexer.peek_token(0) {
-                            if end.token == TokenKind::RightBracket {
-                                break;
-                            }
-                            exprs.push(self.parse_top_expr()?);
-                            if let Ok(nt) = self.lexer.peek_token(0) {
-                                if nt.token == TokenKind::Comma {
-                                    self.lexer.next_token().unwrap();
-                                    continue;
-                                } else if nt.token == TokenKind::RightBracket {
-                                    break;
-                                }
-                            }
-                            if let Ok(nt) = self.lexer.peek_token(0) {
-                                return Err(ParseError::new(
-                                    format!(
-                                        "Expected {} or {}, but found {}",
-                                        ",".yellow(),
-                                        "]".yellow(),
-                                        nt.token.to_string().light_red()
-                                    ),
-                                    nt.info.clone(),
-                                )
-                                .with_label(
-                                    "This should be either a comma or a right bracket".to_string(),
-                                    nt.info,
-                                ));
-                            } else {
-                                return Err(ParseError::new(
-                                    "Unexpected end of program".to_string(),
-                                    LineInfo::eof(t.info.end, self.lexer.current_index()),
-                                ));
-                            }
-                        }
-                        let last = self.parse_expected(TokenKind::RightBracket, "]")?;
-                        Ok(Ast::List {
-                            exprs,
-                            info: t.info.join(&last.info),
-                        })
-                    }
+                    } => self.parse_tuple(t.info), // Tuples, Units and Parentheses: ()
+                    TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
+                    TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),
                 }
             }
-            _ => {
-                return Err(ParseError::new(
-                    format!(
-                        "Expected primary expression, but found {}",
-                        t.token.to_string().light_red()
-                    ),
-                    t.info.clone(),
-                )
-                .with_label(
-                    format!("This {} is invalid here", t.token.to_string().yellow()),
-                    t.info,
-                ));
-            }
+            _ => Err(ParseError::new(
+                format!(
+                    "Expected primary expression, but found {}",
+                    t.token.to_string().light_red()
+                ),
+                t.info.clone(),
+            )
+            .with_label(
+                format!("This {} is invalid here", t.token.to_string().yellow()),
+                t.info,
+            )),
         }
     }
 
@@ -1321,35 +650,28 @@ impl<R: Read> Parser<R> {
     ///     - **not an infix operator**
     ///     - its **precedence is lower than** `min_prec`
     ///     - it is a **terminator**
-    fn check_op(
-        &self,
-        nt: &LexResult,
-        min_prec: OperatorPrecedence,
-        allow_eq: bool,
-    ) -> Option<Operator> {
-        let t = nt.as_ref().ok()?;
-        let op = if let TokenKind::Op(op) = &t.token {
-            op
-        } else {
-            return None;
-        };
-        let op = self.find_operator(op, |op| {
-            op.position == OperatorPosition::Infix
-                || op.position == OperatorPosition::InfixAccumulate
-        })?;
-        let is_infix = op.info.position.is_infix();
-        let is_greater = op.info.precedence > min_prec;
-        let is_right_assoc = op.info.associativity == OperatorAssociativity::Right;
-        let is_equal = op.info.precedence == min_prec;
-        if is_infix && (is_greater || ((is_right_assoc || allow_eq) && is_equal)) {
+    fn check_binary_op(&self, min_prec: OpPrec, op: &str) -> Option<OpInfo> {
+        let op = self.find_operator(op, |op| op.position == OpPos::Infix)?;
+        let is_greater = op.precedence > min_prec;
+        let is_right_assoc = op.associativity == OpAssoc::Right;
+        let is_equal = op.precedence == min_prec;
+        if is_greater || (is_right_assoc && is_equal) {
             Some(op.clone())
         } else {
             None
         }
     }
 
-    fn next_prec(curr_op: &OperatorInfo, next_op: &OperatorInfo) -> OperatorPrecedence {
-        curr_op.precedence + (next_op.precedence > curr_op.precedence) as OperatorPrecedence
+    fn check_postfix_op(&self, min_prec: OpPrec, op: &str) -> Option<OpInfo> {
+        let op = self.find_operator(op, |op| op.position == OpPos::Postfix)?;
+        let is_greater = op.precedence > min_prec;
+        let is_right_assoc = op.associativity == OpAssoc::Right;
+        let is_equal = op.precedence == min_prec;
+        if is_greater || (is_right_assoc && is_equal) {
+            Some(op.clone())
+        } else {
+            None
+        }
     }
 
     /// Parse an expression with a given left-hand side and minimum precedence level
@@ -1363,174 +685,171 @@ impl<R: Read> Parser<R> {
     /// The parsed expression or a parse error if the expression could not be parsed
     ///
     /// ## Algorithm
-    /// See:
-    /// - https://en.wikipedia.org/wiki/Operator-precedence_parser
-    /// - https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
-    /// - https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing
-    /// - https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
-    /// - https://crockford.com/javascript/tdop/tdop.html
-    fn parse_expr(&mut self, lhs: Ast, min_prec: OperatorPrecedence) -> ParseResult {
-        let mut expr = lhs;
-        while let Some(curr_op) = {
-            let nt = self.lexer.peek_token(0);
-            self.check_op(&nt, min_prec, false)
-        } {
-            let curr_info = self.lexer.next_token().unwrap().info; // Consume the operator token
-            if curr_op.info.position.is_accumulate() {
-                expr = self.parse_expr_accum(&curr_op, expr, curr_info)?;
-                continue;
+    /// See: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+    fn parse_expr(&mut self, min_prec: OpPrec) -> ParseResult {
+        let mut expr = self.parse_primary()?;
+        while let Ok(nt) = self.lexer.peek_token(0) {
+            if nt.token.is_terminator() {
+                break; // Stop parsing on expression terminators
             }
-            let mut rhs = self.parse_primary()?;
-            while let Some(next_op) = {
-                let nt = self.lexer.peek_token(0);
-                self.check_op(&nt, curr_op.info.precedence, false)
-            } {
-                rhs = self.parse_expr(rhs, Self::next_prec(&curr_op.info, &next_op.info))?;
-            }
-            if let Some(desugar) = syntax_sugar::try_binary(&expr, &curr_op.info, &rhs) {
-                expr = desugar;
-            } else {
-                let info = expr.info().join(rhs.info());
-                expr = if let OperatorHandler::Parse(handler) = curr_op.handler {
-                    handler(StaticOperatorAst::Infix(expr, rhs))
-                } else {
-                    Ast::Binary {
+            if let TokenKind::Op(op) = &nt.token {
+                if let Some(op) = self.check_postfix_op(min_prec, op) {
+                    self.lexer.next_token().unwrap();
+                    expr = Ast::Unary {
+                        info: expr.info().join(&nt.info),
+                        op_info: op.clone(),
+                        expr: Box::new(expr),
+                    };
+                    continue;
+                } else if let Some(op) = self.check_binary_op(min_prec, op) {
+                    self.lexer.next_token().unwrap();
+                    let rhs = self.parse_expr(op.precedence)?;
+                    expr = Ast::Binary {
+                        info: expr.info().join(rhs.info()),
                         lhs: Box::new(expr),
-                        op_info: curr_op.info.clone(),
+                        op_info: op.clone(),
                         rhs: Box::new(rhs),
-                        info,
-                    }
-                };
-            }
-        }
-        Ok(expr)
-    }
-
-    /// Expect the parser state to be at the end of [expr, op] sequence.
-    /// Next token should be a new expression or a terminator.
-    fn parse_expr_accum(&mut self, op: &Operator, first: Ast, info: LineInfo) -> ParseResult {
-        let mut exprs = vec![first];
-        while let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
-            if op.info.allow_trailing && t.token.is_terminator() {
-                break;
-            }
-
-            // Parse the next nested expression in the sequence
-            let lhs = self.parse_primary()?;
-            exprs.push(self.parse_expr(lhs, op.info.precedence)?);
-
-            // Expect the next token to be the same operator or another expression
-            let nt = self.lexer.peek_token_not(pred::ignored, 0);
-            if let Some(next_op) = self.check_op(&nt, op.info.precedence, true) {
-                if !next_op.info.eq(&op.info) {
+                    };
+                    continue;
+                } else {
                     break;
                 }
-                self.lexer.read_next_token_not(pred::ignored).unwrap(); // Consume the operator token
+            }
+            if prec::FUNCTION_APP > min_prec {
+                expr = Ast::FunctionCall {
+                    info: expr.info().join(&nt.info),
+                    expr: Box::new(expr),
+                    arg: Box::new(self.parse_primary()?),
+                };
+                continue;
+            }
+            if nt.token.is_terminator() {
+                break; // Stop parsing on expression terminators
             } else {
-                break;
+                return Err(ParseError::new(
+                    format!(
+                        "Expected operator or funciton application, but found {}",
+                        nt.token.to_string().light_red()
+                    ),
+                    nt.info.clone(),
+                )
+                .with_label("Not valid in this context".to_string(), nt.info));
             }
         }
-        let expr = if let OperatorHandler::Parse(handler) = &op.handler {
-            handler(StaticOperatorAst::Accumulate(exprs))
-        } else {
-            let info = info.join(exprs.last().unwrap().info());
-            Ast::Accumulate {
-                op_info: op.info.clone(),
-                exprs,
-                info,
-            }
-        };
-
         Ok(expr)
     }
 
     /// Parse a top-level expression.
     fn parse_top_expr(&mut self) -> ParseResult {
-        let lhs = self.parse_primary()?;
-        let expr = self.parse_expr(lhs, 0);
-        let nt = self.lexer.peek_token(0);
-        if let Ok(t) = nt {
-            if t.token.is_top_level_terminal(false) {
-                self.lexer.next_token().unwrap();
+        match self.parse_expr(0) {
+            Ok(expr) => {
+                let nt = self.lexer.peek_token(0);
+                if let Ok(t) = nt {
+                    if t.token.is_top_level_terminal(false) {
+                        self.lexer.next_token().unwrap();
+                    }
+                }
+                syntax_sugar::specialize_top(expr, &self.types)
             }
+            Err(err) => Err(err),
         }
-        expr
     }
 
-    fn parse_expected(
-        &mut self,
-        expected_token: TokenKind,
-        symbol: &'static str,
-    ) -> Result<TokenInfo, ParseError> {
-        match self.lexer.expect_next_token_not(pred::ignored) {
-            Ok(t) if t.token == expected_token => Ok(t),
-            Ok(t) => Err(ParseError::new(
-                format!(
-                    "Expected {} but found {}",
-                    symbol.yellow(),
-                    t.token.to_string().light_red()
-                ),
-                t.info.clone(),
-            )
-            .with_label(format!("This should be a {}", symbol), t.info)),
-            Err(err) => Err(ParseError::new(
-                format!("Expected {}", symbol.yellow(),),
-                err.info().clone(),
-            )
-            .with_label(err.message().to_owned(), err.info().clone())),
+    /// Parse **a single** expression from the stream of tokens.
+    /// Returns an AST node or an error.
+    /// If the first token is an EOF, then the parser will return an empty unit expression.
+    ///
+    /// # Note
+    /// The parser will not necessarily consume all tokens from the stream.
+    /// It will **ONLY** consume a whole complete expression.
+    /// There may be remaining tokens in the stream after the expression is parsed.
+    pub fn parse_one(&mut self) -> ParseResult {
+        // Check if the next token is an EOF, then return an empty unit top-level expression
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
+            if pred::eof(&t.token) {
+                return Ok(Ast::Literal {
+                    value: Value::Unit,
+                    info: t.info,
+                });
+            }
         }
+        self.parse_top_expr()
+    }
+
+    /// Parse a global AST from the stream of tokens.
+    /// A global AST is a list of **all** top-level AST nodes (expressions).
+    pub fn parse_all(&mut self) -> ParseResults {
+        let mut asts = Vec::new();
+        loop {
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
+                if pred::eof(&t.token) {
+                    break;
+                }
+            }
+            match self.parse_top_expr() {
+                Ok(expr) => asts.push(expr),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(asts)
     }
 }
 
+//--------------------------------------------------------------------------------------//
+//                                   Syntax Sugar                                       //
+//--------------------------------------------------------------------------------------//
+
 mod syntax_sugar {
-    use malachite::{num::basic::traits::Zero, Integer, Rational};
-
-    use crate::interpreter::number::{FloatingPoint, Number, NumberCasting};
-
     use super::*;
+    use crate::{
+        interpreter::number::Number,
+        parser::{ast::ParamAst, pattern::BindPattern},
+        type_checker::types::std_types,
+    };
 
-    pub fn try_literal_fraction(lhs: &Number, rhs: &Number, info: LineInfo) -> Option<Ast> {
-        let lhs = match lhs {
-            Number::UnsignedInteger(lhs) => lhs.to_signed(),
-            Number::SignedInteger(lhs) => lhs.clone(),
-            _ => return None,
-        }
-        .to_bigint();
-        let rhs = match rhs {
-            Number::UnsignedInteger(rhs) => rhs.to_signed(),
-            Number::SignedInteger(rhs) => rhs.clone(),
-            _ => return None,
-        }
-        .to_bigint();
-        if rhs.cmp(&Integer::ZERO) == std::cmp::Ordering::Equal {
-            return None;
-        }
-        Some(Ast::Literal {
-            value: Value::Number(Number::FloatingPoint(
-                FloatingPoint::FloatBig(Rational::from_integers(lhs, rhs)).optimize(),
-            )),
-            info,
-        })
-    }
+    // TODO: Figure out what to do with this...
+    // use crate::interpreter::number::{FloatingPoint, Number, NumberCasting};
+    // use malachite::{num::basic::traits::Zero, Integer, Rational};
+    // pub fn try_literal_fraction(lhs: &Number, rhs: &Number, info: LineInfo) -> Option<Ast> {
+    //     let lhs = match lhs {
+    //         Number::UnsignedInteger(lhs) => lhs.to_signed(),
+    //         Number::SignedInteger(lhs) => lhs.clone(),
+    //         _ => return None,
+    //     }
+    //     .to_bigint();
+    //     let rhs = match rhs {
+    //         Number::UnsignedInteger(rhs) => rhs.to_signed(),
+    //         Number::SignedInteger(rhs) => rhs.clone(),
+    //         _ => return None,
+    //     }
+    //     .to_bigint();
+    //     if rhs.cmp(&Integer::ZERO) == std::cmp::Ordering::Equal {
+    //         return None;
+    //     }
+    //     Some(Ast::Literal {
+    //         value: Value::Number(Number::FloatingPoint(
+    //             FloatingPoint::FloatBig(Rational::from_integers(lhs, rhs)).optimize(),
+    //         )),
+    //         info,
+    //     })
+    // }
 
-    pub fn try_binary(lhs: &Ast, op: &OperatorInfo, rhs: &Ast) -> Option<Ast> {
-        match (lhs, op, rhs) {
-            (
-                Ast::Literal {
-                    value: Value::Number(lhs),
-                    info: left_info,
-                },
-                OperatorInfo { name, symbol, .. },
-                Ast::Literal {
-                    value: Value::Number(rhs),
-                    info: right_info,
-                },
-            ) if name == "div" && symbol == "/" => {
-                try_literal_fraction(lhs, rhs, left_info.join(right_info))
-            }
-            _ => None,
-        }
-    }
+    // pub fn try_binary(lhs: &Ast, op: &OpInfo, rhs: &Ast) -> Option<Ast> {
+    //     match (lhs, op, rhs) {
+    //         (
+    //             Ast::Literal {
+    //                 value: Value::Number(lhs),
+    //                 info: left_info,
+    //             },
+    //             OpInfo { symbol, .. },
+    //             Ast::Literal {
+    //                 value: Value::Number(rhs),
+    //                 info: right_info,
+    //             },
+    //         ) if symbol == "/" => try_literal_fraction(lhs, rhs, left_info.join(right_info)),
+    //         _ => None,
+    //     }
+    // }
 
     /// Takes a function name, a list of parameters and a body and rolls them into a single assignment expression.
     /// Parameters are rolled into a nested function definition.
@@ -1547,18 +866,18 @@ mod syntax_sugar {
     /// - `func_name` The name of the function
     /// - `params` A list of parameters in left-to-right order: `a, b, c`
     /// - `body` The body of the function
-    pub fn roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
+    pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
         assert!(!params.is_empty(), "Expected at least one parameter");
         let info = body.info().join(params.last().map(|p| &p.info).unwrap());
         let mut params = params.iter().rev();
-        let mut function = Ast::FunctionDef {
+        let mut function = Ast::Lambda {
             param: params.next().unwrap().clone(),
             body: Box::new(body),
             return_type: None,
             info,
         };
         for param in params {
-            function = Ast::FunctionDef {
+            function = Ast::Lambda {
                 info: function.info().join(&param.info),
                 param: param.clone(),
                 body: Box::new(function),
@@ -1568,6 +887,16 @@ mod syntax_sugar {
         function
     }
 
+    /// Takes a function name, a list of arguments and rolls them into a single function call expression.
+    /// Arguments are rolled into a nested function call.
+    /// All arguments are sorted like:
+    /// ```lento
+    /// func(a, b, c)
+    /// ```
+    /// becomes:
+    /// ```lento
+    /// func(a)(b)(c)
+    /// ```
     pub fn roll_function_call(name: String, args: Vec<Ast>, start_info: LineInfo) -> Ast {
         let last_info = args
             .last()
@@ -1593,28 +922,89 @@ mod syntax_sugar {
         }
         call
     }
-}
 
-//--------------------------------------------------------------------------------------//
-//                               Parser Factory Functions                               //
-//--------------------------------------------------------------------------------------//
+    fn specialize_binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
+        todo!("Specialize binding pattern");
+    }
 
-pub fn from_file(file: File) -> Parser<BufReader<File>> {
-    Parser::new(lexer::from_file(file))
-}
+    fn specialize_record_key(expr: Ast) -> Result<RecordKey, ParseError> {
+        match expr {
+            Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),
+            Ast::Literal {
+                value: Value::Number(Number::UnsignedInteger(n)),
+                ..
+            } => Ok(RecordKey::Number(Number::UnsignedInteger(n.clone()))),
+            _ => Err(ParseError::new(
+                format!(
+                    "Field access via {} requires a identifier or {} literal",
+                    ".".yellow(),
+                    std_types::UINT().pretty_print_color()
+                ),
+                expr.info().clone(),
+            )
+            .with_label(
+                format!(
+                    "This is not an identifier or {}",
+                    std_types::UINT().pretty_print_color()
+                ),
+                expr.info().clone(),
+            )
+            .with_hint(format!(
+                "Did you mean to use indexing via {} instead?",
+                "[]".yellow()
+            ))),
+        }
+    }
 
-pub fn from_string(source: String) -> Parser<Cursor<String>> {
-    Parser::new(lexer::from_string(source))
-}
+    // Specialize type constructors to literal types
+    pub fn specialize_call(expr: Ast, types: &HashSet<String>) -> ParseResult {
+        let (func, _args) = flatten_calls(&expr);
+        if let Ast::Identifier { name, info: _ } = &func {
+            if types.contains(name) {
+                todo!("Specialize type constructor");
+            }
+        }
+        Ok(expr)
+    }
 
-pub fn from_str(source: &str) -> Parser<BytesReader<'_>> {
-    Parser::new(lexer::from_str(source))
-}
+    fn flatten_calls(expr: &Ast) -> (&Ast, Vec<&Ast>) {
+        let mut calls = Vec::new();
+        let mut current = expr;
+        while let Ast::FunctionCall { expr, arg, .. } = current {
+            calls.push(&**arg);
+            current = expr;
+        }
+        (current, calls)
+    }
 
-pub fn from_stdin() -> Parser<StdinReader> {
-    Parser::new(lexer::from_stdin())
-}
-
-pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
-    Parser::new(lexer::from_stream(reader))
+    pub fn specialize_top(expr: Ast, types: &HashSet<String>) -> ParseResult {
+        match expr {
+            // Specialize type constructors to literal types
+            Ast::FunctionCall { .. } => specialize_call(expr, types),
+            // Specialize assignments to binding patterns with optional type annotations
+            Ast::Binary {
+                lhs,
+                op_info,
+                rhs,
+                info,
+            } if op_info.symbol == ASSIGNMENT => Ok(Ast::Assignment {
+                annotation: None,
+                target: specialize_binding_pattern(*lhs)?,
+                expr: rhs,
+                info,
+            }),
+            Ast::Binary {
+                lhs,
+                op_info,
+                rhs,
+                info,
+            } if op_info.symbol == MEMBER_ACCESS => Ok(Ast::MemderAccess {
+                expr: lhs,
+                field: specialize_record_key(*rhs)?,
+                info,
+            }),
+            // No specialization available
+            _ => Ok(expr),
+        }
+    }
 }

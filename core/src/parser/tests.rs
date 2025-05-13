@@ -9,6 +9,7 @@ mod tests {
         parser::{
             ast::{Ast, TypeAst},
             parser::from_string,
+            pattern::BindPattern,
         },
         stdlib::init::{stdlib, Initializer},
         util::error::LineInfo,
@@ -161,7 +162,7 @@ mod tests {
             lhs, op_info, rhs, ..
         } = &result
         {
-            assert_eq!(op_info.name, "add".to_string());
+            assert_eq!(&op_info.symbol, "+");
             assert!(matches!(*lhs.to_owned(), Ast::Tuple { .. }));
             assert!(matches!(*rhs.to_owned(), Ast::Tuple { .. }));
         }
@@ -269,7 +270,7 @@ mod tests {
         assert!(matches!(result, Ast::Binary { .. }));
         // Assert "add"
         if let Ast::Binary { op_info, .. } = &result {
-            assert_eq!(op_info.name, "add".to_string());
+            assert_eq!(&op_info.symbol, "+");
         }
         if let Ast::Binary { lhs, rhs, .. } = &result {
             // Always true
@@ -334,7 +335,7 @@ mod tests {
             ..
         } = &result
         {
-            assert!(matches!(*target.to_owned(), Ast::Identifier { .. }));
+            assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
             assert!(annotation.to_owned().is_some());
             assert!(matches!(
@@ -370,7 +371,7 @@ mod tests {
 
         assert!(matches!(result, Ast::Assignment { .. }));
         if let Ast::Assignment { target, expr, .. } = &result {
-            assert!(matches!(*target.to_owned(), Ast::Identifier { .. }));
+            assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Binary { .. }));
         }
     }
@@ -626,46 +627,31 @@ mod tests {
 
     #[test]
     fn function_def_paren_explicit_args_and_ret() {
-        let result = parse_str_one(
-            "u8 add(u8 x, u8 y, u8 z) { x + y + z }",
-            None,
-        );
+        let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) { x + y + z }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_args_and_ret() {
-        let result = parse_str_one(
-            "u8 add u8 x, u8 y, u8 z { x + y + z }",
-            None,
-        );
+        let result = parse_str_one("u8 add u8 x, u8 y, u8 z { x + y + z }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_args() {
-        let result = parse_str_one(
-            "add u8 x, u8 y, u8 z { x + y + z }",
-            None,
-        );
+        let result = parse_str_one("add u8 x, u8 y, u8 z { x + y + z }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_paren_implicit_args_and_ret() {
-        let result = parse_str_one(
-            "add(x, y, z) { x + y + z }",
-            None,
-        );
+        let result = parse_str_one("add(x, y, z) { x + y + z }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_implicit_args_and_ret() {
-        let result = parse_str_one(
-            "add x, y, z { x + y + z }",
-            None,
-        );
+        let result = parse_str_one("add x, y, z { x + y + z }", None);
         assert!(result.is_ok());
     }
 
@@ -680,80 +666,56 @@ mod tests {
 
     #[test]
     fn function_def_paren_explicit_oneline() {
-        let result = parse_str_one(
-            "u8 add(u8 x, u8 y, u8 z) = x + y + z;",
-            None,
-        );
+        let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_oneline() {
-        let result = parse_str_one(
-            "u8 add u8 x, u8 y, u8 z = x + y + z;",
-            None,
-        );
+        let result = parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_paren_implicit_oneline() {
-        let result = parse_str_one(
-            "add(x, y, z) = x + y + z;",
-            None,
-        );
+        let result = parse_str_one("add(x, y, z) = x + y + z;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_implicit_oneline() {
-        let result = parse_str_one(
-            "add x, y, z = x + y + z;",
-            None,
-        );
+        let result = parse_str_one("add x, y, z = x + y + z;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type() {
-        let result = parse_str_one(
-            "int add(int x, int y) = x + y;",
-            None,
-        );
+        let result = parse_str_one("int add(int x, int y) = x + y;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_no_parens() {
-        let result = parse_str_one(
-            "int add int x, int y = x + y;",
-            None,
-        );
+        let result = parse_str_one("int add int x, int y = x + y;", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_block() {
-        let result = parse_str_one(
-            "int add(int x, int y) { x + y }",
-            None,
-        );
+        let result = parse_str_one("int add(int x, int y) { x + y }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_no_parens_block() {
-        let result = parse_str_one(
-            "int add int x, int y { x + y }",
-            None,
-        );
+        let result = parse_str_one("int add int x, int y { x + y }", None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_multiple_statements() {
         let result = parse_str_one(
-            "int add(int x, int y) { 
+            "int add(int x, int y) {
                 let z = x + y;
                 z
             }",

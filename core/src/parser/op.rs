@@ -12,73 +12,64 @@ use super::parser::ParseResult;
 //                               Execution Agnostic Data                                //
 //--------------------------------------------------------------------------------------//
 
+/// The position of the operator in the expression.
+/// - Prefix: `-x`
+/// - Infix: `x + y`
+/// - Postfix: `x!`
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub enum OperatorPosition {
+pub enum OpPos {
     Prefix,  // Unary operator
     Infix,   // Binary operator
     Postfix, // Unary operator
-    /// If the binary operator should accumulate the arguments
-    /// when there are more than two arguments in the expression
-    ///
-    /// ## Example
-    /// The comma operator (`,`) accumulates the arguments into a tuple
-    /// ```ignore
-    /// a, b, c // Accumulate into a tuple
-    /// ```
-    /// Gives a tuple `(a, b, c)`, not `(a, (b, c))`
-    ///
-    /// The assignment operator (`=`) does not accumulate the arguments
-    /// ```ignore
-    /// a = b // Does not accumulate
-    /// ```
-    /// Gives a single assignment `a = b`
-    InfixAccumulate,
 }
 
-impl OperatorPosition {
+impl OpPos {
     pub fn is_prefix(&self) -> bool {
-        matches!(self, OperatorPosition::Prefix)
+        matches!(self, OpPos::Prefix)
     }
 
     pub fn is_infix(&self) -> bool {
-        matches!(
-            self,
-            OperatorPosition::Infix | OperatorPosition::InfixAccumulate
-        )
+        matches!(self, OpPos::Infix)
     }
 
     pub fn is_postfix(&self) -> bool {
-        matches!(self, OperatorPosition::Postfix)
-    }
-
-    pub fn is_accumulate(&self) -> bool {
-        matches!(self, OperatorPosition::InfixAccumulate)
+        matches!(self, OpPos::Postfix)
     }
 }
 
+/// Associativity of the operator.
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub enum OperatorAssociativity {
+pub enum OpAssoc {
     Left,
     Right,
 }
 
-pub type OperatorPrecedence = u16;
+/// The precedence of the operator.
+pub type OpPrec = u16;
 
-pub mod default_operator_precedence {
-    use super::OperatorPrecedence;
+/// Default precedence for operators used to define the order of operations.
+/// Higher precedence operators are evaluated first.
+pub mod prec {
+    use super::OpPrec;
 
-    pub const ASSIGNMENT: OperatorPrecedence = 100;
-    pub const CONDITIONAL: OperatorPrecedence = 200;
-    pub const LOGICAL_OR: OperatorPrecedence = 300;
-    pub const LOGICAL_AND: OperatorPrecedence = 400;
-    pub const EQUALITY: OperatorPrecedence = 500;
-    pub const TUPLE: OperatorPrecedence = 600;
-    pub const ADDITIVE: OperatorPrecedence = 700;
-    pub const MULTIPLICATIVE: OperatorPrecedence = 800;
-    pub const EXPONENTIAL: OperatorPrecedence = 900;
-    pub const PREFIX: OperatorPrecedence = 1000;
-    pub const POSTFIX: OperatorPrecedence = 1100;
-    pub const MEMBER_ACCESS: OperatorPrecedence = 1200;
+    pub const SEMICOLON: OpPrec = 10;
+    pub const COMMA: OpPrec = 50;
+    pub const ASSIGNMENT: OpPrec = 100;
+    pub const CONDITIONAL: OpPrec = 200;
+    pub const LOGICAL_OR: OpPrec = 300;
+    pub const LOGICAL_AND: OpPrec = 400;
+    pub const EQUALITY: OpPrec = 500;
+    pub const TUPLE: OpPrec = 600;
+    pub const ADDITIVE: OpPrec = 700;
+    pub const MULTIPLICATIVE: OpPrec = 800;
+    pub const EXPONENTIAL: OpPrec = 900;
+    pub const PREFIX: OpPrec = 1000;
+    pub const POSTFIX: OpPrec = 1100;
+    pub const MEMBER_ACCESS: OpPrec = 1200;
+
+    /// Function application precedence.
+    /// Stronger than any other default operator.
+    pub const FUNCTION_APP: OpPrec = 2000;
 }
 
 //--------------------------------------------------------------------------------------//
@@ -86,20 +77,19 @@ pub mod default_operator_precedence {
 //--------------------------------------------------------------------------------------//
 
 #[derive(Clone, Debug)]
-pub enum StaticOperatorAst {
+pub enum StaticOpAst {
     Prefix(Ast),
     Infix(Ast, Ast),
     Postfix(Ast),
-    Accumulate(Vec<Ast>),
 }
 
 #[derive(Clone, Debug)]
-pub struct OperatorSignature {
+pub struct OpSignature {
     pub params: Vec<CheckedParam>,
     pub ret: Type,
 }
 
-impl OperatorSignature {
+impl OpSignature {
     pub fn new(params: Vec<CheckedParam>, ret: Type) -> Self {
         Self { params, ret }
     }
@@ -140,21 +130,15 @@ impl OperatorSignature {
 //--------------------------------------------------------------------------------------//
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct OperatorInfo {
-    /// Descriptive name of the operator.
-    /// Used for:
-    /// - handler function definition
-    /// - error messages
-    /// - introspection.
-    pub name: String,
+pub struct OpInfo {
     /// The symbol of the operator
     pub symbol: String,
     /// The position of the operator
-    pub position: OperatorPosition,
+    pub position: OpPos,
     /// The precedence of the operator
-    pub precedence: OperatorPrecedence,
+    pub precedence: OpPrec,
     /// The associativity of the operator
-    pub associativity: OperatorAssociativity,
+    pub associativity: OpAssoc,
     /// If the operator allows trailing arguments
     ///
     /// ## Note
@@ -172,71 +156,63 @@ pub struct OperatorInfo {
 }
 
 #[derive(Clone, Debug)]
-pub struct RuntimeOperatorHandler {
+pub struct RuntimeOpHandler {
     pub function_name: String,
-    pub signature: OperatorSignature,
-}
-
-pub type ParseOperatorHandler = fn(StaticOperatorAst) -> Ast;
-
-#[derive(Clone, Debug)]
-pub struct StaticOperatorHandler {
-    pub signature: OperatorSignature,
-    pub handler: fn(StaticOperatorAst) -> ParseResult,
+    pub signature: OpSignature,
 }
 
 #[derive(Clone, Debug)]
-pub enum OperatorHandler {
+pub struct StaticOpHandler {
+    pub signature: OpSignature,
+    pub handler: fn(StaticOpAst) -> ParseResult,
+}
+
+#[derive(Clone, Debug)]
+pub enum OpHandler {
     /// Runtime operators (functions)
-    Runtime(RuntimeOperatorHandler),
-    /// Parse-time operators (macros)
-    Parse(ParseOperatorHandler),
+    Runtime(RuntimeOpHandler),
     /// The compile-time handler for the operator
     /// (macros or syntax extensions/sugar)
     /// 1. The signature of the operator. This is used for type checking and inference on the operator in expressions.
     /// 2. The native handler function for the operator called at compile-time
-    Static(StaticOperatorHandler),
+    Static(StaticOpHandler),
 }
 
 #[derive(Clone, Debug)]
 pub struct Operator {
     /// Basic information about the operator
     /// required for parsing and type checking.
-    pub info: OperatorInfo,
+    pub info: OpInfo,
     /// The handler for the operator
-    pub handler: OperatorHandler,
+    pub handler: OpHandler,
 }
 
 impl Operator {
-    pub fn signature(&self) -> OperatorSignature {
+    pub fn signature(&self) -> OpSignature {
         match &self.handler {
-            OperatorHandler::Runtime(RuntimeOperatorHandler { signature, .. }) => signature.clone(),
-            OperatorHandler::Parse(_) => {
-                panic!("Parse operator does not have a signature")
-            }
-            OperatorHandler::Static(StaticOperatorHandler { signature, .. }) => signature.clone(),
+            OpHandler::Runtime(RuntimeOpHandler { signature, .. }) => signature.clone(),
+            OpHandler::Static(StaticOpHandler { signature, .. }) => signature.clone(),
         }
     }
 
     pub fn new_runtime(
         function_name: String,
         symbol: String,
-        position: OperatorPosition,
-        precedence: OperatorPrecedence,
-        associativity: OperatorAssociativity,
+        position: OpPos,
+        precedence: OpPrec,
+        associativity: OpAssoc,
         allow_trailing: bool,
-        signature: OperatorSignature,
+        signature: OpSignature,
     ) -> Self {
         Self {
-            info: OperatorInfo {
-                name: function_name.clone(),
+            info: OpInfo {
                 symbol,
                 position,
                 precedence,
                 associativity,
                 allow_trailing,
             },
-            handler: OperatorHandler::Runtime(RuntimeOperatorHandler {
+            handler: OpHandler::Runtime(RuntimeOpHandler {
                 function_name,
                 signature,
             }),
@@ -245,47 +221,23 @@ impl Operator {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_static(
-        name: String,
         symbol: String,
-        position: OperatorPosition,
-        precedence: OperatorPrecedence,
-        associativity: OperatorAssociativity,
+        position: OpPos,
+        precedence: OpPrec,
+        associativity: OpAssoc,
         allow_trailing: bool,
-        signature: OperatorSignature,
-        handler: fn(StaticOperatorAst) -> ParseResult,
+        signature: OpSignature,
+        handler: fn(StaticOpAst) -> ParseResult,
     ) -> Self {
         Self {
-            info: OperatorInfo {
-                name,
+            info: OpInfo {
                 symbol,
                 position,
                 precedence,
                 associativity,
                 allow_trailing,
             },
-            handler: OperatorHandler::Static(StaticOperatorHandler { signature, handler }),
-        }
-    }
-
-    pub fn new_parse(
-        name: String,
-        symbol: String,
-        position: OperatorPosition,
-        precedence: OperatorPrecedence,
-        associativity: OperatorAssociativity,
-        allow_trailing: bool,
-        handler: ParseOperatorHandler,
-    ) -> Self {
-        Self {
-            info: OperatorInfo {
-                name,
-                symbol,
-                position,
-                precedence,
-                associativity,
-                allow_trailing,
-            },
-            handler: OperatorHandler::Parse(handler),
+            handler: OpHandler::Static(StaticOpHandler { signature, handler }),
         }
     }
 }

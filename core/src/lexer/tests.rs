@@ -49,9 +49,9 @@ mod tests {
         let equals = "==".to_string();
         let assignment = "=".to_string();
         let strict_equals = "===".to_string();
-        lexer.operators.insert(equals.clone());
-        lexer.operators.insert(strict_equals.clone());
-        lexer.operators.insert(assignment.clone());
+        lexer.add_operator(equals.clone());
+        lexer.add_operator(strict_equals.clone());
+        lexer.add_operator(assignment.clone());
         // ==
         assert_next_token_eq(&mut lexer, TokenKind::Op(equals));
         // =
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn operators() {
         let mut lexer = from_str("a + b");
-        lexer.operators.insert("+".to_string());
+        lexer.add_operator("+".to_string());
         assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
         assert_next_token_eq(&mut lexer, TokenKind::Op("+".to_string()));
         assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));

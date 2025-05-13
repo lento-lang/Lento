@@ -4,24 +4,17 @@ use colorful::Colorful;
 
 use crate::{
     interpreter::{
-        self,
         env::Environment,
         number::{FloatingPoint, Number},
-        value::{Function, RecordKey, Value},
+        value::{Function, Value},
     },
     lexer::lexer::Lexer,
     parser::{
-        ast::Ast,
-        error::ParseError,
-        op::{
-            default_operator_precedence, Operator, OperatorAssociativity, OperatorHandler,
-            OperatorPosition, OperatorSignature, RuntimeOperatorHandler, StaticOperatorAst,
-        },
+        op::{prec, OpAssoc, OpHandler, OpPos, OpSignature, Operator, RuntimeOpHandler},
         parser::Parser,
     },
     stdlib::arithmetic,
     type_checker::{
-        checked_ast::CheckedParam,
         checker::TypeChecker,
         types::{std_types, Type, TypeTrait},
     },
@@ -36,7 +29,7 @@ use super::{logical, system};
 pub struct Initializer {
     operators: Vec<Operator>,
     types: HashMap<String, Type>,
-    values: Vec<(Str, Value)>,
+    constants: Vec<(Str, Value)>,
     functions: Vec<(&'static str, Function)>,
 }
 
@@ -45,8 +38,8 @@ impl Initializer {
         log::trace!("Initializing lexer with {} operators", self.operators.len());
         for op in &self.operators {
             // TODO: Why does this only add static operators to the lexer?
-            if let OperatorHandler::Static(_) = &op.handler {
-                lexer.operators.insert(op.info.symbol.clone());
+            if let OpHandler::Static(_) = &op.handler {
+                lexer.add_operator(op.info.symbol.clone());
             }
         }
     }
@@ -58,7 +51,7 @@ impl Initializer {
             self.types.len()
         );
         for op in &self.operators {
-            if let Err(e) = parser.define_op(op.clone()) {
+            if let Err(e) = parser.define_op(op.info.clone()) {
                 panic!(
                     "Parser initialization failed when adding operator '{:?}': {:?}",
                     op, e
@@ -96,12 +89,12 @@ impl Initializer {
     pub fn init_environment(&self, env: &mut Environment) {
         log::trace!(
             "Initializing environment with {} values, {} functions, {} operators and {} types",
-            self.values.len(),
+            self.constants.len(),
             self.functions.len(),
             self.operators.len(),
             self.types.len()
         );
-        for (name, val) in &self.values {
+        for (name, val) in &self.constants {
             if let Err(e) = env.add_value(name.clone(), val.clone(), &LineInfo::default()) {
                 panic!(
                     "Environment initialization failed when adding value {}: {}",
@@ -125,7 +118,7 @@ impl Initializer {
         }
         for op in &self.operators {
             match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler {
+                OpHandler::Runtime(RuntimeOpHandler {
                     function_name,
                     signature,
                 }) => {
@@ -135,7 +128,7 @@ impl Initializer {
                         if !signature.function_type().equals(func.get_fn_type()).success {
                             panic!(
                                 "Function type mismatch for operator {}: expected {}, but got {}",
-                                op.info.name.clone().yellow(),
+                                op.info.symbol.clone().yellow(),
                                 signature.function_type().pretty_print(),
                                 func.get_type().pretty_print()
                             );
@@ -143,8 +136,7 @@ impl Initializer {
                     }
                 }
                 // Skip static operators
-                OperatorHandler::Parse(_) => {}
-                OperatorHandler::Static(_) => {}
+                OpHandler::Static(_) => {}
             }
         }
         for (name, ty) in &self.types {
@@ -159,144 +151,59 @@ impl Initializer {
     }
 }
 
+//--------------------------------------------------------------------------------------//
+//                                   Standard Library                                   //
+//--------------------------------------------------------------------------------------//
+
 pub fn stdlib() -> Initializer {
     Initializer {
-        //--------------------------------------------------------------------------------------//
-        //                                       Operators                                      //
-        //--------------------------------------------------------------------------------------//
         operators: vec![
-            // Assignment operator, native to the language
-            // TODO: Implement this operator statically in the parser instead of using an operator handler
-            Operator::new_parse(
-                "assign".into(),
-                "=".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::ASSIGNMENT,
-                OperatorAssociativity::Right,
-                false,
-                |op| {
-                    if let StaticOperatorAst::Infix(lhs, rhs) = op {
-                        let info = lhs.info().join(rhs.info());
-                        Ast::Assignment {
-                            annotation: None,
-                            target: Box::new(lhs),
-                            expr: Box::new(rhs),
-                            info,
-                        }
-                    } else {
-                        panic!("assign expects an infix operator");
-                    }
-                },
-            ),
-            // Field access operator
-            Operator::new_static(
-                "field_access".into(),
-                ".".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::MEMBER_ACCESS,
-                OperatorAssociativity::Left,
-                false,
-                OperatorSignature::new(
-                    vec![
-                        CheckedParam::from_str("record", std_types::ANY),
-                        CheckedParam::from_str("field", std_types::ANY),
-                    ],
-                    std_types::ANY.clone(),
-                ),
-                |op| {
-                    if let StaticOperatorAst::Infix(lhs, rhs) = op {
-                        let key = if let Ast::Identifier { name, .. } = &rhs {
-                            RecordKey::String(name.to_string())
-                        } else if let Ast::Literal {
-                            value: Value::Number(interpreter::number::Number::UnsignedInteger(n)),
-                            ..
-                        } = &rhs
-                        {
-                            RecordKey::Number(Number::UnsignedInteger(n.clone()))
-                        } else {
-                            return Err(ParseError::new(
-                                format!(
-                                    "Field access via {} requires a identifier or {} literal",
-                                    ".".yellow(),
-                                    std_types::UINT().pretty_print_color()
-                                ),
-                                rhs.info().clone(),
-                            )
-                            .with_label(
-                                format!(
-                                    "This is not an identifier or {}",
-                                    std_types::UINT().pretty_print_color()
-                                ),
-                                rhs.info().clone(),
-                            )
-                            .with_hint(format!(
-                                "Did you mean to use indexing via {} instead?",
-                                "[]".yellow()
-                            )));
-                        };
-                        let info = lhs.info().join(rhs.info());
-                        Ok(Ast::FieldAccess {
-                            expr: Box::new(lhs),
-                            field: key,
-                            info,
-                        })
-                    } else {
-                        panic!("field_access expects an infix operator");
-                    }
-                },
-            ),
-            // Addition operator
             Operator::new_runtime(
                 "add".into(),
                 "+".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::ADDITIVE,
-                OperatorAssociativity::Left,
+                OpPos::Infix,
+                prec::ADDITIVE,
+                OpAssoc::Left,
                 false,
-                OperatorSignature::from_function(arithmetic::add().get_fn_type()),
+                OpSignature::from_function(arithmetic::add().get_fn_type()),
             ),
             Operator::new_runtime(
                 "sub".into(),
                 "-".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::ADDITIVE,
-                OperatorAssociativity::Left,
+                OpPos::Infix,
+                prec::ADDITIVE,
+                OpAssoc::Left,
                 false,
-                OperatorSignature::from_function(arithmetic::sub().get_fn_type()),
+                OpSignature::from_function(arithmetic::sub().get_fn_type()),
             ),
             Operator::new_runtime(
                 "mul".into(),
                 "*".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::MULTIPLICATIVE,
-                OperatorAssociativity::Left,
+                OpPos::Infix,
+                prec::MULTIPLICATIVE,
+                OpAssoc::Left,
                 false,
-                OperatorSignature::from_function(arithmetic::mul().get_fn_type()),
+                OpSignature::from_function(arithmetic::mul().get_fn_type()),
             ),
             Operator::new_runtime(
                 "div".into(),
                 "/".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::MULTIPLICATIVE,
-                OperatorAssociativity::Left,
+                OpPos::Infix,
+                prec::MULTIPLICATIVE,
+                OpAssoc::Left,
                 false,
-                OperatorSignature::from_function(arithmetic::div().get_fn_type()),
+                OpSignature::from_function(arithmetic::div().get_fn_type()),
             ),
-            // Comparison operators
             Operator::new_runtime(
                 "eq".into(),
                 "==".into(),
-                OperatorPosition::Infix,
-                default_operator_precedence::EQUALITY,
-                OperatorAssociativity::Left,
+                OpPos::Infix,
+                prec::EQUALITY,
+                OpAssoc::Left,
                 false,
-                OperatorSignature::from_function(logical::eq().get_fn_type()),
+                OpSignature::from_function(logical::eq().get_fn_type()),
             ),
         ],
-
-        //--------------------------------------------------------------------------------------//
-        //						            Built-in Types                                      //
-        //--------------------------------------------------------------------------------------//
         types: vec![
             std_types::ANY,
             std_types::TYPE,
@@ -336,11 +243,7 @@ pub fn stdlib() -> Initializer {
             ("num".into(), std_types::NUM()),
         ])
         .collect(),
-
-        //--------------------------------------------------------------------------------------//
-        //                                      Constants                                       //
-        //--------------------------------------------------------------------------------------//
-        values: vec![
+        constants: vec![
             (
                 Str::String("pi".to_string()),
                 Value::Number(Number::FloatingPoint(FloatingPoint::Float64(
@@ -392,10 +295,6 @@ pub fn stdlib() -> Initializer {
                 Value::Number(Number::FloatingPoint(FloatingPoint::Float64(f64::NAN))),
             ),
         ],
-
-        //--------------------------------------------------------------------------------------//
-        //                                       Functions                                      //
-        //--------------------------------------------------------------------------------------//
         functions: vec![
             ("add", arithmetic::add()),
             ("sub", arithmetic::sub()),

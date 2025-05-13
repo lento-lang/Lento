@@ -7,16 +7,14 @@ use crate::{
     parser::{
         ast::{Ast, ParamAst, TypeAst},
         error::ParseError,
-        op::{
-            Operator, OperatorHandler, OperatorInfo, RuntimeOperatorHandler, StaticOperatorAst,
-            StaticOperatorHandler,
-        },
+        op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
+        pattern::BindPattern,
     },
     util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedBindPattern, CheckedParam},
+    checked_ast::{CheckedAst, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -224,10 +222,10 @@ impl TypeChecker<'_> {
         operators
     }
 
-    fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOperatorHandler> {
-        let operator: Option<&StaticOperatorHandler> = self.env.operators.iter().find_map(|o| {
+    fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOpHandler> {
+        let operator: Option<&StaticOpHandler> = self.env.operators.iter().find_map(|o| {
             if o.info.symbol == symbol {
-                if let OperatorHandler::Static(op) = &o.handler {
+                if let OpHandler::Static(op) = &o.handler {
                     return Some(op);
                 }
             }
@@ -243,11 +241,11 @@ impl TypeChecker<'_> {
     fn scan_forward(&mut self, expr: &[Ast]) -> TypeResult<()> {
         for e in expr {
             if let Ast::Assignment { target, expr, .. } = e {
-                let Ast::Identifier { name, .. } = target.borrow() else {
+                let BindPattern::Variable { name, .. } = target else {
                     continue;
                 };
                 match expr.borrow() {
-                    Ast::FunctionDef {
+                    Ast::Lambda {
                         param,
                         body,
                         return_type,
@@ -291,7 +289,7 @@ impl TypeChecker<'_> {
     /// Check the type of an expression
     pub fn check_expr(&mut self, expr: &Ast) -> TypeResult<CheckedAst> {
         Ok(match expr {
-            Ast::FunctionDef {
+            Ast::Lambda {
                 param,
                 body,
                 return_type,
@@ -305,7 +303,7 @@ impl TypeChecker<'_> {
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
-            Ast::FieldAccess {
+            Ast::MemderAccess {
                 expr: record,
                 field,
                 info,
@@ -316,11 +314,6 @@ impl TypeChecker<'_> {
                 arg: args,
                 info,
             } => self.check_call(expr, args, info)?,
-            Ast::Accumulate {
-                op_info: op,
-                exprs: operands,
-                info,
-            } => self.check_accumulate(op, operands, info)?,
             Ast::Binary {
                 lhs,
                 op_info,
@@ -350,7 +343,7 @@ impl TypeChecker<'_> {
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
-            TypeAst::Constructor { expr, arg, info } => {
+            TypeAst::Constructor { expr, args, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
                     return Err(TypeError::new(
@@ -366,8 +359,11 @@ impl TypeChecker<'_> {
                     )
                     .into());
                 };
-                let arg = self.check_type_expr(arg)?;
-                Type::Constructor(base_name, vec![arg], base_type)
+                let args = args
+                    .iter()
+                    .map(|a| self.check_type_expr(a))
+                    .collect::<TypeResult<Vec<_>>>()?;
+                Type::Constructor(base_name, args, base_type)
             }
         })
     }
@@ -611,12 +607,12 @@ impl TypeChecker<'_> {
     fn check_assignment(
         &mut self,
         annotation: &Option<TypeAst>,
-        target: &Ast,
+        target: &BindPattern,
         expr: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
         let target_name = match target {
-            Ast::Identifier { name, .. } => name,
+            BindPattern::Variable { name, .. } => name,
             _ => {
                 return Err(TypeError::new(
                     "Assignment expects an identifier".to_string(),
@@ -674,7 +670,8 @@ impl TypeChecker<'_> {
         let assign_info = info.join(expr.info());
         self.env.add_variable(target_name, body_ty.clone());
         Ok(CheckedAst::Assignment {
-            target: CheckedBindPattern::Variable {
+            target: BindPattern::Variable {
+                annotation: None, // TODO: Add annotation support!!!
                 name: target_name.to_string(),
                 info: target.info().clone(),
             },
@@ -772,84 +769,6 @@ impl TypeChecker<'_> {
         }
     }
 
-    /// Check the type of an accumulate expression.
-    /// An accumulate expression results in a function variation-specific call.
-    fn check_accumulate(
-        &mut self,
-        op_info: &OperatorInfo,
-        operands: &[Ast],
-        info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
-        let checked_operands = operands
-            .iter()
-            .map(|a| self.check_expr(a))
-            .collect::<TypeResult<Vec<_>>>()?;
-        let alternatives = self.lookup_operator(&op_info.symbol);
-        if let Some(op) = alternatives.iter().find(|op| {
-            checked_operands
-                .iter()
-                .zip(op.signature().params.iter())
-                .all(|(operand, param)| operand.get_type().subtype(&param.ty).success)
-        }) {
-            match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
-                    // Construct a function call expression
-                    let mut operands = operands.iter();
-                    let mut call = Ast::FunctionCall {
-                        expr: Box::new(Ast::Identifier {
-                            name: function_name.clone(),
-                            info: info.clone(),
-                        }),
-                        arg: Box::new(operands.next().unwrap().clone()),
-                        info: info.clone(),
-                    };
-                    for arg in operands {
-                        call = Ast::FunctionCall {
-                            expr: Box::new(call),
-                            arg: Box::new(arg.clone()),
-                            info: info.clone(),
-                        };
-                    }
-                    self.check_expr(&call)
-                }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in accumulate expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
-                    // Evaluate the handler at compile-time
-                    self.check_expr(&handler(StaticOperatorAst::Accumulate(operands.to_vec()))?)
-                }
-            }
-        } else {
-            let mut err = TypeError::new(
-                format!(
-                    "Unknown accumulate operator {}",
-                    op_info.symbol.clone().yellow()
-                ),
-                info.clone(),
-            );
-
-            if let Some(op) = alternatives.first() {
-                let params = op
-                    .signature()
-                    .params
-                    .iter()
-                    .map(|p| p.ty.pretty_print_color())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let ret = op.signature().ret.pretty_print_color();
-                err = err.with_hint(format!(
-                    "Did you mean {} {} {}?",
-                    params,
-                    op_info.symbol.clone().yellow(),
-                    ret
-                ));
-            }
-
-            Err(err.into())
-        }
-    }
-
     /// Check the type of a binary expression.
     /// A binary expression results in a function variation-specific call on the form:
     ///
@@ -866,16 +785,13 @@ impl TypeChecker<'_> {
     fn check_binary(
         &mut self,
         lhs: &Ast,
-        op_info: &OperatorInfo,
+        op_info: &OpInfo,
         rhs: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
         if let Some(op) = self.lookup_static_operator(&op_info.symbol) {
             log::trace!("Found static operator: {}", op_info.symbol);
-            return self.check_expr(&(op.handler)(StaticOperatorAst::Infix(
-                lhs.clone(),
-                rhs.clone(),
-            ))?);
+            return self.check_expr(&(op.handler)(StaticOpAst::Infix(lhs.clone(), rhs.clone()))?);
         }
         let checked_lhs = self.check_expr(lhs)?;
         let checked_rhs = self.check_expr(rhs)?;
@@ -915,7 +831,7 @@ impl TypeChecker<'_> {
                 op.signature().ret.pretty_print_color()
             );
             match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
+                OpHandler::Runtime(RuntimeOpHandler { function_name, .. }) => {
                     let function_ty = self
                         .lookup_function(function_name)
                         .ok_or_else(|| {
@@ -985,16 +901,11 @@ impl TypeChecker<'_> {
 
                     return Ok(result);
                 }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in binary expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
+                OpHandler::Static(StaticOpHandler { handler, .. }) => {
                     log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
-                    return self.check_expr(&handler(StaticOperatorAst::Infix(
-                        lhs.clone(),
-                        rhs.clone(),
-                    ))?);
+                    return self
+                        .check_expr(&handler(StaticOpAst::Infix(lhs.clone(), rhs.clone()))?);
                 }
             }
         }
@@ -1035,7 +946,7 @@ impl TypeChecker<'_> {
 
     fn check_unary(
         &mut self,
-        op_info: &OperatorInfo,
+        op_info: &OpInfo,
         operand: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
@@ -1048,7 +959,7 @@ impl TypeChecker<'_> {
                 continue;
             }
             match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
+                OpHandler::Runtime(RuntimeOpHandler { function_name, .. }) => {
                     let call = Ast::FunctionCall {
                         expr: Box::new(Ast::Identifier {
                             name: function_name.clone(),
@@ -1059,12 +970,9 @@ impl TypeChecker<'_> {
                     };
                     return self.check_expr(&call);
                 }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in unary expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
+                OpHandler::Static(StaticOpHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
-                    return self.check_expr(&handler(StaticOperatorAst::Prefix(operand.clone()))?);
+                    return self.check_expr(&handler(StaticOpAst::Prefix(operand.clone()))?);
                 }
             }
         }

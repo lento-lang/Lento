@@ -93,6 +93,30 @@ impl NumInfo {
 }
 
 //--------------------------------------------------------------------------------------//
+//                               Lexer Factory Functions                                //
+//--------------------------------------------------------------------------------------//
+
+pub fn from_str(input: &str) -> Lexer<BytesReader<'_>> {
+    Lexer::new(BytesReader::from(input))
+}
+
+pub fn from_string(input: String) -> Lexer<Cursor<String>> {
+    Lexer::new(Cursor::new(input))
+}
+
+pub fn from_file(file: File) -> Lexer<BufReader<File>> {
+    Lexer::new(BufReader::new(file))
+}
+
+pub fn from_stream<R: Read>(reader: R) -> Lexer<R> {
+    Lexer::new_stream(reader)
+}
+
+pub fn from_stdin() -> Lexer<StdinReader> {
+    from_stream(StdinReader::default())
+}
+
+//--------------------------------------------------------------------------------------//
 //                                        Lexer                                         //
 //--------------------------------------------------------------------------------------//
 
@@ -118,7 +142,7 @@ where
     content: Vec<u8>,
     index: usize,
     line_info: LineInfo,
-    pub operators: HashSet<String>,
+    operators: HashSet<String>,
     peeked_tokens: Vec<LexResult>, // Queue of peeked tokens (FIFO)
     /// The buffer size of the lexer. \
     /// This is the size of the buffer used to read from the source code.
@@ -197,6 +221,10 @@ impl<R: Read> Lexer<R> {
 
     pub fn move_content(self) -> Vec<u8> {
         self.content
+    }
+
+    pub fn add_operator(&mut self, op: String) {
+        self.operators.insert(op);
     }
 
     pub fn current_index(&self) -> usize {
@@ -1177,24 +1205,4 @@ impl<R: Read> Lexer<R> {
         };
         self.new_token_info(TokenKind::Op(op.clone()))
     }
-}
-
-pub fn from_str(input: &str) -> Lexer<BytesReader<'_>> {
-    Lexer::new(BytesReader::from(input))
-}
-
-pub fn from_string(input: String) -> Lexer<Cursor<String>> {
-    Lexer::new(Cursor::new(input))
-}
-
-pub fn from_file(file: File) -> Lexer<BufReader<File>> {
-    Lexer::new(BufReader::new(file))
-}
-
-pub fn from_stream<R: Read>(reader: R) -> Lexer<R> {
-    Lexer::new_stream(reader)
-}
-
-pub fn from_stdin() -> Lexer<StdinReader> {
-    from_stream(StdinReader::default())
 }

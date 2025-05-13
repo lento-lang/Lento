@@ -3,7 +3,7 @@ use crate::{
     util::error::LineInfo,
 };
 
-use super::op::OperatorInfo;
+use super::{op::OpInfo, pattern::BindPattern};
 
 #[derive(Debug, Clone)]
 pub struct ParamAst {
@@ -34,6 +34,13 @@ pub enum TypeAst {
 }
 
 impl TypeAst {
+    pub fn info(&self) -> &LineInfo {
+        match self {
+            TypeAst::Identifier { info, .. } => info,
+            TypeAst::Constructor { info, .. } => info,
+        }
+    }
+
     pub fn print_sexpr(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
@@ -50,10 +57,19 @@ impl TypeAst {
         }
     }
 
-    pub fn info(&self) -> &LineInfo {
+    pub fn pretty_print(&self) -> String {
         match self {
-            TypeAst::Identifier { info, .. } => info,
-            TypeAst::Constructor { info, .. } => info,
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor { expr, args, .. } => {
+                format!(
+                    "{}({})",
+                    expr.pretty_print(),
+                    args.iter()
+                        .map(|a| a.pretty_print())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
         }
     }
 }
@@ -98,8 +114,8 @@ pub enum Ast {
         fields: Vec<(RecordKey, Ast)>,
         info: LineInfo,
     },
-    /// A field access expression is a reference to a field in a record.
-    FieldAccess {
+    /// A member field access expression is a reference to a field in a record.
+    MemderAccess {
         /// The record expression to access the field from.
         expr: Box<Ast>,
         /// The field key to access.
@@ -113,13 +129,13 @@ pub enum Ast {
         /// Any type annotation for the target expression.
         annotation: Option<TypeAst>,
         /// The target expression to assign to.
-        target: Box<Ast>,
+        target: BindPattern,
         /// The source expression to assign to the target.
         expr: Box<Ast>,
         info: LineInfo,
     },
-    /// A function definition is a named function with a list of parameters and a body expression.
-    FunctionDef {
+    /// A lambda expression is an anonymous function that can be passed as a value.
+    Lambda {
         param: ParamAst,
         body: Box<Ast>,
         return_type: Option<TypeAst>,
@@ -131,22 +147,16 @@ pub enum Ast {
         arg: Box<Ast>,
         info: LineInfo,
     },
-    /// An accumulate expression is an operation with multiple operands.
-    Accumulate {
-        op_info: OperatorInfo,
-        exprs: Vec<Ast>,
-        info: LineInfo,
-    },
     /// A binary expression is an operation with two operands.
     Binary {
         lhs: Box<Ast>,
-        op_info: OperatorInfo,
+        op_info: OpInfo,
         rhs: Box<Ast>,
         info: LineInfo,
     },
     /// A unary expression is an operation with one operand.
     Unary {
-        op_info: OperatorInfo,
+        op_info: OpInfo,
         expr: Box<Ast>,
         info: LineInfo,
     },
@@ -161,12 +171,11 @@ impl Ast {
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
-            Ast::FieldAccess { info, .. } => info,
+            Ast::MemderAccess { info, .. } => info,
             Ast::LiteralType { expr, .. } => expr.info(),
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall { info, .. } => info,
-            Ast::FunctionDef { info, .. } => info,
-            Ast::Accumulate { info, .. } => info,
+            Ast::Lambda { info, .. } => info,
             Ast::Binary { info, .. } => info,
             Ast::Unary { info, .. } => info,
             Ast::Assignment { info, .. } => info,
@@ -213,12 +222,12 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Ast::FieldAccess { expr, field, .. } => format!("({}.{})", expr.print_sexpr(), field),
+            Ast::MemderAccess { expr, field, .. } => format!("({}.{})", expr.print_sexpr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
                 format!("{}({})", expr.print_sexpr(), arg.print_sexpr())
             }
-            Ast::FunctionDef {
+            Ast::Lambda {
                 param: params,
                 body,
                 ..
@@ -234,21 +243,7 @@ impl Ast {
                     format!("(unknown {} -> {})", params.name, body.print_sexpr())
                 }
             }
-            Ast::Accumulate {
-                op_info: op,
-                exprs: operands,
-                ..
-            } => {
-                format!(
-                    "({} {})",
-                    op.symbol.clone(),
-                    operands
-                        .iter()
-                        .map(|e| e.print_sexpr())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
+
             Ast::Binary {
                 lhs, op_info, rhs, ..
             } => format!(
@@ -312,31 +307,19 @@ impl PartialEq for Ast {
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::FunctionDef {
+                Self::Lambda {
                     param: l_param,
                     body: l_body,
                     return_type: l_return_type,
                     ..
                 },
-                Self::FunctionDef {
+                Self::Lambda {
                     param: r_param,
                     body: r_body,
                     return_type: r_return_type,
                     ..
                 },
             ) => l_param == r_param && l_body == r_body && l_return_type == r_return_type,
-            (
-                Self::Accumulate {
-                    op_info: l0,
-                    exprs: l1,
-                    ..
-                },
-                Self::Accumulate {
-                    op_info: r0,
-                    exprs: r1,
-                    ..
-                },
-            ) => l0 == r0 && l1 == r1,
             (
                 Self::Binary {
                     rhs: rhs1,

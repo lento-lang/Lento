@@ -2,8 +2,9 @@ use std::borrow::Borrow;
 
 use crate::{
     interpreter::value::NativeFunction,
+    parser::pattern::BindPattern,
     type_checker::{
-        checked_ast::{CheckedAst, CheckedBindPattern},
+        checked_ast::CheckedAst,
         types::{GetType, Type},
     },
     util::{error::LineInfo, str::Str},
@@ -44,16 +45,16 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
-            (_, _) => unreachable!("This should have been checked by the type checker"),
+            (_, _) => unreachable!("Undefined identifier: {}", name),
         },
         CheckedAst::Assignment { target, expr, .. } => {
             let info = target.info();
-            let target = match target.to_owned() {
-                CheckedBindPattern::Variable { name, .. } => name,
-                _ => unreachable!("This should have been checked by the type checker"),
+            let target = match target {
+                BindPattern::Variable { name, .. } => name,
+                _ => unreachable!("Assignment target must be a variable"),
             };
             let value = eval_expr(expr, env)?;
-            env.add_value(Str::String(target), value.clone(), info)?;
+            env.add_value(Str::String(target.clone()), value.clone(), info)?;
             value
         }
         CheckedAst::List { exprs, ty, .. } => Value::List(

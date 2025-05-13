@@ -7,7 +7,10 @@ mod tests {
             number::{FloatingPoint, Number, UnsignedInteger},
             value::Value,
         },
-        parser::parser::{self, ParseResult, ParseResults},
+        parser::{
+            parser::{self, ParseResult, ParseResults},
+            pattern::BindPattern,
+        },
         stdlib::init::{stdlib, Initializer},
         type_checker::{
             checked_ast::{CheckedAst, CheckedParam},
@@ -193,7 +196,8 @@ mod tests {
     #[test]
     fn assignment() {
         let ast = CheckedAst::Assignment {
-            target: crate::type_checker::checked_ast::CheckedBindPattern::Variable {
+            target: BindPattern::Variable {
+                annotation: None,
                 name: "x".into(),
                 info: LineInfo::default(),
             },
