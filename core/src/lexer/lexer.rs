@@ -490,7 +490,6 @@ impl<R: Read> Lexer<R> {
                     ']' => TokenKind::RightBracket,
                     ';' => TokenKind::SemiColon,
                     ':' => TokenKind::Colon,
-                    ',' => TokenKind::Comma,
                     '/' if self.peek_char(0) == Some('/') => return self.read_comment(),
                     _ => return self.read_operator(c),
                 });

@@ -10,7 +10,6 @@ pub enum TokenKind {
     Newline,
     SemiColon,
     Colon,
-    Comma,
     // Literals
     Identifier(String),
     Number(Number),
@@ -100,7 +99,6 @@ impl Display for TokenKind {
             Self::Newline => write!(f, "newline"),
             Self::SemiColon => write!(f, ";"),
             Self::Colon => write!(f, ":"),
-            Self::Comma => write!(f, ","),
             Self::Identifier(s) => write!(f, "{}", s),
             Self::Number(s) => write!(f, "{}", s),
             Self::String(s) => write!(f, "\"{}\"", s),

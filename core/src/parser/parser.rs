@@ -14,7 +14,7 @@ use crate::{
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{TokenInfo, TokenKind},
     },
-    parser::op::prec,
+    parser::op::{prec, COMMA_SYM},
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -262,9 +262,11 @@ impl<R: Read> Parser<R> {
             if end.token == TokenKind::RightParen {
                 break;
             }
+            log::trace!("Parsing element...");
             exprs.push(self.parse_top_expr()?);
+            log::trace!("Parsed tuple element: {:?}", exprs.last());
             if let Ok(nt) = self.lexer.peek_token(0) {
-                if nt.token == TokenKind::Comma {
+                if nt.token == TokenKind::Op(COMMA_SYM.to_string()) {
                     self.lexer.next_token().unwrap();
                     if self.lexer.peek_token(0).unwrap().token == TokenKind::RightParen {
                         explicit_single = true;
@@ -336,7 +338,7 @@ impl<R: Read> Parser<R> {
             }
             exprs.push(self.parse_top_expr()?);
             if let Ok(nt) = self.lexer.peek_token(0) {
-                if nt.token == TokenKind::Comma {
+                if nt.token == TokenKind::Op(COMMA_SYM.to_string()) {
                     self.lexer.next_token().unwrap();
                     continue;
                 } else if nt.token == TokenKind::RightBracket {
@@ -430,7 +432,7 @@ impl<R: Read> Parser<R> {
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Comma => (), // Continue parsing
+                    TokenKind::Op(op) if op == COMMA_SYM => (), // Continue parsing
                     TokenKind::RightBrace => {
                         return Some(Ok(Ast::Record {
                             fields,
@@ -488,7 +490,7 @@ impl<R: Read> Parser<R> {
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Comma => continue,
+                    TokenKind::Op(op) if op == COMMA_SYM => continue,
                     TokenKind::RightBrace => {
                         last_info = t.info;
                         break;
@@ -528,7 +530,7 @@ impl<R: Read> Parser<R> {
                 )
                 .with_label(err.message().to_owned(), err.info().clone())
             })?;
-
+        log::trace!("Parsing primary: {:?}", t.token);
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
             TokenKind::Identifier(id) => {
@@ -556,6 +558,7 @@ impl<R: Read> Parser<R> {
             }
             TokenKind::Op(op) => {
                 if let Some(op) = self.find_operator_pos(&op, OpPos::Prefix) {
+                    log::trace!("Parsing prefix operator: {:?}", op);
                     Ok(Ast::Unary {
                         op_info: op.clone(),
                         expr: Box::new(self.parse_primary()?),
@@ -650,6 +653,7 @@ impl<R: Read> Parser<R> {
             }
             if let TokenKind::Op(op) = &nt.token {
                 if let Some(op) = self.check_postfix_op(min_prec, op) {
+                    log::trace!("Parsing postfix operator: {:?}", op);
                     self.lexer.next_token().unwrap();
                     expr = Ast::Unary {
                         info: expr.info().join(&nt.info),
@@ -658,6 +662,7 @@ impl<R: Read> Parser<R> {
                     };
                     continue;
                 } else if let Some(op) = self.check_binary_op(min_prec, op) {
+                    log::trace!("Parsing infix operator: {:?}", op);
                     self.lexer.next_token().unwrap();
                     let rhs = self.parse_expr(op.precedence)?;
                     expr = Ast::Binary {
@@ -699,8 +704,7 @@ impl<R: Read> Parser<R> {
     fn parse_top_expr(&mut self) -> ParseResult {
         match self.parse_expr(0) {
             Ok(expr) => {
-                let nt = self.lexer.peek_token(0);
-                if let Ok(t) = nt {
+                if let Ok(t) = self.lexer.peek_token(0) {
                     if t.token.is_top_level_terminal(false) {
                         self.lexer.next_token().unwrap();
                     }

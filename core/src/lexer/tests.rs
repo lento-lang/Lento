@@ -152,9 +152,9 @@ mod tests {
     fn commas() {
         let mut lexer = from_str("a, b, c");
         assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Comma);
+        assert_next_token_eq(&mut lexer, TokenKind::Op(",".to_string()));
         assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Comma);
+        assert_next_token_eq(&mut lexer, TokenKind::Op(",".to_string()));
         assert_next_token_eq(&mut lexer, TokenKind::Identifier("c".to_string()));
         assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
     }
