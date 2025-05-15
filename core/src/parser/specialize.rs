@@ -1,7 +1,7 @@
 use super::{
     ast::Ast,
     error::ParseError,
-    op::{ASSIGNMENT_SYM, MEMBER_ACCESS_SYM},
+    op::{ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
     parser::ParseResult,
 };
 use crate::{
@@ -56,6 +56,9 @@ pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
             field: record_key(*rhs)?,
             info,
         }),
+        Ast::Binary {
+            lhs, op_info, rhs, ..
+        } if op_info.symbol == COMMA_SYM => Ok(sequence(*lhs, *rhs)),
         // No specialization available
         _ => Ok(expr),
     }
@@ -80,6 +83,36 @@ fn flatten_calls(expr: &Ast) -> (&Ast, Vec<&Ast>) {
         current = expr;
     }
     (current, calls)
+}
+
+/// Flatten a sequence of comma (bin op) separated expressions into a single vector
+fn sequence(expr: Ast, first: Ast) -> Ast {
+    let mut exprs = vec![first];
+    let start_info = expr.info().clone();
+    let mut current = expr;
+    loop {
+        match current {
+            Ast::Binary {
+                lhs, op_info, rhs, ..
+            } if op_info.symbol == COMMA_SYM => {
+                exprs.insert(0, *rhs);
+                current = *lhs;
+            }
+            _ => {
+                exprs.insert(0, current);
+                break;
+            }
+        }
+    }
+    if exprs.len() == 1 {
+        exprs.pop().unwrap()
+    } else {
+        log::trace!("Specializing comma sequence: {:?}", exprs);
+        Ast::Tuple {
+            info: start_info.join(exprs.last().unwrap().info()),
+            exprs,
+        }
+    }
 }
 
 fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {

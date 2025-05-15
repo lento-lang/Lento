@@ -254,59 +254,12 @@ impl<R: Read> Parser<R> {
     /// ```ignored
     /// x = (1, 2, 3)
     /// ```
-    fn parse_tuple(&mut self, start_info: LineInfo) -> ParseResult {
-        // Tuples are defined by a comma-separated list of expressions
-        let mut explicit_single = false;
-        let mut exprs = Vec::new();
-        while let Ok(end) = self.lexer.peek_token(0) {
-            if end.token == TokenKind::RightParen {
-                break;
-            }
-            log::trace!("Parsing element...");
-            exprs.push(self.parse_top_expr()?);
-            log::trace!("Parsed tuple element: {:?}", exprs.last());
-            if let Ok(nt) = self.lexer.peek_token(0) {
-                if nt.token == TokenKind::Op(COMMA_SYM.to_string()) {
-                    self.lexer.next_token().unwrap();
-                    if self.lexer.peek_token(0).unwrap().token == TokenKind::RightParen {
-                        explicit_single = true;
-                        // Break in the next iteration
-                    }
-                    continue;
-                } else if nt.token == TokenKind::RightParen {
-                    break;
-                }
-            }
-            if let Ok(nt) = self.lexer.peek_token(0) {
-                return Err(ParseError::new(
-                    format!(
-                        "Expected {} or {}, but found {}",
-                        ",".yellow(),
-                        ")".yellow(),
-                        nt.token.to_string().light_red()
-                    ),
-                    nt.info.clone(),
-                )
-                .with_label(
-                    "This should be either a comma or a right parenthesis".to_string(),
-                    nt.info,
-                ));
-            } else {
-                return Err(ParseError::new(
-                    "Unexpected end of program".to_string(),
-                    LineInfo::eof(start_info.end, self.lexer.current_index()),
-                ));
-            }
-        }
-        let end = self.parse_expected_eq(TokenKind::RightParen, ")")?;
-        if exprs.len() == 1 && !explicit_single {
-            Ok(exprs.pop().unwrap())
-        } else {
-            Ok(Ast::Tuple {
-                exprs,
-                info: start_info.join(&end.info),
-            })
-        }
+    fn parse_tuple(&mut self) -> ParseResult {
+        log::trace!("Parsing elements...");
+        let tuple = self.parse_top_expr()?;
+        log::trace!("Parsed tuple elements: {:?}", tuple);
+        self.parse_expected_eq(TokenKind::RightParen, ")")?;
+        Ok(tuple)
     }
 
     fn parse_record_or_block(&mut self, start_info: LineInfo) -> ParseResult {
@@ -543,7 +496,7 @@ impl<R: Read> Parser<R> {
                         }
                     ) {
                         self.lexer.next_token().unwrap();
-                        let args: Vec<Ast> = match self.parse_tuple(nt.info)? {
+                        let args: Vec<Ast> = match self.parse_tuple()? {
                             Ast::Tuple { exprs, .. } => exprs,
                             single_expr => vec![single_expr],
                         };
@@ -577,7 +530,7 @@ impl<R: Read> Parser<R> {
                 match start {
                     TokenKind::LeftParen {
                         is_function_call: false,
-                    } => self.parse_tuple(t.info), // Tuples, Units and Parentheses: ()
+                    } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
                     TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
                     TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),
@@ -591,7 +544,7 @@ impl<R: Read> Parser<R> {
                 t.info.clone(),
             )
             .with_label(
-                format!("This {} is invalid here", t.token.to_string().yellow()),
+                format!("The {} is invalid here", t.token.to_string().yellow()),
                 t.info,
             )),
         }
