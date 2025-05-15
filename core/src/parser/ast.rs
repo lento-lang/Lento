@@ -41,15 +41,15 @@ impl TypeAst {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
             TypeAst::Constructor { expr, args, .. } => {
                 format!(
                     "{}({})",
-                    expr.print_sexpr(),
+                    expr.print_expr(),
                     args.iter()
-                        .map(|a| a.print_sexpr())
+                        .map(|a| a.print_expr())
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
@@ -190,17 +190,17 @@ impl Ast {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
-            Ast::LiteralType { expr, .. } => expr.print_sexpr(),
+            Ast::LiteralType { expr, .. } => expr.print_expr(),
             Ast::Tuple {
                 exprs: elements, ..
             } => format!(
                 "({})",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -210,7 +210,7 @@ impl Ast {
                 "[{}]",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -218,14 +218,14 @@ impl Ast {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Ast::MemderAccess { expr, field, .. } => format!("({}.{})", expr.print_sexpr(), field),
+            Ast::MemderAccess { expr, field, .. } => format!("({}.{})", expr.print_expr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
-                format!("{}({})", expr.print_sexpr(), arg.print_sexpr())
+                format!("{}({})", expr.print_expr(), arg.print_expr())
             }
             Ast::Lambda {
                 param: params,
@@ -235,12 +235,12 @@ impl Ast {
                 if let Some(ty) = &params.ty {
                     format!(
                         "({} {} -> {})",
+                        ty.print_expr(),
                         params.name,
-                        ty.print_sexpr(),
-                        body.print_sexpr()
+                        body.print_expr()
                     )
                 } else {
-                    format!("(unknown {} -> {})", params.name, body.print_sexpr())
+                    format!("({} -> {})", params.name, body.print_expr())
                 }
             }
 
@@ -248,16 +248,16 @@ impl Ast {
                 lhs, op_info, rhs, ..
             } => format!(
                 "({} {} {})",
+                lhs.print_expr(),
                 op_info.symbol.clone(),
-                lhs.print_sexpr(),
-                rhs.print_sexpr()
+                rhs.print_expr()
             ),
             Ast::Unary {
                 op_info: op,
                 expr: operand,
                 ..
             } => {
-                format!("({} {})", op.symbol.clone(), operand.print_sexpr())
+                format!("({} {})", op.symbol.clone(), operand.print_expr())
             }
             Ast::Assignment {
                 annotation: ty,
@@ -267,22 +267,22 @@ impl Ast {
             } => {
                 if let Some(ty) = ty {
                     format!(
-                        "(= {} {} {})",
-                        ty.print_sexpr(),
+                        "({} {} = {})",
+                        ty.print_expr(),
                         lhs.print_sexpr(),
-                        rhs.print_sexpr()
+                        rhs.print_expr()
                     )
                 } else {
-                    format!("(= {} {})", lhs.print_sexpr(), rhs.print_sexpr())
+                    format!("({} = {})", lhs.print_sexpr(), rhs.print_expr())
                 }
             }
             Ast::Block { exprs, .. } => format!(
-                "({})",
+                "{{ {} }}",
                 exprs
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join("; ")
             ),
         }
     }
