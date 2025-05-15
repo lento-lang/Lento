@@ -1196,7 +1196,6 @@ impl<R: Read> Lexer<R> {
             ops = new_ops;
             self.next_char(); // Eat the peeked character
         }
-        log::trace!("longest_match: {}", longest_match);
         let Some(op) = self.operators.get(&longest_match) else {
             return Err(LexerError::new(
                 format!("Unknown operator {}", longest_match),

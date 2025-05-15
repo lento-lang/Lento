@@ -349,12 +349,12 @@ impl TypeChecker<'_> {
                     return Err(TypeError::new(
                         format!(
                             "Cannot use constructor on non-constructor type {}",
-                            expr.print_sexpr()
+                            expr.print_expr()
                         ),
                         info.clone(),
                     )
                     .with_label(
-                        format!("This is not a constructable type {}", expr.print_sexpr()),
+                        format!("This is not a constructable type {}", expr.print_expr()),
                         expr_info.clone(),
                     )
                     .into());

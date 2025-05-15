@@ -121,7 +121,7 @@ impl BindPattern {
                 ..
             } => {
                 let mut result = if let Some(annotation) = annotation {
-                    format!("{} {}(", name, annotation.print_sexpr())
+                    format!("{} {}(", name, annotation.print_expr())
                 } else {
                     format!("{}(", name)
                 };

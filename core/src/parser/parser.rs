@@ -24,55 +24,11 @@ use crate::{
 use crate::lexer::lexer::Lexer;
 
 use super::{
-    ast::Ast,
+    ast::{Ast, ParamAst},
     error::{ParseError, ParserOpError},
-    op::{OpAssoc, OpInfo, OpPos, OpPrec},
+    op::{default_operators, OpAssoc, OpInfo, OpPos, OpPrec},
+    specialize,
 };
-
-const SEMICOLON: &str = ";";
-const COMMA: &str = ",";
-const ASSIGNMENT: &str = "=";
-const MEMBER_ACCESS: &str = ".";
-
-/// Default operators used in the language grammar and required for parsing. \
-/// These operators are defined in the parser and are required to produce valid ASTs. \
-/// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top_expr` expression.
-/// - `semicolon`: `;` - Used to separate statements becomes an `Ast::Block` node.
-/// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
-/// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Assignment` node.
-/// - `member access`: `.` - Used to access members of records becomes an `Ast::MemberAccess` node.
-pub fn default_operators() -> Vec<OpInfo> {
-    vec![
-        OpInfo {
-            symbol: SEMICOLON.to_string(),
-            position: OpPos::Infix,
-            precedence: prec::SEMICOLON,
-            associativity: OpAssoc::Left,
-            allow_trailing: false,
-        },
-        OpInfo {
-            symbol: COMMA.to_string(),
-            position: OpPos::Infix,
-            precedence: prec::COMMA,
-            associativity: OpAssoc::Left,
-            allow_trailing: true,
-        },
-        OpInfo {
-            symbol: ASSIGNMENT.to_string(),
-            position: OpPos::Infix,
-            precedence: prec::ASSIGNMENT,
-            associativity: OpAssoc::Right,
-            allow_trailing: false,
-        },
-        OpInfo {
-            symbol: MEMBER_ACCESS.to_string(),
-            position: OpPos::Infix,
-            precedence: prec::MEMBER_ACCESS,
-            associativity: OpAssoc::Left,
-            allow_trailing: false,
-        },
-    ]
-}
 
 /// Token predicates for parsing
 mod pred {
@@ -589,7 +545,7 @@ impl<R: Read> Parser<R> {
                             Ast::Tuple { exprs, .. } => exprs,
                             single_expr => vec![single_expr],
                         };
-                        return Ok(syntax_sugar::roll_function_call(id, args, t.info));
+                        return Ok(roll_function_call(id, args, t.info));
                     }
                 }
                 // Else, just return the identifier as is
@@ -749,7 +705,7 @@ impl<R: Read> Parser<R> {
                         self.lexer.next_token().unwrap();
                     }
                 }
-                syntax_sugar::specialize_top(expr, &self.types)
+                specialize::top(expr, &self.types)
             }
             Err(err) => Err(err),
         }
@@ -796,215 +752,77 @@ impl<R: Read> Parser<R> {
 }
 
 //--------------------------------------------------------------------------------------//
-//                                   Syntax Sugar                                       //
+//                                  Helper Functions                                    //
 //--------------------------------------------------------------------------------------//
 
-mod syntax_sugar {
-    use super::*;
-    use crate::{
-        interpreter::number::Number,
-        parser::{ast::ParamAst, pattern::BindPattern},
-        type_checker::types::std_types,
+/// Takes a function name, a list of parameters and a body and rolls them into a single assignment expression.
+/// Parameters are rolled into a nested function definition.
+/// All parameters are sorted like:
+/// ```lento
+/// func(a, b, c) = expr
+/// ```
+/// becomes:
+/// ```lento
+/// func = a -> b -> c -> expr
+/// ```
+///
+/// # Arguments
+/// - `func_name` The name of the function
+/// - `params` A list of parameters in left-to-right order: `a, b, c`
+/// - `body` The body of the function
+pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
+    assert!(!params.is_empty(), "Expected at least one parameter");
+    let info = body.info().join(params.last().map(|p| &p.info).unwrap());
+    let mut params = params.iter().rev();
+    let mut function = Ast::Lambda {
+        param: params.next().unwrap().clone(),
+        body: Box::new(body),
+        return_type: None,
+        info,
     };
-
-    // TODO: Figure out what to do with this...
-    // use crate::interpreter::number::{FloatingPoint, Number, NumberCasting};
-    // use malachite::{num::basic::traits::Zero, Integer, Rational};
-    // pub fn try_literal_fraction(lhs: &Number, rhs: &Number, info: LineInfo) -> Option<Ast> {
-    //     let lhs = match lhs {
-    //         Number::UnsignedInteger(lhs) => lhs.to_signed(),
-    //         Number::SignedInteger(lhs) => lhs.clone(),
-    //         _ => return None,
-    //     }
-    //     .to_bigint();
-    //     let rhs = match rhs {
-    //         Number::UnsignedInteger(rhs) => rhs.to_signed(),
-    //         Number::SignedInteger(rhs) => rhs.clone(),
-    //         _ => return None,
-    //     }
-    //     .to_bigint();
-    //     if rhs.cmp(&Integer::ZERO) == std::cmp::Ordering::Equal {
-    //         return None;
-    //     }
-    //     Some(Ast::Literal {
-    //         value: Value::Number(Number::FloatingPoint(
-    //             FloatingPoint::FloatBig(Rational::from_integers(lhs, rhs)).optimize(),
-    //         )),
-    //         info,
-    //     })
-    // }
-
-    // pub fn try_binary(lhs: &Ast, op: &OpInfo, rhs: &Ast) -> Option<Ast> {
-    //     match (lhs, op, rhs) {
-    //         (
-    //             Ast::Literal {
-    //                 value: Value::Number(lhs),
-    //                 info: left_info,
-    //             },
-    //             OpInfo { symbol, .. },
-    //             Ast::Literal {
-    //                 value: Value::Number(rhs),
-    //                 info: right_info,
-    //             },
-    //         ) if symbol == "/" => try_literal_fraction(lhs, rhs, left_info.join(right_info)),
-    //         _ => None,
-    //     }
-    // }
-
-    /// Takes a function name, a list of parameters and a body and rolls them into a single assignment expression.
-    /// Parameters are rolled into a nested function definition.
-    /// All parameters are sorted like:
-    /// ```lento
-    /// func(a, b, c) = expr
-    /// ```
-    /// becomes:
-    /// ```lento
-    /// func = a -> b -> c -> expr
-    /// ```
-    ///
-    /// # Arguments
-    /// - `func_name` The name of the function
-    /// - `params` A list of parameters in left-to-right order: `a, b, c`
-    /// - `body` The body of the function
-    pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
-        assert!(!params.is_empty(), "Expected at least one parameter");
-        let info = body.info().join(params.last().map(|p| &p.info).unwrap());
-        let mut params = params.iter().rev();
-        let mut function = Ast::Lambda {
-            param: params.next().unwrap().clone(),
-            body: Box::new(body),
+    for param in params {
+        function = Ast::Lambda {
+            info: function.info().join(&param.info),
+            param: param.clone(),
+            body: Box::new(function),
             return_type: None,
-            info,
         };
-        for param in params {
-            function = Ast::Lambda {
-                info: function.info().join(&param.info),
-                param: param.clone(),
-                body: Box::new(function),
-                return_type: None,
-            };
-        }
-        function
     }
+    function
+}
 
-    /// Takes a function name, a list of arguments and rolls them into a single function call expression.
-    /// Arguments are rolled into a nested function call.
-    /// All arguments are sorted like:
-    /// ```lento
-    /// func(a, b, c)
-    /// ```
-    /// becomes:
-    /// ```lento
-    /// func(a)(b)(c)
-    /// ```
-    pub fn roll_function_call(name: String, args: Vec<Ast>, start_info: LineInfo) -> Ast {
-        let last_info = args
-            .last()
-            .map(|a| a.info().clone())
-            .unwrap_or(start_info.clone());
-        let call_info = start_info.join(&last_info);
-        let mut args = args.into_iter();
-        let mut call = Ast::FunctionCall {
-            expr: Box::new(Ast::Identifier {
-                name,
-                info: call_info.clone(),
-            }),
-            arg: Box::new(args.next().unwrap()),
+/// Takes a function name, a list of arguments and rolls them into a single function call expression.
+/// Arguments are rolled into a nested function call.
+/// All arguments are sorted like:
+/// ```lento
+/// func(a, b, c)
+/// ```
+/// becomes:
+/// ```lento
+/// func(a)(b)(c)
+/// ```
+pub fn roll_function_call(name: String, args: Vec<Ast>, start_info: LineInfo) -> Ast {
+    let last_info = args
+        .last()
+        .map(|a| a.info().clone())
+        .unwrap_or(start_info.clone());
+    let call_info = start_info.join(&last_info);
+    let mut args = args.into_iter();
+    let mut call = Ast::FunctionCall {
+        expr: Box::new(Ast::Identifier {
+            name,
             info: call_info.clone(),
+        }),
+        arg: Box::new(args.next().unwrap()),
+        info: call_info.clone(),
+    };
+    for arg in args {
+        let arg_info = call_info.join(arg.info());
+        call = Ast::FunctionCall {
+            expr: Box::new(call),
+            arg: Box::new(arg),
+            info: arg_info,
         };
-        for arg in args {
-            let arg_info = call_info.join(arg.info());
-            call = Ast::FunctionCall {
-                expr: Box::new(call),
-                arg: Box::new(arg),
-                info: arg_info,
-            };
-        }
-        call
     }
-
-    fn specialize_binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
-        todo!("Specialize binding pattern");
-    }
-
-    fn specialize_record_key(expr: Ast) -> Result<RecordKey, ParseError> {
-        match expr {
-            Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),
-            Ast::Literal {
-                value: Value::Number(Number::UnsignedInteger(n)),
-                ..
-            } => Ok(RecordKey::Number(Number::UnsignedInteger(n.clone()))),
-            _ => Err(ParseError::new(
-                format!(
-                    "Field access via {} requires a identifier or {} literal",
-                    ".".yellow(),
-                    std_types::UINT().pretty_print_color()
-                ),
-                expr.info().clone(),
-            )
-            .with_label(
-                format!(
-                    "This is not an identifier or {}",
-                    std_types::UINT().pretty_print_color()
-                ),
-                expr.info().clone(),
-            )
-            .with_hint(format!(
-                "Did you mean to use indexing via {} instead?",
-                "[]".yellow()
-            ))),
-        }
-    }
-
-    // Specialize type constructors to literal types
-    pub fn specialize_call(expr: Ast, types: &HashSet<String>) -> ParseResult {
-        let (func, _args) = flatten_calls(&expr);
-        if let Ast::Identifier { name, info: _ } = &func {
-            if types.contains(name) {
-                todo!("Specialize type constructor");
-            }
-        }
-        Ok(expr)
-    }
-
-    fn flatten_calls(expr: &Ast) -> (&Ast, Vec<&Ast>) {
-        let mut calls = Vec::new();
-        let mut current = expr;
-        while let Ast::FunctionCall { expr, arg, .. } = current {
-            calls.push(&**arg);
-            current = expr;
-        }
-        (current, calls)
-    }
-
-    pub fn specialize_top(expr: Ast, types: &HashSet<String>) -> ParseResult {
-        match expr {
-            // Specialize type constructors to literal types
-            Ast::FunctionCall { .. } => specialize_call(expr, types),
-            // Specialize assignments to binding patterns with optional type annotations
-            Ast::Binary {
-                lhs,
-                op_info,
-                rhs,
-                info,
-            } if op_info.symbol == ASSIGNMENT => Ok(Ast::Assignment {
-                annotation: None,
-                target: specialize_binding_pattern(*lhs)?,
-                expr: rhs,
-                info,
-            }),
-            Ast::Binary {
-                lhs,
-                op_info,
-                rhs,
-                info,
-            } if op_info.symbol == MEMBER_ACCESS => Ok(Ast::MemderAccess {
-                expr: lhs,
-                field: specialize_record_key(*rhs)?,
-                info,
-            }),
-            // No specialization available
-            _ => Ok(expr),
-        }
-    }
+    call
 }

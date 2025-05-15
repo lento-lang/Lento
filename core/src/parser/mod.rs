@@ -3,4 +3,5 @@ pub mod error;
 pub mod op;
 pub mod parser;
 pub mod pattern;
+mod specialize;
 mod tests;
