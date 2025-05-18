@@ -52,24 +52,24 @@ pub type OpPrec = u16;
 pub mod prec {
     use super::OpPrec;
 
-    pub const SEMICOLON: OpPrec = 10;
-    pub const COMMA: OpPrec = 50;
-    pub const ASSIGNMENT: OpPrec = 100;
-    pub const CONDITIONAL: OpPrec = 200;
-    pub const LOGICAL_OR: OpPrec = 300;
-    pub const LOGICAL_AND: OpPrec = 400;
-    pub const EQUALITY: OpPrec = 500;
-    pub const TUPLE: OpPrec = 600;
-    pub const ADDITIVE: OpPrec = 700;
-    pub const MULTIPLICATIVE: OpPrec = 800;
-    pub const EXPONENTIAL: OpPrec = 900;
-    pub const PREFIX: OpPrec = 1000;
-    pub const POSTFIX: OpPrec = 1100;
-    pub const MEMBER_ACCESS: OpPrec = 1200;
+    pub const SEMICOLON_PREC: OpPrec = 10;
+    pub const COMMA_PREC: OpPrec = 50;
+    pub const ASSIGNMENT_PREC: OpPrec = 100;
+    pub const CONDITIONAL_PREC: OpPrec = 200;
+    pub const LOGICAL_OR_PREC: OpPrec = 300;
+    pub const LOGICAL_AND_PREC: OpPrec = 400;
+    pub const EQUALITY_PREC: OpPrec = 500;
+    pub const TUPLE_PREC: OpPrec = 600;
+    pub const ADDITIVE_PREC: OpPrec = 700;
+    pub const MULTIPLICATIVE_PREC: OpPrec = 800;
+    pub const EXPONENTIAL_PREC: OpPrec = 900;
+    pub const PREFIX_PREC: OpPrec = 1000;
+    pub const POSTFIX_PREC: OpPrec = 1100;
+    pub const MEMBER_ACCESS_PREC: OpPrec = 1200;
 
     /// Function application precedence.
     /// Stronger than any other default operator.
-    pub const FUNCTION_APP: OpPrec = 2000;
+    pub const FUNCTION_APP_PREC: OpPrec = 2000;
 }
 
 //--------------------------------------------------------------------------------------//
@@ -258,21 +258,21 @@ pub fn default_operators() -> Vec<OpInfo> {
         OpInfo {
             symbol: COMMA_SYM.to_string(),
             position: OpPos::Infix,
-            precedence: prec::COMMA,
+            precedence: prec::COMMA_PREC,
             associativity: OpAssoc::Left,
             allow_trailing: true,
         },
         OpInfo {
             symbol: ASSIGNMENT_SYM.to_string(),
             position: OpPos::Infix,
-            precedence: prec::ASSIGNMENT,
+            precedence: prec::ASSIGNMENT_PREC,
             associativity: OpAssoc::Right,
             allow_trailing: false,
         },
         OpInfo {
             symbol: MEMBER_ACCESS_SYM.to_string(),
             position: OpPos::Infix,
-            precedence: prec::MEMBER_ACCESS,
+            precedence: prec::MEMBER_ACCESS_PREC,
             associativity: OpAssoc::Left,
             allow_trailing: false,
         },
