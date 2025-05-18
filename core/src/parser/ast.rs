@@ -225,7 +225,7 @@ impl Ast {
             Ast::MemderAccess { expr, field, .. } => format!("({}.{})", expr.print_expr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
-                format!("{}({})", expr.print_expr(), arg.print_expr())
+                format!("({} {})", expr.print_expr(), arg.print_expr())
             }
             Ast::Lambda {
                 param: params,
