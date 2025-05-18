@@ -343,7 +343,7 @@ impl TypeChecker<'_> {
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
-            TypeAst::Constructor { expr, args, info } => {
+            TypeAst::Constructor { expr, params, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
                     return Err(TypeError::new(
@@ -359,7 +359,7 @@ impl TypeChecker<'_> {
                     )
                     .into());
                 };
-                let args = args
+                let args = params
                     .iter()
                     .map(|a| self.check_type_expr(a))
                     .collect::<TypeResult<Vec<_>>>()?;
