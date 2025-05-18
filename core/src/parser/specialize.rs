@@ -175,7 +175,7 @@ fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
         }
         Ast::Literal { value, info } => Ok(BindPattern::Literal { value, info }),
         _ => Err(ParseError::new(
-            format!("Invalid binding pattern: {:?}", expr),
+            format!("Invalid binding pattern: {}", expr.print_expr()),
             expr.info().clone(),
         )),
     }
