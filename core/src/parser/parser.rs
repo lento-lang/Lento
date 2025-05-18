@@ -14,7 +14,6 @@ use crate::{
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{TokenInfo, TokenKind},
     },
-    parser::op::{prec, COMMA_SYM},
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -26,7 +25,11 @@ use crate::lexer::lexer::Lexer;
 use super::{
     ast::{Ast, ParamAst},
     error::{ParseError, ParserOpError},
-    op::{default_operators, OpAssoc, OpInfo, OpPos, OpPrec},
+    op::{
+        default_operators,
+        prec::{COMMA_PREC, FUNCTION_APP_PREC},
+        OpAssoc, OpInfo, OpPos, OpPrec, COMMA_SYM,
+    },
     specialize,
 };
 
@@ -629,7 +632,7 @@ impl<R: Read> Parser<R> {
                     break;
                 }
             }
-            if prec::FUNCTION_APP > min_prec {
+            if FUNCTION_APP_PREC > min_prec {
                 expr = Ast::FunctionCall {
                     info: expr.info().join(&nt.info),
                     expr: Box::new(expr),
