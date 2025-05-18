@@ -613,18 +613,27 @@ impl TypeChecker<'_> {
     ) -> TypeResult<CheckedAst> {
         let target_name = match target {
             BindPattern::Variable { name, .. } => name,
-            _ => {
-                return Err(TypeError::new(
-                    "Assignment expects an identifier".to_string(),
-                    info.clone(),
-                )
-                .with_label(
-                    "This is not an identifier".to_string(),
-                    target.info().clone(),
-                )
-                .with_hint("Did you mean to assign to an identifier?".to_string())
-                .into());
+            BindPattern::Tuple { .. }
+            | BindPattern::Record { .. }
+            | BindPattern::List { .. }
+            | BindPattern::Wildcard
+            | BindPattern::Literal { .. }
+            | BindPattern::Rest { .. } => {
+                let checked_expr = self.check_expr(expr)?;
+                let expr_type = checked_expr.get_type().clone();
+                self.check_binding_pattern(target, &expr_type, info)?;
+                return Ok(CheckedAst::Assignment {
+                    target: target.clone(),
+                    expr: Box::new(checked_expr),
+                    info: info.clone(),
+                });
             }
+            BindPattern::Function {
+                name,
+                annotation,
+                params,
+                info,
+            } => todo!("Function assignment"),
         };
         if let Some(existing) = self.lookup_local_identifier(target_name) {
             let ty_name = match existing {
@@ -989,6 +998,142 @@ impl TypeChecker<'_> {
             ));
         }
         Err(err.into())
+    }
+
+    fn check_binding_pattern(
+        &mut self,
+        pattern: &BindPattern,
+        expr_ty: &Type,
+        info: &LineInfo,
+    ) -> TypeResult<()> {
+        match pattern {
+            BindPattern::Variable { name, .. } => {
+                self.env.add_variable(name, expr_ty.clone());
+                Ok(())
+            }
+            BindPattern::Tuple { elements, .. } => {
+                if let Type::Tuple(types) = expr_ty {
+                    if elements.len() != types.len() {
+                        return Err(TypeError::new(
+                            format!(
+                                "Tuple pattern has {} elements, but the type has {} elements",
+                                elements.len(),
+                                types.len()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!("This pattern has {} elements", elements.len()),
+                            pattern.info().clone(),
+                        )
+                        .with_label(
+                            format!("This type has {} elements", types.len()),
+                            info.clone(),
+                        )
+                        .into());
+                    }
+                    for (element, ty) in elements.iter().zip(types) {
+                        self.check_binding_pattern(element, ty, info)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match tuple pattern with non-tuple type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a tuple type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::Record { fields, .. } => {
+                if let Type::Record(types) = expr_ty {
+                    for (key, pattern) in fields {
+                        if let Some((_, ty)) = types.iter().find(|(k, _)| k == key) {
+                            self.check_binding_pattern(pattern, ty, info)?;
+                        } else {
+                            return Err(TypeError::new(
+                                format!(
+                                    "Field {} not found in record type {}",
+                                    key.to_string().yellow(),
+                                    expr_ty.pretty_print_color()
+                                ),
+                                info.clone(),
+                            )
+                            .with_label(
+                                format!(
+                                    "This record does not have the field {}",
+                                    key.to_string().yellow()
+                                ),
+                                pattern.info().clone(),
+                            )
+                            .into());
+                        }
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match record pattern with non-record type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a record type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::List { elements, .. } => {
+                if let Type::List(element_type) = expr_ty {
+                    for element in elements {
+                        self.check_binding_pattern(element, element_type, info)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match list pattern with non-list type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a list type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::Wildcard => Ok(()),
+            BindPattern::Literal { value, .. } => {
+                let value_type = value.get_type();
+                if !value_type.subtype(expr_ty).success {
+                    return Err(TypeError::new(
+                        format!(
+                            "Literal pattern of type {} does not match type {}",
+                            value_type.pretty_print_color(),
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label(
+                        format!("This is of type {}", value_type.pretty_print_color()),
+                        pattern.info().clone(),
+                    )
+                    .into());
+                }
+                Ok(())
+            }
+            BindPattern::Rest { .. } => Ok(()),
+            BindPattern::Function { .. } => Err(TypeError::new(
+                "Function binding patterns are not supported in this context".to_string(),
+                info.clone(),
+            )
+            .with_label(
+                "This is a function binding pattern".to_string(),
+                pattern.info().clone(),
+            )
+            .into()),
+        }
     }
 
     // ================== Type inference functions ==================
