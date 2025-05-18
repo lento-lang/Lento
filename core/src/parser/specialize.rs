@@ -144,6 +144,39 @@ fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
     }
 }
 
+/// Convert a loose AST expression into a binding pattern.
 fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
-    todo!("Specialize binding pattern");
+    match expr {
+        Ast::Identifier { name, info } => Ok(BindPattern::Variable {
+            name,
+            annotation: None,
+            info,
+        }),
+        Ast::Tuple { exprs, info } => {
+            let elements = exprs
+                .into_iter()
+                .map(binding_pattern)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::Tuple { elements, info })
+        }
+        Ast::Record { fields, info } => {
+            let fields = fields
+                .into_iter()
+                .map(|(k, v)| Ok((k, binding_pattern(v)?)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::Record { fields, info })
+        }
+        Ast::List { exprs, info } => {
+            let elements = exprs
+                .into_iter()
+                .map(binding_pattern)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::List { elements, info })
+        }
+        Ast::Literal { value, info } => Ok(BindPattern::Literal { value, info }),
+        _ => Err(ParseError::new(
+            format!("Invalid binding pattern: {:?}", expr),
+            expr.info().clone(),
+        )),
+    }
 }
