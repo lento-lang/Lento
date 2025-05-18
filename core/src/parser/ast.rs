@@ -269,11 +269,11 @@ impl Ast {
                     format!(
                         "({} {} = {})",
                         ty.print_expr(),
-                        lhs.print_sexpr(),
+                        lhs.print_expr(),
                         rhs.print_expr()
                     )
                 } else {
-                    format!("({} = {})", lhs.print_sexpr(), rhs.print_expr())
+                    format!("({} = {})", lhs.print_expr(), rhs.print_expr())
                 }
             }
             Ast::Block { exprs, .. } => format!(
