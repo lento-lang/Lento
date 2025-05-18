@@ -722,7 +722,7 @@ impl TypeChecker<'_> {
             if tr.success {
                 log::info!(
                     "Function call: {} : {} -> {} with argument {} : {}",
-                    expr.print_sexpr(),
+                    expr.print_expr(),
                     param.ty.pretty_print_color(),
                     ret.pretty_print_color(),
                     arg.pretty_print(),
@@ -736,7 +736,7 @@ impl TypeChecker<'_> {
                     if changed {
                         log::trace!(
                             "Specialized call: {} : {} -> {}",
-                            expr.print_sexpr(),
+                            expr.print_expr(),
                             param_ty.pretty_print_color(),
                             ret_ty.pretty_print_color()
                         );
@@ -904,7 +904,7 @@ impl TypeChecker<'_> {
 
                     log::trace!(
                         "Binary: {} : {}",
-                        result.print_sexpr(),
+                        result.print_expr(),
                         result.get_type().pretty_print_color()
                     );
 

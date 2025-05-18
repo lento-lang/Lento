@@ -255,7 +255,7 @@ impl CheckedAst {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             CheckedAst::Literal { value, info: _ } => value.pretty_print(),
             CheckedAst::LiteralType { value, info: _ } => value.pretty_print(),
@@ -265,7 +265,7 @@ impl CheckedAst {
                 "({})",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -275,7 +275,7 @@ impl CheckedAst {
                 "[{}]",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -283,7 +283,7 @@ impl CheckedAst {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -291,7 +291,7 @@ impl CheckedAst {
                 expr: record,
                 field,
                 ..
-            } => format!("({}.{})", record.print_sexpr(), field),
+            } => format!("({}.{})", record.print_expr(), field),
             CheckedAst::Identifier { name, .. } => name.clone(),
             CheckedAst::FunctionCall {
                 expr: function,
@@ -313,22 +313,22 @@ impl CheckedAst {
                 }
                 format!(
                     "{}({})",
-                    function.print_sexpr(),
+                    function.print_expr(),
                     args.iter()
-                        .map(|a| a.print_sexpr())
+                        .map(|a| a.print_expr())
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
             }
             CheckedAst::FunctionDef { param, body, .. } => {
-                format!("({} {} -> {})", param.ty, param.name, body.print_sexpr())
+                format!("({} {} -> {})", param.ty, param.name, body.print_expr())
             }
             CheckedAst::Assignment {
                 target: lhs,
                 expr: rhs,
                 ..
             } => {
-                format!("({} = {})", lhs.print_sexpr(), rhs.print_sexpr())
+                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
             }
             CheckedAst::Block {
                 exprs: expressions, ..
@@ -336,7 +336,7 @@ impl CheckedAst {
                 "{{ {} }}",
                 expressions
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
