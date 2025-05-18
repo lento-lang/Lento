@@ -629,10 +629,10 @@ impl TypeChecker<'_> {
                 });
             }
             BindPattern::Function {
-                name,
-                annotation,
-                params,
-                info,
+                name: _,
+                annotation: _,
+                params: _,
+                info: _,
             } => todo!("Function assignment"),
         };
         if let Some(existing) = self.lookup_local_identifier(target_name) {
