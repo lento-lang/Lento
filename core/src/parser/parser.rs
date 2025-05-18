@@ -292,7 +292,7 @@ impl<R: Read> Parser<R> {
             if end.token == TokenKind::RightBracket {
                 break;
             }
-            exprs.push(self.parse_top_expr()?);
+            exprs.push(self.parse_expr(COMMA_PREC)?);
             if let Ok(nt) = self.lexer.peek_token(0) {
                 if nt.token == TokenKind::Op(COMMA_SYM.to_string()) {
                     self.lexer.next_token().unwrap();
