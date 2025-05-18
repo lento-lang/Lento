@@ -7,7 +7,11 @@ use crate::{
         checked_ast::CheckedAst,
         types::{GetType, Type},
     },
-    util::{error::LineInfo, str::Str},
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        failable::Failable,
+        str::Str,
+    },
 };
 
 use super::{
@@ -48,13 +52,8 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             (_, _) => unreachable!("Undefined identifier: {}", name),
         },
         CheckedAst::Assignment { target, expr, .. } => {
-            let info = target.info();
-            let target = match target {
-                BindPattern::Variable { name, .. } => name,
-                _ => unreachable!("Assignment target must be a variable"),
-            };
             let value = eval_expr(expr, env)?;
-            env.add_value(Str::String(target.clone()), value.clone(), info)?;
+            eval_assignment(target, &value, env)?;
             value
         }
         CheckedAst::List { exprs, ty, .. } => Value::List(
@@ -216,4 +215,73 @@ fn eval_tuple(exprs: &[CheckedAst], env: &mut Environment) -> InterpretResult {
         .unzip();
 
     Ok(Value::Tuple(values, Type::Tuple(types)))
+}
+
+/// Evaluate an assignment expression to a bind pattern
+fn eval_assignment(
+    pattern: &BindPattern,
+    value: &Value,
+    env: &mut Environment,
+) -> Failable<RuntimeError> {
+    match pattern {
+        // BindPattern::Function { name, params, .. } => {
+        //     let mut closure = env.new_child(Str::Str("<closure>"));
+        //     closure.add_value(name.clone(), value.clone(), pattern.info())?;
+        //     for param in params {
+        //         if let BindPattern::Variable { name, .. } = param {
+        //             closure.add_value(name.clone(), value.clone(), pattern.info())?;
+        //         }
+        //     }
+        // }
+        BindPattern::Variable { name, .. } => {
+            env.add_value(Str::String(name.clone()), value.clone(), pattern.info())?
+        }
+        BindPattern::Tuple { elements, .. } => {
+            let Value::Tuple(values, _) = value else {
+                unreachable!("This should have been checked by the type checker");
+            };
+            for (pattern, value) in elements.iter().zip(values) {
+                eval_assignment(pattern, value, env)?;
+            }
+        }
+        BindPattern::Record { fields, .. } => {
+            let Value::Record(values, _) = value else {
+                unreachable!("This should have been checked by the type checker");
+            };
+            for (key, pattern) in fields {
+                let Some((_, value)) = values.into_iter().find(|(k, _)| k == key) else {
+                    unreachable!("This should have been checked by the type checker");
+                };
+                eval_assignment(pattern, value, env)?;
+            }
+        }
+        BindPattern::List { elements, .. } => {
+            let Value::List(values, _) = value else {
+                unreachable!("This should have been checked by the type checker");
+            };
+            for (element, value) in elements.into_iter().zip(values) {
+                eval_assignment(element, value, env)?;
+            }
+        }
+        BindPattern::Wildcard => {}
+        BindPattern::Literal { value: lit, .. } => {
+            if value != lit {
+                return Err(RuntimeError::new(
+                    format!(
+                        "Literal pattern match failed: expected {}, found {}",
+                        lit.pretty_print(),
+                        value.pretty_print()
+                    ),
+                    pattern.info().clone(),
+                ));
+            }
+        }
+        BindPattern::Rest { .. } => {
+            // Handle rest pattern if needed
+        }
+        BindPattern::Function { .. } => {
+            unreachable!("Function binding patterns are not supported in this context");
+        }
+    }
+    Ok(())
 }
