@@ -249,7 +249,7 @@ fn eval_assignment(
                 unreachable!("This should have been checked by the type checker");
             };
             for (key, pattern) in fields {
-                let Some((_, value)) = values.into_iter().find(|(k, _)| k == key) else {
+                let Some((_, value)) = values.iter().find(|(k, _)| k == key) else {
                     unreachable!("This should have been checked by the type checker");
                 };
                 eval_assignment(pattern, value, env)?;
@@ -259,7 +259,7 @@ fn eval_assignment(
             let Value::List(values, _) = value else {
                 unreachable!("This should have been checked by the type checker");
             };
-            for (element, value) in elements.into_iter().zip(values) {
+            for (element, value) in elements.iter().zip(values) {
                 eval_assignment(element, value, env)?;
             }
         }
