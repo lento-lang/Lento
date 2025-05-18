@@ -111,7 +111,7 @@ impl BindPattern {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
             BindPattern::Function {
@@ -126,7 +126,7 @@ impl BindPattern {
                     format!("{}(", name)
                 };
                 for (i, v) in params.iter().enumerate() {
-                    result.push_str(&v.print_sexpr());
+                    result.push_str(&v.print_expr());
                     if i < params.len() - 1 {
                         result.push_str(", ");
                     }
@@ -138,7 +138,7 @@ impl BindPattern {
                 "({})",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -146,7 +146,7 @@ impl BindPattern {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -154,7 +154,7 @@ impl BindPattern {
                 "[{}]",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),

@@ -109,7 +109,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
     if !matches!(ast, CheckedAst::Literal { .. }) {
         log::trace!(
             "Eval: {} -> {}",
-            ast.print_sexpr(),
+            ast.print_expr(),
             result.pretty_print_color()
         );
     }
