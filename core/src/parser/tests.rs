@@ -735,4 +735,105 @@ mod tests {
         );
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn parse_assignment_with_type() {
+        let result = parse_str_one("int x = 123", Some(&stdlib()));
+        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            assert!(matches!(*expr, Ast::Literal { .. }));
+            assert!(annotation.is_some());
+        } else {
+            panic!("Expected assignment");
+        }
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_paren_arg() {
+        let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_paren_arg() {
+        let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_parenless_arg() {
+        let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_parenless_arg() {
+        let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_explicit_arg() {
+        let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_explicit_arg() {
+        let result = parse_str_one("f x = x + 5", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_multiple_explicit_args() {
+        let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_paren_args_block() {
+        let result = parse_str_one(
+            "int f(int x, int y) {
+					x + y
+				}",
+            Some(&stdlib()),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_explicit_args_block() {
+        let result = parse_str_one(
+            "int f int x, int y {
+					x + y
+				}",
+            Some(&stdlib()),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_paren_args_oneline() {
+        let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_function_def_with_type_and_explicit_args_multiline() {
+        let result = parse_str_one(
+            "int f
+				  int x,
+				  int y
+				  = x + y;",
+            Some(&stdlib()),
+        );
+        assert!(result.is_ok());
+    }
 }
