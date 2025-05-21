@@ -28,7 +28,7 @@ pub enum TypeAst {
     },
     Constructor {
         expr: Box<TypeAst>,
-        args: Vec<TypeAst>,
+        params: Vec<TypeAst>,
         info: LineInfo,
     },
 }
@@ -44,7 +44,9 @@ impl TypeAst {
     pub fn print_expr(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor { expr, args, .. } => {
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
                 format!(
                     "{}({})",
                     expr.print_expr(),
@@ -60,7 +62,9 @@ impl TypeAst {
     pub fn pretty_print(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor { expr, args, .. } => {
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
                 format!(
                     "{}({})",
                     expr.pretty_print(),
@@ -81,12 +85,12 @@ impl PartialEq for TypeAst {
             (
                 Self::Constructor {
                     expr: l0,
-                    args: l1,
+                    params: l1,
                     info: _,
                 },
                 Self::Constructor {
                     expr: r0,
-                    args: r1,
+                    params: r1,
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
