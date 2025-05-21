@@ -1,5 +1,5 @@
 use super::{
-    ast::Ast,
+    ast::{Ast, TypeAst},
     error::ParseError,
     op::{ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
     parser::ParseResult,
@@ -11,7 +11,7 @@ use crate::{
     },
     parser::pattern::BindPattern,
     type_checker::types::std_types,
-    util::error::BaseErrorExt,
+    util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
 use std::collections::HashSet;
@@ -57,8 +57,22 @@ pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
             info,
         }),
         Ast::Binary {
-            lhs, op_info, rhs, ..
-        } if op_info.symbol == COMMA_SYM => Ok(sequence(*lhs, *rhs)),
+            lhs,
+            op_info,
+            rhs,
+            info,
+        } if op_info.symbol == COMMA_SYM => {
+            let mut exprs = flatten_sequence(*lhs, *rhs);
+            if exprs.len() == 1 {
+                Ok(exprs.pop().unwrap())
+            } else {
+                log::trace!("Specializing comma sequence: {:?}", exprs);
+                Ok(Ast::Tuple {
+                    info: info.join(exprs.last().unwrap().info()),
+                    exprs,
+                })
+            }
+        }
         // No specialization available
         _ => Ok(expr),
     }
@@ -66,7 +80,8 @@ pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
 
 // Specialize type constructors to literal types
 pub fn call(expr: Ast, types: &HashSet<String>) -> ParseResult {
-    let (func, _args) = flatten_calls(&expr);
+    let mut exprs = flatten_calls(&expr);
+    let func = exprs.remove(0);
     if let Ast::Identifier { name, info: _ } = &func {
         if types.contains(name) {
             todo!("Specialize type constructor");
@@ -75,44 +90,38 @@ pub fn call(expr: Ast, types: &HashSet<String>) -> ParseResult {
     Ok(expr)
 }
 
-fn flatten_calls(expr: &Ast) -> (&Ast, Vec<&Ast>) {
-    let mut calls = Vec::new();
+fn flatten_calls(expr: &Ast) -> Vec<&Ast> {
+    let mut exprs = Vec::new();
     let mut current = expr;
     while let Ast::FunctionCall { expr, arg, .. } = current {
-        calls.push(&**arg);
+        exprs.push(&**arg);
         current = expr;
     }
-    (current, calls)
+    exprs.push(current);
+    exprs.reverse();
+    exprs
 }
 
 /// Flatten a sequence of comma (bin op) separated expressions into a single vector
-fn sequence(expr: Ast, first: Ast) -> Ast {
+fn flatten_sequence(expr: Ast, first: Ast) -> Vec<Ast> {
     let mut exprs = vec![first];
-    let start_info = expr.info().clone();
     let mut current = expr;
     loop {
         match current {
             Ast::Binary {
                 lhs, op_info, rhs, ..
             } if op_info.symbol == COMMA_SYM => {
-                exprs.insert(0, *rhs);
+                exprs.push(*rhs);
                 current = *lhs;
             }
             _ => {
-                exprs.insert(0, current);
+                exprs.push(current);
                 break;
             }
         }
     }
-    if exprs.len() == 1 {
-        exprs.pop().unwrap()
-    } else {
-        log::trace!("Specializing comma sequence: {:?}", exprs);
-        Ast::Tuple {
-            info: start_info.join(exprs.last().unwrap().info()),
-            exprs,
-        }
-    }
+    exprs.reverse();
+    exprs
 }
 
 fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
