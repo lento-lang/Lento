@@ -197,7 +197,6 @@ mod tests {
     fn assignment() {
         let ast = CheckedAst::Assignment {
             target: BindPattern::Variable {
-                annotation: None,
                 name: "x".into(),
                 info: LineInfo::default(),
             },

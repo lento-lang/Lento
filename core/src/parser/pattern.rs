@@ -18,16 +18,12 @@ pub enum BindPattern {
         /// The name of the variable.
         name: String,
         /// The type annotation for the variable.
-        annotation: Option<TypeAst>,
-        /// The type annotation for the variable.
         info: LineInfo,
     },
     /// A function definition binding pattern.
     Function {
         /// The name of the function.
         name: String,
-        /// The type annotation for the function.
-        annotation: Option<TypeAst>,
         /// Parameters of the function.
         params: Vec<BindPattern>,
         /// Information about the function.
@@ -115,16 +111,11 @@ impl BindPattern {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
             BindPattern::Function {
-                annotation,
                 name,
                 params,
                 ..
             } => {
-                let mut result = if let Some(annotation) = annotation {
-                    format!("{} {}(", name, annotation.print_expr())
-                } else {
-                    format!("{}(", name)
-                };
+                let mut result = format!("{}(", name);
                 for (i, v) in params.iter().enumerate() {
                     result.push_str(&v.print_expr());
                     if i < params.len() - 1 {
@@ -168,16 +159,11 @@ impl BindPattern {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
             BindPattern::Function {
-                annotation,
                 name,
                 params,
                 ..
             } => {
-                let mut result = if let Some(annotation) = annotation {
-                    format!("{} {}(", name, annotation.pretty_print())
-                } else {
-                    format!("{}(", name)
-                };
+                let mut result = format!("{}(", name);
                 for (i, v) in params.iter().enumerate() {
                     result.push_str(&v.pretty_print());
                     if i < params.len() - 1 {

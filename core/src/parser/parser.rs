@@ -492,12 +492,7 @@ impl<R: Read> Parser<R> {
             TokenKind::Identifier(id) => {
                 // Check if function call with parentheses like `f(5, 6, 7)`, **NOT** `f (5, 6, 7)`
                 if let Ok(nt) = self.lexer.peek_token(0) {
-                    if matches!(
-                        nt.token,
-                        TokenKind::LeftParen {
-                            is_function_call: true
-                        }
-                    ) {
+                    if matches!(&nt.token, TokenKind::LeftParen { is_function_call: true }) {
                         self.lexer.next_token().unwrap();
                         let args: Vec<Ast> = match self.parse_tuple()? {
                             Ast::Tuple { exprs, .. } => exprs,
@@ -531,9 +526,7 @@ impl<R: Read> Parser<R> {
 
             start if start.is_grouping_start() => {
                 match start {
-                    TokenKind::LeftParen {
-                        is_function_call: false,
-                    } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
+                    TokenKind::LeftParen { is_function_call: false } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
                     TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
                     TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),

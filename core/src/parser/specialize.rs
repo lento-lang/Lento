@@ -82,9 +82,31 @@ pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
 pub fn call(expr: Ast, types: &HashSet<String>) -> ParseResult {
     let mut exprs = flatten_calls(&expr);
     let func = exprs.remove(0);
-    if let Ast::Identifier { name, info: _ } = &func {
+    if let Ast::Identifier { name, info } = &func {
         if types.contains(name) {
-            todo!("Specialize type constructor");
+            let args = exprs
+                .into_iter()
+                .map(|arg| match arg {
+                    Ast::Identifier { name, info } => Ok(TypeAst::Identifier {
+                        name: name.to_string(),
+                        info: info.clone(),
+                    }),
+                    _ => Err(ParseError::new(
+                        format!("Invalid type argument: {}", arg.print_expr()),
+                        arg.info().clone(),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(Ast::LiteralType {
+                expr: TypeAst::Constructor {
+                    expr: Box::new(TypeAst::Identifier {
+                        name: name.clone(),
+                        info: info.clone(),
+                    }),
+                    params: args,
+                    info: info.clone(),
+                },
+            });
         }
     }
     Ok(expr)
@@ -159,11 +181,7 @@ fn binding_pattern_top(expr: Ast, types: &HashSet<String>) -> Result<BindPattern
         // `_ = ...`
         Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
         // `x = ...`
-        Ast::Identifier { name, info } => Ok(BindPattern::Variable {
-            name,
-            annotation: None,
-            info,
-        }),
+        Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
         // `x, y = ...`, `f x, y = ...`, `f int x, bool y = ...` or `int f int x, bool y = ...` etc.
         // Potentially a function definition.
         Ast::Binary {
@@ -186,7 +204,6 @@ fn binding_pattern_top(expr: Ast, types: &HashSet<String>) -> Result<BindPattern
                             // If no parameters are found, it's a typed variable binding
                             Ok(BindPattern::Variable {
                                 name: name.to_string(),
-                                annotation: Some(func_annotation),
                                 info: expr.info().clone(),
                             })
                         } else {
@@ -233,7 +250,6 @@ fn function_definition(
             Ast::Identifier { name, info } => {
                 params.push(BindPattern::Variable {
                     name: name.to_string(),
-                    annotation: None,
                     info: info.clone(),
                 });
             }
@@ -250,7 +266,6 @@ fn function_definition(
         .map_or(start_info.clone(), |p| p.info().clone());
     Ok(BindPattern::Function {
         name: name.to_string(),
-        annotation,
         params,
         info: start_info.join(&last_info),
     })
@@ -320,23 +335,28 @@ fn function_definition(
 // }
 
 fn comma_function_definition(exprs: Vec<Ast>) -> Result<BindPattern, ParseError> {
-    let flat = exprs.iter().map(flatten_calls).collect::<Vec<_>>();
-    log::trace!(
-        "Specializing comma separated assignment pattern: [{}]",
-        flat.iter()
-            .map(|e| {
-                format!(
-                    "[{}]",
-                    e.iter()
-                        .map(|e| e.print_expr())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    todo!("Specialize comma separated function definition");
+    let mut params = Vec::new();
+    for expr in exprs {
+        match expr {
+            Ast::Identifier { name, info } => {
+                params.push(BindPattern::Variable { name, info });
+            }
+            _ => {
+                return Err(ParseError::new(
+                    format!("Invalid function binding pattern: {}", expr.print_expr()),
+                    expr.info().clone(),
+                ));
+            }
+        }
+    }
+    let last_info = params
+        .last()
+        .map_or(LineInfo::default(), |p| p.info().clone());
+    Ok(BindPattern::Function {
+        name: "<anonymous>".to_string(),
+        params,
+        info: last_info,
+    })
 }
 
 /// Try to parse a type annotation from a list of expressions given from a function definition assignment.

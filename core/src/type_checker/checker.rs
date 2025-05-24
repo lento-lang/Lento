@@ -611,82 +611,37 @@ impl TypeChecker<'_> {
         expr: &Ast,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        let target_name = match target {
-            BindPattern::Variable { name, .. } => name,
-            BindPattern::Tuple { .. }
-            | BindPattern::Record { .. }
-            | BindPattern::List { .. }
-            | BindPattern::Wildcard
-            | BindPattern::Literal { .. }
-            | BindPattern::Rest { .. } => {
-                let checked_expr = self.check_expr(expr)?;
-                let expr_type = checked_expr.get_type().clone();
-                self.check_binding_pattern(target, &expr_type, info)?;
-                return Ok(CheckedAst::Assignment {
-                    target: target.clone(),
-                    expr: Box::new(checked_expr),
+        match target {
+            BindPattern::Variable { name, .. } => {
+                let expr = self.check_expr(expr)?;
+                let ty = expr.get_type().clone();
+                Ok(CheckedAst::Assignment {
+                    target: BindPattern::Variable {
+                        name: name.clone(),
+                        info: info.clone(),
+                    },
+                    expr: Box::new(expr),
                     info: info.clone(),
-                });
+                })
             }
-            BindPattern::Function {
-                name: _,
-                annotation: _,
-                params: _,
-                info: _,
-            } => todo!("Function assignment"),
-        };
-        if let Some(existing) = self.lookup_local_identifier(target_name) {
-            let ty_name = match existing {
-                IdentifierType::Variable(_) => "Variable",
-                IdentifierType::Type(_) => "Type",
-                IdentifierType::Function(_) => "Function",
-            };
-            return Err(TypeError::new(
-                format!(
-                    "{} {} already exists",
-                    ty_name,
-                    target_name.clone().yellow()
-                ),
+            BindPattern::Function { name, params, .. } => {
+                let expr = self.check_expr(expr)?;
+                let ty = expr.get_type().clone();
+                Ok(CheckedAst::Assignment {
+                    target: BindPattern::Function {
+                        name: name.clone(),
+                        params: params.clone(),
+                        info: info.clone(),
+                    },
+                    expr: Box::new(expr),
+                    info: info.clone(),
+                })
+            }
+            _ => Err(TypeErrorVariant::ParseError(ParseError::new(
+                format!("Invalid assignment target: {}", target.print_expr()),
                 info.clone(),
-            )
-            .with_hint("Use a different name for the variable".to_string())
-            .into());
+            ))),
         }
-        let expr = self.check_expr(expr)?;
-        let body_ty = expr.get_type().clone();
-        if let Some(ann) = annotation {
-            let ann_ty = self.check_type_expr(ann)?;
-            if !body_ty.subtype(&ann_ty).success {
-                return Err(TypeError::new(
-                    format!(
-                        "{} is not a valid subtype of {}",
-                        expr.pretty_print(),
-                        ann_ty.pretty_print_color(),
-                    ),
-                    info.clone(),
-                )
-                .with_label(
-                    format!(
-                        "This should be of type {} but is {}",
-                        ann_ty.pretty_print_color(),
-                        body_ty.pretty_print_color()
-                    ),
-                    expr.info().clone(),
-                )
-                .into());
-            }
-        }
-        let assign_info = info.join(expr.info());
-        self.env.add_variable(target_name, body_ty.clone());
-        Ok(CheckedAst::Assignment {
-            target: BindPattern::Variable {
-                annotation: None, // TODO: Add annotation support!!!
-                name: target_name.to_string(),
-                info: target.info().clone(),
-            },
-            expr: Box::new(expr),
-            info: assign_info,
-        })
     }
 
     fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
