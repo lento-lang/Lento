@@ -590,97 +590,100 @@ mod tests {
 
     #[test]
     fn function_def_paren_explicit_args_and_ret() {
-        let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) { x + y + z }", None);
+        parse_str_one("u8 add(u8 x, u8 y, u8 z) { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_explicit_args_and_ret() {
-        let result = parse_str_one("u8 add u8 x, u8 y, u8 z { x + y + z }", None);
+        parse_str_one("u8 add u8 x, u8 y, u8 z { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_explicit_args() {
-        let result = parse_str_one("add u8 x, u8 y, u8 z { x + y + z }", None);
+        parse_str_one("add u8 x, u8 y, u8 z { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_paren_implicit_args_and_ret() {
-        let result = parse_str_one("add(x, y, z) { x + y + z }", None);
+        parse_str_one("add(x, y, z) { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_implicit_args_and_ret() {
-        let result = parse_str_one("add x, y, z { x + y + z }", None);
+        parse_str_one("add x, y, z { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_mixed_parens() {
-        let result = parse_str_one(
+        parse_str_one(
             "u8 add x, y, (z), a, (b), (c) { x + y + z + a + b + c }",
-            None,
-        );
+            Some(&stdlib()),
+        )
+        .unwrap();
     }
 
     #[test]
     fn function_def_paren_explicit_oneline() {
-        let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", None);
+        parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_explicit_oneline() {
-        let result = parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", None);
+        parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_paren_implicit_oneline() {
-        let result = parse_str_one("add(x, y, z) = x + y + z;", None);
+        parse_str_one("add(x, y, z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_implicit_oneline() {
-        let result = parse_str_one("add x, y, z = x + y + z;", None);
+        parse_str_one("add x, y, z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_with_return_type() {
-        let result = parse_str_one("int add(int x, int y) = x + y;", None);
+        parse_str_one("int add(int x, int y) = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_with_return_type_no_parens() {
-        let result = parse_str_one("int add int x, int y = x + y;", None);
+        parse_str_one("int add int x, int y = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_with_return_type_block() {
-        let result = parse_str_one("int add(int x, int y) { x + y }", None);
+        parse_str_one("int add(int x, int y) { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_with_return_type_no_parens_block() {
-        let result = parse_str_one("int add int x, int y { x + y }", None);
+        parse_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_multiple_statements() {
-        let result = parse_str_one(
+        parse_str_one(
             "int add(int x, int y) {
                 let z = x + y;
                 z
             }",
-            None,
-        );
+            Some(&stdlib()),
+        )
+        .unwrap();
     }
 
     #[test]
     fn function_def_nested() {
-        let result = parse_str_one(
+        parse_str_one(
             "int outer(int x) {
                 int inner(int y) = x + y;
                 inner(x)
             }",
-            None,
-        );
+            Some(&stdlib()),
+        )
+        .unwrap();
     }
 
     #[test]

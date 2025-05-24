@@ -4,8 +4,6 @@ use crate::{
     util::error::LineInfo,
 };
 
-use super::ast::TypeAst;
-
 /// A pattern used for binding variables in:
 /// - Variable assignments
 /// - Function definitions
@@ -110,11 +108,7 @@ impl BindPattern {
     pub fn print_expr(&self) -> String {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
-            BindPattern::Function {
-                name,
-                params,
-                ..
-            } => {
+            BindPattern::Function { name, params, .. } => {
                 let mut result = format!("{}(", name);
                 for (i, v) in params.iter().enumerate() {
                     result.push_str(&v.print_expr());
@@ -158,11 +152,7 @@ impl BindPattern {
     pub fn pretty_print(&self) -> String {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
-            BindPattern::Function {
-                name,
-                params,
-                ..
-            } => {
+            BindPattern::Function { name, params, .. } => {
                 let mut result = format!("{}(", name);
                 for (i, v) in params.iter().enumerate() {
                     result.push_str(&v.pretty_print());
