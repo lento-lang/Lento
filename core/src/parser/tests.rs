@@ -55,7 +55,6 @@ mod tests {
     #[test]
     fn number() {
         let result = parse_str_one("1", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(result == lit(make_u1(1)));
@@ -64,7 +63,6 @@ mod tests {
     #[test]
     fn number_many() {
         let result = parse_str_all("1 2 3 4 5", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.len() == 5);
         assert!(result[0] == lit(make_u1(1)));
@@ -77,7 +75,6 @@ mod tests {
     #[test]
     fn number_many_semicolon() {
         let result = parse_str_all("1; 2; 3;", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.len() == 3);
         assert!(result[0] == lit(make_u1(1)));
@@ -88,7 +85,6 @@ mod tests {
     #[test]
     fn number_par() {
         let result = parse_str_one("(1)", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(result == lit(make_u1(1)));
@@ -97,7 +93,6 @@ mod tests {
     #[test]
     fn tuple_1_trailing() {
         let result = parse_str_one("(1,)", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Tuple { .. }));
@@ -110,7 +105,6 @@ mod tests {
     #[test]
     fn tuple_2() {
         let result = parse_str_one("(1, 2)", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Tuple { .. }));
@@ -124,7 +118,6 @@ mod tests {
     #[test]
     fn tuple_3() {
         let result = parse_str_one("(1, 2, 3)", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Tuple { .. }));
@@ -139,7 +132,6 @@ mod tests {
     #[test]
     fn tuple_3_trailing() {
         let result = parse_str_one("(1, 2, 3,)", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Tuple { .. }));
@@ -154,7 +146,6 @@ mod tests {
     #[test]
     fn tuple_addition() {
         let result = parse_str_one("(1, 2) + (3, 4)", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Binary { .. }));
@@ -171,7 +162,6 @@ mod tests {
     #[test]
     fn list_3() {
         let result = parse_str_one("[1, 2, 3]", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::List { .. }));
@@ -198,7 +188,6 @@ mod tests {
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
             info: LineInfo::default(),
         };
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(result == expected);
@@ -215,7 +204,6 @@ mod tests {
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
             info: LineInfo::default(),
         };
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(result == expected);
@@ -232,7 +220,6 @@ mod tests {
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
             info: LineInfo::default(),
         };
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(result == expected);
@@ -252,7 +239,6 @@ mod tests {
             arg: Box::new(lit(Value::String("Hello, World!".to_string()))),
             info: LineInfo::default(),
         };
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.len() == 3);
         // All three should be the same
@@ -264,7 +250,6 @@ mod tests {
     #[test]
     fn arithmetic() {
         let result = parse_str_one("1 + 2", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Binary { .. }));
@@ -294,7 +279,6 @@ mod tests {
     #[test]
     fn arithmetic_tree() {
         let result = parse_str_one("1 + 2 + 3", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Binary { .. }));
@@ -308,7 +292,6 @@ mod tests {
     #[test]
     fn literal_type_identifier() {
         let result = parse_str_one("int", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(matches!(result, Ast::LiteralType { .. }));
         if let Ast::LiteralType { expr, .. } = &result {
@@ -323,9 +306,7 @@ mod tests {
     #[test]
     fn typed_assignment() {
         let result = parse_str_one("int x = 1", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
-        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
         if let Ast::Assignment {
@@ -355,9 +336,7 @@ mod tests {
     #[test]
     fn untyped_assignment() {
         let result = parse_str_one("x = 1", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
-        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
     }
@@ -365,9 +344,7 @@ mod tests {
     #[test]
     fn assign_add() {
         let result = parse_str_one("x = 1 + 2", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
-        println!("result: {:?}", result);
 
         assert!(matches!(result, Ast::Assignment { .. }));
         if let Ast::Assignment { target, expr, .. } = &result {
@@ -379,7 +356,6 @@ mod tests {
     #[test]
     fn comment() {
         let result = parse_str_all("1; // This is a comment", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.len() == 1);
         assert!(matches!(result[0], Ast::Literal { .. }));
@@ -397,7 +373,6 @@ mod tests {
 		"#,
             None,
         );
-        assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.len() == 2);
         assert!(result[0] == lit(make_u1(1)));
@@ -407,7 +382,6 @@ mod tests {
     #[test]
     fn arithmetic_complex() {
         let result = parse_str_one("5 * (10 - 2) / 2 + 1", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Binary { .. }));
@@ -427,7 +401,6 @@ mod tests {
     #[test]
     fn record_literal_empty() {
         let result = parse_str_one("{}", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Record { .. }));
@@ -439,7 +412,6 @@ mod tests {
     #[test]
     fn record_literal_one() {
         let result = parse_str_one("{ x: 1 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Record { .. }));
@@ -458,7 +430,6 @@ mod tests {
     #[test]
     fn record_literal_two() {
         let result = parse_str_one("{ x: 1, y: 2 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Record { .. }));
@@ -483,7 +454,6 @@ mod tests {
     #[test]
     fn record_literal_nested() {
         let result = parse_str_one("{ x: { y: 1 } }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Record { .. }));
@@ -515,7 +485,6 @@ mod tests {
     #[test]
     fn record_nested_block() {
         let result = parse_str_one("{ x: { 1 + 2 } }", Some(&stdlib()));
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Record { .. }));
@@ -537,7 +506,6 @@ mod tests {
     #[test]
     fn block_one() {
         let result = parse_str_one("{ 1 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -550,7 +518,6 @@ mod tests {
     #[test]
     fn block_two() {
         let result = parse_str_one("{ 1; 2 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -564,7 +531,6 @@ mod tests {
     #[test]
     fn block_three() {
         let result = parse_str_one("{ 1; 2; 3 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -579,7 +545,6 @@ mod tests {
     #[test]
     fn block_three_no_semicolon() {
         let result = parse_str_one("{ 1 2 3 }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -594,7 +559,6 @@ mod tests {
     #[test]
     fn block_nested() {
         let result = parse_str_one("{ { 1 } }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -607,7 +571,6 @@ mod tests {
     #[test]
     fn block_nested_two() {
         let result = parse_str_one("{ { 1; 2 } }", None);
-        assert!(result.is_ok());
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -628,31 +591,26 @@ mod tests {
     #[test]
     fn function_def_paren_explicit_args_and_ret() {
         let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) { x + y + z }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_args_and_ret() {
         let result = parse_str_one("u8 add u8 x, u8 y, u8 z { x + y + z }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_args() {
         let result = parse_str_one("add u8 x, u8 y, u8 z { x + y + z }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_paren_implicit_args_and_ret() {
         let result = parse_str_one("add(x, y, z) { x + y + z }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_implicit_args_and_ret() {
         let result = parse_str_one("add x, y, z { x + y + z }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -661,55 +619,46 @@ mod tests {
             "u8 add x, y, (z), a, (b), (c) { x + y + z + a + b + c }",
             None,
         );
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_paren_explicit_oneline() {
         let result = parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_explicit_oneline() {
         let result = parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_paren_implicit_oneline() {
         let result = parse_str_one("add(x, y, z) = x + y + z;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_no_paren_implicit_oneline() {
         let result = parse_str_one("add x, y, z = x + y + z;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type() {
         let result = parse_str_one("int add(int x, int y) = x + y;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_no_parens() {
         let result = parse_str_one("int add int x, int y = x + y;", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_block() {
         let result = parse_str_one("int add(int x, int y) { x + y }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
     fn function_def_with_return_type_no_parens_block() {
         let result = parse_str_one("int add int x, int y { x + y }", None);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -721,7 +670,6 @@ mod tests {
             }",
             None,
         );
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -733,13 +681,11 @@ mod tests {
             }",
             None,
         );
-        assert!(result.is_ok());
     }
 
     #[test]
     fn parse_assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
-        assert!(result.is_ok());
         if let Ast::Assignment {
             target,
             expr,
@@ -748,8 +694,14 @@ mod tests {
         } = result.unwrap()
         {
             assert!(matches!(target, BindPattern::Variable { .. }));
-            assert!(matches!(*expr, Ast::Literal { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "x");
+            }
             assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Literal { .. }));
         } else {
             panic!("Expected assignment");
         }
@@ -758,82 +710,327 @@ mod tests {
     #[test]
     fn parse_function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_none());
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_none());
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 1);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+            }
+            assert!(annotation.is_none());
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 2);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+                if let BindPattern::Variable { name, .. } = &params[1] {
+                    assert_eq!(name, "y");
+                }
+            }
+            assert!(annotation.is_none());
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_paren_args_block() {
         let result = parse_str_one(
             "int f(int x, int y) {
-					x + y
-				}",
+                    x + y
+                }",
             Some(&stdlib()),
         );
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 2);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+                if let BindPattern::Variable { name, .. } = &params[1] {
+                    assert_eq!(name, "y");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Block { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_explicit_args_block() {
         let result = parse_str_one(
             "int f int x, int y {
-					x + y
-				}",
+                    x + y
+                }",
             Some(&stdlib()),
         );
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 2);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+                if let BindPattern::Variable { name, .. } = &params[1] {
+                    assert_eq!(name, "y");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Block { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 2);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+                if let BindPattern::Variable { name, .. } = &params[1] {
+                    assert_eq!(name, "y");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 
     #[test]
     fn parse_function_def_with_type_and_explicit_args_multiline() {
         let result = parse_str_one(
             "int f
-				  int x,
-				  int y
-				  = x + y;",
+                  int x,
+                  int y
+                  = x + y;",
             Some(&stdlib()),
         );
-        assert!(result.is_ok());
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(matches!(target, BindPattern::Function { .. }));
+            if let BindPattern::Function { name, params, .. } = target {
+                assert_eq!(name, "f");
+                assert_eq!(params.len(), 2);
+                if let BindPattern::Variable { name, .. } = &params[0] {
+                    assert_eq!(name, "x");
+                }
+                if let BindPattern::Variable { name, .. } = &params[1] {
+                    assert_eq!(name, "y");
+                }
+            }
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(*expr, Ast::Binary { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
     }
 }
