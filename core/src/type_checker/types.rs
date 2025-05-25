@@ -230,6 +230,12 @@ pub enum Type {
     /// A list type is a product type.
     List(Box<Type>),
 
+    /// A map type.
+    /// The first argument is the type of the keys in the map.
+    /// The second argument is the type of the values in the map.
+    /// A map type is a product type.
+    Map(Box<Type>, Box<Type>),
+
     /// A record type.
     /// The first argument is the list of fields in the record.
     /// A record type is a product type.
@@ -379,6 +385,9 @@ impl TypeTrait for Type {
             }
             Type::Tuple(types) => Type::Tuple(types.into_iter().map(Type::simplify).collect()),
             Type::List(t) => Type::List(Box::new(t.simplify())),
+            Type::Map(key, value) => {
+                Type::Map(Box::new(key.simplify()), Box::new(value.simplify()))
+            }
             Type::Record(fields) => {
                 Type::Record(fields.into_iter().map(|(n, t)| (n, t.simplify())).collect())
             }
@@ -429,6 +438,10 @@ impl TypeTrait for Type {
                     .collect(),
             ),
             Type::List(t) => Type::List(Box::new(t.specialize(judgements, changed))),
+            Type::Map(key, value) => Type::Map(
+                Box::new(key.specialize(judgements, changed)),
+                Box::new(value.specialize(judgements, changed)),
+            ),
             Type::Record(fields) => Type::Record(
                 fields
                     .iter()
@@ -474,6 +487,7 @@ impl Display for Type {
                 write!(f, ")")
             }
             Type::List(t) => write!(f, "[{}]", t),
+            Type::Map(key, value) => write!(f, "Map({}, {})", key, value),
             Type::Record(fields) => {
                 write!(f, "{{")?;
                 for (i, (name, t)) in fields.iter().enumerate() {
@@ -544,6 +558,9 @@ impl Type {
                 }
             }
             Type::List(t) => format!("[{}]", t.pretty_print()),
+            Type::Map(key, value) => {
+                format!("Map({}, {})", key.pretty_print(), value.pretty_print())
+            }
             Type::Record(fields) => {
                 let mut result = String::new();
                 result.push('{');
@@ -626,6 +643,13 @@ impl Type {
                 }
             }
             Type::List(t) => format!("[{}]", t.pretty_print_color()),
+            Type::Map(key, value) => {
+                format!(
+                    "Map({}, {})",
+                    key.pretty_print_color(),
+                    value.pretty_print_color()
+                )
+            }
             Type::Record(fields) => {
                 let mut result = String::new();
                 result.push_str(&"{".dark_gray().to_string());
@@ -809,5 +833,34 @@ pub mod std_types {
     #[allow(non_snake_case)]
     pub fn NUM() -> Type {
         Type::Alias(Str::Str("num"), Box::new(Type::Sum(vec![INT(), FLOAT()])))
+    }
+
+    //---------------------------------------------------------------------------------------//
+    //                                  Container types                                      //
+    //---------------------------------------------------------------------------------------//
+
+    /// A list type.
+    /// The type of a list of elements of type `T`.
+    #[allow(non_snake_case)]
+    pub fn LIST() -> Type {
+        Type::Constructor(
+            Str::Str("List"),
+            vec![Type::Variable(Str::Str("T"))],
+            Box::new(Type::List(Box::new(Type::Variable(Str::Str("T"))))),
+        )
+    }
+
+    /// A map type.
+    /// The type of a map with keys of type `K` and values of type `V`.
+    #[allow(non_snake_case)]
+    pub fn MAP() -> Type {
+        Type::Constructor(
+            Str::Str("Map"),
+            vec![Type::Variable(Str::Str("K")), Type::Variable(Str::Str("V"))],
+            Box::new(Type::Map(
+                Box::new(Type::Variable(Str::Str("K"))),
+                Box::new(Type::Variable(Str::Str("V"))),
+            )),
+        )
     }
 }
