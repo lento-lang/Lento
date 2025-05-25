@@ -216,88 +216,28 @@ pub fn assignment(
     body: Ast,
     assignment_info: LineInfo,
     types: &HashSet<String>,
-) -> Result<Ast, ParseError> {
+) -> ParseResult {
     log::debug!(
         "Specializing assignment: {} = {}",
         target.print_expr(),
         body.print_expr()
     );
     log::trace!("Specializing assignment: {:?} = {:?}", target, body);
-    let target_info = target.info().clone();
     match &target {
         // `x, y = ...`, `f x, y = ...`, `f int x, bool y = ...` or `int f int x, bool y = ...` etc.
         // Potentially a function definition.
-        Ast::Binary { op_info, .. } if op_info.symbol == COMMA_SYM => {
-            let mut exprs = flatten_sequence(target);
-            log::trace!(
-                "Flattened comma sequence: {:?}",
-                exprs.iter().map(|e| e.print_expr()).collect::<Vec<_>>()
-            );
-            let function = definition_start(flatten_calls(exprs.remove(0)), &target_info, types)?;
-            let mut params = exprs
+        Ast::Binary { op_info, .. } if op_info.symbol == COMMA_SYM => definition(
+            flatten_sequence(target)
                 .into_iter()
-                .map(|expr| {
-                    let mut exprs = flatten_calls(expr);
-                    let param = next_typed_binding_pattern(&mut exprs, types)?;
-                    if !exprs.is_empty() {
-                        let rest_info = exprs
-                            .first()
-                            .unwrap()
-                            .info()
-                            .join(exprs.last().unwrap().info());
-                        return Err(ParseError::new(
-                            format!(
-                                "Expected a single function parameter, found: {}",
-                                exprs
-                                    .iter()
-                                    .map(|e| e.print_expr())
-                                    .collect::<Vec<String>>()
-                                    .join(" ")
-                            ),
-                            rest_info,
-                        ));
-                    }
-                    Ok(param)
-                })
-                .collect::<Result<Vec<_>, ParseError>>()?;
-            // Insert the first parameter from the function definition start
-            params.insert(0, function.param.unwrap());
-            Ok(create_function_assignment(
-                function.annotation,
-                function.name,
-                function.name_info,
-                params,
-                body,
-                assignment_info,
-            ))
-        }
+                .flat_map(flatten_calls)
+                .collect::<Vec<Ast>>(),
+            body,
+            types,
+        ),
         // `int x = ...`, `f x = ...`, `f int x = ...`, `int f x = ...` or `int f int x = ...`.
         // Complex types can also be used here, like `List int list1 = ...` or `Map int str map1 = ...`.
         // Potentially a function definition.
-        Ast::FunctionCall { .. } => {
-            let def = definition_start(flatten_calls(target), &target_info, types)?;
-            if let Some(param) = def.param {
-                Ok(create_function_assignment(
-                    def.annotation,
-                    def.name,
-                    def.name_info,
-                    vec![param],
-                    body,
-                    assignment_info,
-                ))
-            } else {
-                // If no parameters are found, it's a typed variable binding
-                Ok(Ast::Assignment {
-                    annotation: def.annotation,
-                    target: BindPattern::Variable {
-                        name: def.name,
-                        info: def.name_info,
-                    },
-                    expr: Box::new(body),
-                    info: assignment_info,
-                })
-            }
-        }
+        Ast::FunctionCall { .. } => definition(flatten_calls(target), body, types),
         // Try parse other generic binding patterns (non-typed) for assignments like:
         // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
         _ => Ok(Ast::Assignment {
@@ -309,14 +249,7 @@ pub fn assignment(
     }
 }
 
-struct DefStart {
-    annotation: Option<TypeAst>,
-    name: String,
-    name_info: LineInfo,
-    param: Option<ParamAst>,
-}
-
-/// Parse the first part of a function definition, which can be either a single parameter or a function name with its first parameter.
+/// Parse a variable or function definition.
 /// This is used to handle function definitions like:
 /// ```ignore
 /// x ...
@@ -327,13 +260,14 @@ struct DefStart {
 /// int f int x ...
 /// List int f int x ...
 /// Map int str f int x ...
+/// f x, y ...
+/// f x, y, z ...
+/// int f x, y ...
+/// int f int x, y ...
+/// Map int str f int x, List int y ...
 /// ```
 /// Complex types can also be used here as seen above.
-fn definition_start(
-    mut exprs: Vec<Ast>,
-    info: &LineInfo,
-    types: &HashSet<String>,
-) -> Result<DefStart, ParseError> {
+fn definition(mut exprs: Vec<Ast>, body: Ast, types: &HashSet<String>) -> ParseResult {
     log::trace!(
         "Parsing function definition start from expressions: {:?}",
         exprs
@@ -365,34 +299,46 @@ fn definition_start(
     if exprs.is_empty() {
         // `int x = ...`
         // If no parameters are found, it's a typed variable binding
-        Ok(DefStart {
+        log::trace!("Found a typed variable binding: {} = ...", name);
+        Ok(Ast::Assignment {
+            info: name_info.clone(),
             annotation: func.ty,
-            name,
-            name_info,
-            param: None,
+            target: BindPattern::Variable {
+                name,
+                info: name_info,
+            },
+            expr: Box::new(body),
         })
     } else {
-        // `f x = ...`, `int f x = ...`, `f int x = ...`, or `int f int x = ...` etc.
-        // If there are more expressions, we assume it's the first parameter of a function definition before any comma.
-        let param = next_typed_binding_pattern(&mut exprs, types)?;
-        if !exprs.is_empty() {
-            // If there are more expressions, we assume it's a function definition with multiple parameters.
-            let rest_info = exprs
-                .first()
-                .unwrap()
-                .info()
-                .join(exprs.last().unwrap().info());
-            return Err(ParseError::new(
-                "Expected a single function parameter in definition".to_string(),
-                rest_info,
-            ));
+        // `f x = ...`, `int f x, y = ...`, or `int f int x, bool y, str z = ...`, etc.
+        let mut params = Vec::new();
+        while !exprs.is_empty() {
+            // Parse the next (possibly typed) parameter from the remaining expressions
+            let param = next_typed_binding_pattern(&mut exprs, types)?;
+            log::trace!(
+                "Found function parameter: {}{}",
+                if let Some(annotation) = &param.ty {
+                    format!("{} ", annotation.pretty_print().light_blue())
+                } else {
+                    "".to_string()
+                },
+                param.pattern.pretty_print()
+            );
+            params.push(param);
         }
-        Ok(DefStart {
-            annotation: func.ty,
+        // Create a function definition via nested lambda expressions assigned to a variable
+        log::trace!(
+            "Creating function definition for {} with parameters: {:?}",
             name,
-            name_info,
-            param: Some(param),
-        })
+            params
+                .iter()
+                .map(|p| p.pattern.pretty_print())
+                .collect::<Vec<String>>()
+        );
+        let info = name_info.join(body.info());
+        Ok(create_function_assignment(
+            func.ty, name, name_info, params, body, info,
+        ))
     }
 }
 
