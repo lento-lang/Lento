@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn number_many() {
-        let result = parse_str_all("1 2 3 4 5", None);
+        let result = parse_str_all("1 \n 2 \n 3 \n 4 \n 5", None);
         let result = result.unwrap();
         assert!(result.len() == 5);
         assert!(result[0] == lit(make_u1(1)));
@@ -661,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_assignment_with_type() {
+    fn assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -685,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_type_and_paren_arg() {
+    fn function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -732,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_paren_arg() {
+    fn function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -741,19 +741,42 @@ mod tests {
             ..
         } = result.unwrap()
         {
+            assert!(annotation.is_none());
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
             }
-            assert!(annotation.is_none());
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
     }
 
     #[test]
-    fn parse_function_def_with_type_and_parenless_arg() {
+    fn function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -797,7 +820,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_parenless_arg() {
+    fn function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -838,7 +861,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_type_and_explicit_arg() {
+    fn function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -885,7 +908,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_explicit_arg() {
+    fn function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -927,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_multiple_explicit_args() {
+    fn function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -978,9 +1001,72 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_def_with_type_and_paren_args_block() {
+    fn function_def_with_type_and_paren_args_block() {
         let result = parse_str_one(
-            "int f(int x, int y) {
+            "int f(int x, int y) = {
+                    x + y
+                }",
+            Some(&stdlib()),
+        );
+        if let Ast::Assignment {
+            target,
+            expr,
+            annotation,
+            ..
+        } = result.unwrap()
+        {
+            assert!(annotation.is_some());
+            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+                assert_eq!(name, "int");
+            }
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Lambda { .. }));
+                if let Ast::Lambda { param, body, .. } = *body {
+                    assert!(param.ty.is_some());
+                    if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                        assert_eq!(name, "int");
+                    }
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "y");
+                    }
+                    assert!(matches!(*body, Ast::Block { .. }));
+                    if let Ast::Block { exprs, .. } = *body {
+                        assert_eq!(exprs.len(), 1);
+                        assert!(matches!(exprs[0], Ast::Binary { .. }));
+                        if let Ast::Binary { lhs, rhs, .. } = &exprs[0] {
+                            assert!(matches!(**lhs, Ast::Identifier { .. }));
+                            if let Ast::Identifier { ref name, .. } = **lhs {
+                                assert_eq!(name, "x");
+                            }
+                            assert!(matches!(**rhs, Ast::Identifier { .. }));
+                            if let Ast::Identifier { ref name, .. } = **rhs {
+                                assert_eq!(name, "y");
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            panic!("Expected function definition");
+        }
+    }
+
+    #[test]
+    fn function_def_with_type_and_explicit_args_block() {
+        let result = parse_str_one(
+            "int f int x, int y = {
                     x + y
                 }",
             Some(&stdlib()),
@@ -1000,43 +1086,48 @@ mod tests {
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
             }
-            assert!(matches!(*expr, Ast::Block { .. }));
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Lambda { .. }));
+                if let Ast::Lambda { param, body, .. } = *body {
+                    assert!(param.ty.is_some());
+                    if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                        assert_eq!(name, "int");
+                    }
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "y");
+                    }
+                    assert!(matches!(*body, Ast::Block { .. }));
+                    if let Ast::Block { exprs, .. } = *body {
+                        assert_eq!(exprs.len(), 1);
+                        assert!(matches!(exprs[0], Ast::Binary { .. }));
+                        if let Ast::Binary { lhs, rhs, .. } = &exprs[0] {
+                            assert!(matches!(**lhs, Ast::Identifier { .. }));
+                            if let Ast::Identifier { ref name, .. } = **lhs {
+                                assert_eq!(name, "x");
+                            }
+                            assert!(matches!(**rhs, Ast::Identifier { .. }));
+                            if let Ast::Identifier { ref name, .. } = **rhs {
+                                assert_eq!(name, "y");
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
     }
 
     #[test]
-    fn parse_function_def_with_type_and_explicit_args_block() {
-        let result = parse_str_one(
-            "int f int x, int y {
-                    x + y
-                }",
-            Some(&stdlib()),
-        );
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "f");
-            }
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
-            assert!(matches!(*expr, Ast::Block { .. }));
-        } else {
-            panic!("Expected function definition");
-        }
-    }
-
-    #[test]
-    fn parse_function_def_with_type_and_paren_args_oneline() {
+    fn function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
         if let Ast::Assignment {
             target,
@@ -1045,22 +1136,52 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "f");
-            }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
             }
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Lambda { .. }));
+                if let Ast::Lambda { param, body, .. } = *body {
+                    assert!(param.ty.is_some());
+                    if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                        assert_eq!(name, "int");
+                    }
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "y");
+                    }
+                    assert!(matches!(*body, Ast::Binary { .. }));
+                    if let Ast::Binary { lhs, rhs, .. } = *body {
+                        assert!(matches!(*lhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *lhs {
+                            assert_eq!(name, "x");
+                        }
+                        assert!(matches!(*rhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *rhs {
+                            assert_eq!(name, "y");
+                        }
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
     }
 
     #[test]
-    fn parse_function_def_with_type_and_explicit_args_multiline() {
+    fn function_def_with_type_and_explicit_args_multiline() {
         let result = parse_str_one(
             "int f
                   int x,

@@ -490,6 +490,12 @@ impl<R: Read> Parser<R> {
         log::trace!("Parsing primary: {:?}", t.token);
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
+            TokenKind::Identifier(id) if self.types.contains(&id) => Ok(Ast::LiteralType {
+                expr: crate::parser::ast::TypeAst::Identifier {
+                    name: id,
+                    info: t.info,
+                },
+            }),
             TokenKind::Identifier(id) => Ok(Ast::Identifier {
                 name: id,
                 info: t.info,
