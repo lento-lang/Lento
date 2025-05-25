@@ -91,18 +91,6 @@ mod tests {
     }
 
     #[test]
-    fn tuple_1_trailing() {
-        let result = parse_str_one("(1,)", None);
-        let result = result.unwrap();
-
-        assert!(matches!(result, Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result {
-            assert_eq!(exprs.len(), 1);
-            assert_eq!(exprs[0], lit(make_u1(1)));
-        }
-    }
-
-    #[test]
     fn tuple_2() {
         let result = parse_str_one("(1, 2)", None);
         let result = result.unwrap();
@@ -118,20 +106,6 @@ mod tests {
     #[test]
     fn tuple_3() {
         let result = parse_str_one("(1, 2, 3)", None);
-        let result = result.unwrap();
-
-        assert!(matches!(result, Ast::Tuple { .. }));
-        if let Ast::Tuple { exprs, .. } = &result {
-            assert_eq!(exprs.len(), 3);
-            assert_eq!(exprs[0], lit(make_u1(1)));
-            assert_eq!(exprs[1], lit(make_u8(2)));
-            assert_eq!(exprs[2], lit(make_u8(3)));
-        }
-    }
-
-    #[test]
-    fn tuple_3_trailing() {
-        let result = parse_str_one("(1, 2, 3,)", None);
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Tuple { .. }));
@@ -544,7 +518,7 @@ mod tests {
 
     #[test]
     fn block_three_no_semicolon() {
-        let result = parse_str_one("{ 1 2 3 }", None);
+        let result = parse_str_one("{ 1 \n 2 \n 3 }", None);
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Block { .. }));
@@ -590,33 +564,33 @@ mod tests {
 
     #[test]
     fn function_def_paren_explicit_args_and_ret() {
-        parse_str_one("u8 add(u8 x, u8 y, u8 z) { x + y + z }", Some(&stdlib())).unwrap();
+        parse_str_one("u8 add(u8 x, u8 y, u8 z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_explicit_args_and_ret() {
-        parse_str_one("u8 add u8 x, u8 y, u8 z { x + y + z }", Some(&stdlib())).unwrap();
+        parse_str_one("u8 add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_explicit_args() {
-        parse_str_one("add u8 x, u8 y, u8 z { x + y + z }", Some(&stdlib())).unwrap();
+        parse_str_one("add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_paren_implicit_args_and_ret() {
-        parse_str_one("add(x, y, z) { x + y + z }", Some(&stdlib())).unwrap();
+        parse_str_one("add(x, y, z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_no_paren_implicit_args_and_ret() {
-        parse_str_one("add x, y, z { x + y + z }", Some(&stdlib())).unwrap();
+        parse_str_one("add x, y, z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_mixed_parens() {
         parse_str_one(
-            "u8 add x, y, (z), a, (b), (c) { x + y + z + a + b + c }",
+            "u8 add x, y, (z), a, (b), (c) = { x + y + z + a + b + c }",
             Some(&stdlib()),
         )
         .unwrap();
@@ -654,18 +628,18 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_block() {
-        parse_str_one("int add(int x, int y) { x + y }", Some(&stdlib())).unwrap();
+        parse_str_one("int add(int x, int y) = { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_with_return_type_no_parens_block() {
-        parse_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
+        parse_str_one("int add int x, int y = { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
     fn function_def_multiple_statements() {
         parse_str_one(
-            "int add(int x, int y) {
+            "int add(int x, int y) = {
                 let z = x + y;
                 z
             }",
@@ -677,7 +651,7 @@ mod tests {
     #[test]
     fn function_def_nested() {
         parse_str_one(
-            "int outer(int x) {
+            "int outer(int x) = {
                 int inner(int y) = x + y;
                 inner(x)
             }",
