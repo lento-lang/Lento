@@ -666,14 +666,36 @@ impl<R: Read> Parser<R> {
     fn parse_top_expr(&mut self) -> ParseResult {
         match self.parse_expr(0) {
             Ok(expr) => {
-                if let Ok(t) = self.lexer.peek_token(0) {
-                    if t.token.is_top_level_terminal(false) {
-                        self.lexer.next_token().unwrap();
-                    }
-                }
+                self.skip_terminal_and_ignored();
                 specialize::top(expr, &self.types)
             }
             Err(err) => Err(err),
+        }
+    }
+
+    /// Skip all ignored tokens and the next top-level terminal token (`;`, `\n`, `EOF`).
+    fn skip_terminal_and_ignored(&mut self) {
+        // Remove all ignored tokens after the expression
+        while let Ok(t) = self.lexer.peek_token(0) {
+            if pred::ignore(&t.token) {
+                self.lexer.next_token().unwrap();
+            } else {
+                break;
+            }
+        }
+        // If the next token is a top-level terminal, consume it
+        if let Ok(t) = self.lexer.peek_token(0) {
+            if t.token.is_top_level_terminal(false) {
+                self.lexer.next_token().unwrap();
+            }
+        }
+        // Continue to ignore any remaining ignored tokens
+        while let Ok(t) = self.lexer.peek_token(0) {
+            if pred::ignore(&t.token) {
+                self.lexer.next_token().unwrap();
+            } else {
+                break;
+            }
         }
     }
 
