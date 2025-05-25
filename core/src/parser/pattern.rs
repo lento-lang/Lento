@@ -18,15 +18,6 @@ pub enum BindPattern {
         /// The type annotation for the variable.
         info: LineInfo,
     },
-    /// A function definition binding pattern.
-    Function {
-        /// The name of the function.
-        name: String,
-        /// Parameters of the function.
-        params: Vec<BindPattern>,
-        /// Information about the function.
-        info: LineInfo,
-    },
     /// A tuple binding pattern.
     Tuple {
         /// The elements of the tuple.
@@ -66,7 +57,6 @@ impl BindPattern {
     pub fn info(&self) -> &LineInfo {
         match self {
             BindPattern::Variable { info, .. } => info,
-            BindPattern::Function { info, .. } => info,
             BindPattern::Tuple { info, .. } => info,
             BindPattern::Record { info, .. } => info,
             BindPattern::List { info, .. } => info,
@@ -79,11 +69,6 @@ impl BindPattern {
     pub fn specialize(&mut self, _judgements: &TypeJudgements, _changed: &mut bool) {
         match self {
             BindPattern::Variable { .. } => (),
-            BindPattern::Function { params, .. } => {
-                for param in params {
-                    param.specialize(_judgements, _changed);
-                }
-            }
             BindPattern::Tuple { elements, .. } => {
                 for element in elements {
                     element.specialize(_judgements, _changed);
@@ -108,17 +93,7 @@ impl BindPattern {
     pub fn print_expr(&self) -> String {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
-            BindPattern::Function { name, params, .. } => {
-                let mut result = format!("{}(", name);
-                for (i, v) in params.iter().enumerate() {
-                    result.push_str(&v.print_expr());
-                    if i < params.len() - 1 {
-                        result.push_str(", ");
-                    }
-                }
-                result.push(')');
-                result
-            }
+
             BindPattern::Tuple { elements, .. } => format!(
                 "({})",
                 elements
@@ -152,17 +127,6 @@ impl BindPattern {
     pub fn pretty_print(&self) -> String {
         match self {
             BindPattern::Variable { name, .. } => name.clone(),
-            BindPattern::Function { name, params, .. } => {
-                let mut result = format!("{}(", name);
-                for (i, v) in params.iter().enumerate() {
-                    result.push_str(&v.pretty_print());
-                    if i < params.len() - 1 {
-                        result.push_str(", ");
-                    }
-                }
-                result.push(')');
-                result
-            }
             BindPattern::Tuple { elements, .. } => {
                 let mut result = "(".to_string();
                 for (i, v) in elements.iter().enumerate() {

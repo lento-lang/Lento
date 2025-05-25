@@ -701,7 +701,7 @@ mod tests {
                 assert_eq!(name, "x");
             }
             assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            if let Some(TypeAst::Identifier { name, .. }) = &annotation {
                 assert_eq!(name, "int");
             }
             assert!(matches!(*expr, Ast::Literal { .. }));
@@ -720,19 +720,38 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
-                assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-            }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
             }
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
@@ -748,13 +767,9 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
             }
             assert!(annotation.is_none());
             assert!(matches!(*expr, Ast::Binary { .. }));
@@ -773,19 +788,35 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
-                assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-            }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
             }
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_none());
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
@@ -801,16 +832,32 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(annotation.is_none());
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_none());
+                if let BindPattern::Variable { name, .. } = &param.pattern {
                     assert_eq!(name, "x");
                 }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
             }
-            assert!(annotation.is_none());
-            assert!(matches!(*expr, Ast::Binary { .. }));
         } else {
             panic!("Expected function definition");
         }
@@ -826,19 +873,38 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
             }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
             }
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
@@ -854,16 +920,33 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(annotation.is_none());
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 1);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
             }
             assert!(annotation.is_none());
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_none());
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Binary { .. }));
+                if let Ast::Binary { lhs, rhs, .. } = *body {
+                    assert!(matches!(*lhs, Ast::Identifier { .. }));
+                    if let Ast::Identifier { name, .. } = *lhs {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*rhs, Ast::Literal { .. }));
+                    if let Ast::Literal { value, .. } = *rhs {
+                        assert_eq!(
+                            value,
+                            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5)))
+                        );
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
@@ -879,19 +962,42 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(annotation.is_none());
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 2);
-                if let BindPattern::Variable { name, .. } = &params[0] {
+            }
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
                     assert_eq!(name, "x");
                 }
-                if let BindPattern::Variable { name, .. } = &params[1] {
-                    assert_eq!(name, "y");
+                assert!(matches!(*body, Ast::Lambda { .. }));
+                if let Ast::Lambda { param, body, .. } = *body {
+                    assert!(param.ty.is_some());
+                    if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                        assert_eq!(name, "int");
+                    }
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "y");
+                    }
+                    assert!(matches!(*body, Ast::Binary { .. }));
+                    if let Ast::Binary { lhs, rhs, .. } = *body {
+                        assert!(matches!(*lhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *lhs {
+                            assert_eq!(name, "x");
+                        }
+                        assert!(matches!(*rhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *rhs {
+                            assert_eq!(name, "y");
+                        }
+                    }
                 }
             }
-            assert!(annotation.is_none());
-            assert!(matches!(*expr, Ast::Binary { .. }));
         } else {
             panic!("Expected function definition");
         }
@@ -912,16 +1018,9 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 2);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-                if let BindPattern::Variable { name, .. } = &params[1] {
-                    assert_eq!(name, "y");
-                }
             }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
@@ -948,16 +1047,9 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 2);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-                if let BindPattern::Variable { name, .. } = &params[1] {
-                    assert_eq!(name, "y");
-                }
             }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
@@ -979,16 +1071,9 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
-                assert_eq!(params.len(), 2);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-                if let BindPattern::Variable { name, .. } = &params[1] {
-                    assert_eq!(name, "y");
-                }
             }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
@@ -1016,20 +1101,13 @@ mod tests {
             ..
         } = result.unwrap()
         {
-            assert!(matches!(target, BindPattern::Function { .. }));
-            if let BindPattern::Function { name, params, .. } = target {
-                assert_eq!(name, "f");
-                assert_eq!(params.len(), 2);
-                if let BindPattern::Variable { name, .. } = &params[0] {
-                    assert_eq!(name, "x");
-                }
-                if let BindPattern::Variable { name, .. } = &params[1] {
-                    assert_eq!(name, "y");
-                }
-            }
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
                 assert_eq!(name, "int");
+            }
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Binary { .. }));
         } else {

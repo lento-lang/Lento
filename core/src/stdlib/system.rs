@@ -23,10 +23,7 @@ pub fn print() -> Function {
             }
             Ok(Value::Unit)
         },
-        vec![CheckedParam {
-            name: "values".to_string(),
-            ty: Type::Variable("T".into()),
-        }],
+        vec![CheckedParam::from_str("values", Type::Variable("T".into()))],
         std_types::UNIT,
     )
 }
@@ -46,10 +43,7 @@ pub fn dbg() -> Function {
             );
             Ok(value)
         },
-        vec![CheckedParam {
-            name: "values".to_string(),
-            ty: Type::Variable("T".into()),
-        }],
+        vec![CheckedParam::from_str("values", Type::Variable("T".into()))],
         Type::Variable("T".into()),
     )
 }
@@ -64,10 +58,7 @@ pub fn type_of() -> Function {
             }
             Ok(Value::Type(values[0].get_type().clone()))
         },
-        vec![CheckedParam {
-            name: "value".to_string(),
-            ty: std_types::ANY,
-        }],
+        vec![CheckedParam::from_str("value", std_types::ANY)],
         std_types::TYPE,
     )
 }
@@ -99,10 +90,7 @@ pub fn exit() -> Function {
                 ),
             }
         },
-        vec![CheckedParam {
-            name: "code".to_string(),
-            ty: std_types::INT32,
-        }],
+        vec![CheckedParam::from_str("code", std_types::INT32)],
         std_types::UNIT,
     )
 }

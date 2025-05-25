@@ -69,11 +69,8 @@ mod tests {
     }
 
     fn fn_unit() -> CheckedAst {
-        CheckedAst::function_def(
-            CheckedParam {
-                name: "ignore".to_string(),
-                ty: std_types::UNIT,
-            },
+        CheckedAst::lambda(
+            CheckedParam::from_str("ignore", std_types::UNIT),
             CheckedAst::Block {
                 exprs: vec![],
                 ty: std_types::UNIT,

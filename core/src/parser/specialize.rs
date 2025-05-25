@@ -1,5 +1,5 @@
 use super::{
-    ast::{Ast, TypeAst},
+    ast::{Ast, ParamAst, TypeAst},
     error::ParseError,
     op::{ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
     parser::ParseResult,
@@ -33,36 +33,23 @@ use std::collections::HashSet;
 pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
     match expr {
         // Specialize type constructors to literal types
-        Ast::FunctionCall { .. } => call(expr, types),
+        Ast::FunctionCall { expr, arg, info } => call(*expr, *arg, info, types),
         // Specialize assignments to binding patterns with optional type annotations
         Ast::Binary {
             lhs,
             op_info,
             rhs,
             info,
-        } if op_info.symbol == ASSIGNMENT_SYM => Ok(Ast::Assignment {
-            annotation: None,
-            target: binding_pattern_top(*lhs, types)?,
-            expr: rhs,
-            info,
-        }),
+        } if op_info.symbol == ASSIGNMENT_SYM => assignment(*lhs, *rhs, info, types),
         Ast::Binary {
             lhs,
             op_info,
             rhs,
             info,
-        } if op_info.symbol == MEMBER_ACCESS_SYM => Ok(Ast::MemderAccess {
-            expr: lhs,
-            field: record_key(*rhs)?,
-            info,
-        }),
-        Ast::Binary {
-            lhs,
-            op_info,
-            rhs,
-            info,
-        } if op_info.symbol == COMMA_SYM => {
-            let mut exprs = flatten_sequence(*lhs, *rhs);
+        } if op_info.symbol == MEMBER_ACCESS_SYM => member_access(*lhs, *rhs, info),
+        Ast::Binary { ref op_info, .. } if op_info.symbol == COMMA_SYM => {
+            let info = expr.info().clone();
+            let mut exprs = flatten_sequence(expr);
             if exprs.len() == 1 {
                 Ok(exprs.pop().unwrap())
             } else {
@@ -78,72 +65,120 @@ pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
     }
 }
 
+pub fn member_access(expr: Ast, rhs: Ast, info: LineInfo) -> ParseResult {
+    log::trace!(
+        "Specializing member access: {}.{}",
+        expr.print_expr().light_blue(),
+        rhs.print_expr().light_blue()
+    );
+    Ok(Ast::MemderAccess {
+        expr: Box::new(expr),
+        field: record_key(rhs)?,
+        info,
+    })
+}
+
 // Specialize type constructors to literal types
-pub fn call(expr: Ast, types: &HashSet<String>) -> ParseResult {
-    let mut exprs = flatten_calls(&expr);
-    let func = exprs.remove(0);
-    if let Ast::Identifier { name, info } = &func {
-        if types.contains(name) {
-            let args = exprs
-                .into_iter()
-                .map(|arg| match arg {
-                    Ast::Identifier { name, info } => Ok(TypeAst::Identifier {
-                        name: name.to_string(),
-                        info: info.clone(),
-                    }),
-                    _ => Err(ParseError::new(
-                        format!("Invalid type argument: {}", arg.print_expr()),
-                        arg.info().clone(),
-                    )),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            return Ok(Ast::LiteralType {
+pub fn call(expr: Ast, arg: Ast, info: LineInfo, types: &HashSet<String>) -> ParseResult {
+    Ok(match expr {
+        Ast::Identifier {
+            name: constructor_name,
+            info: constructor_info,
+        } if types.contains(&constructor_name) && is_type_expr(&arg, types) => {
+            // If the function is a type constructor, we can specialize it as a literal type.
+            log::trace!(
+                "Specializing new type constructor: {}({})",
+                constructor_name.clone().light_blue(),
+                arg.print_expr().light_blue()
+            );
+            let args = vec![into_type_ast(arg)?];
+            Ast::LiteralType {
                 expr: TypeAst::Constructor {
                     expr: Box::new(TypeAst::Identifier {
-                        name: name.clone(),
-                        info: info.clone(),
+                        name: constructor_name,
+                        info: constructor_info,
                     }),
                     params: args,
                     info: info.clone(),
                 },
-            });
-        }
-    }
-    Ok(expr)
-}
-
-fn flatten_calls(expr: &Ast) -> Vec<&Ast> {
-    let mut exprs = Vec::new();
-    let mut current = expr;
-    while let Ast::FunctionCall { expr, arg, .. } = current {
-        exprs.push(&**arg);
-        current = expr;
-    }
-    exprs.push(current);
-    exprs.reverse();
-    exprs
-}
-
-/// Flatten a sequence of comma (bin op) separated expressions into a single vector
-fn flatten_sequence(expr: Ast, first: Ast) -> Vec<Ast> {
-    let mut exprs = vec![first];
-    let mut current = expr;
-    loop {
-        match current {
-            Ast::Binary {
-                lhs, op_info, rhs, ..
-            } if op_info.symbol == COMMA_SYM => {
-                exprs.push(*rhs);
-                current = *lhs;
-            }
-            _ => {
-                exprs.push(current);
-                break;
             }
         }
-    }
-    exprs.reverse();
-    exprs
+        Ast::LiteralType {
+            expr:
+                TypeAst::Constructor {
+                    expr,
+                    mut params,
+                    info,
+                },
+        } if is_type_expr(&arg, types) => {
+            // If the expression is a literal type constructor, we can add the argument as a type parameter.
+            log::trace!(
+                "Specializing existing type constructor: {}({}, {})",
+                expr.print_expr().light_blue(),
+                params
+                    .iter()
+                    .map(|p| p.pretty_print())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+                    .light_blue(),
+                arg.print_expr().light_blue()
+            );
+            params.push(into_type_ast(arg)?);
+            Ast::LiteralType {
+                expr: TypeAst::Constructor { expr, params, info },
+            }
+        }
+        Ast::FunctionCall {
+            expr: inner,
+            arg: arg_inner,
+            info: inner_info,
+        } => {
+            match *arg_inner {
+                Ast::Identifier {
+                    name: constructor_name,
+                    info: constructor_info,
+                } if types.contains(&constructor_name) && is_type_expr(&arg, types) => {
+                    // Apply the new type argument to the type constructor
+                    log::trace!(
+                        "Specializing new type constructor call: {}({})",
+                        constructor_name.clone().light_blue(),
+                        arg.print_expr().light_blue()
+                    );
+                    let args = vec![into_type_ast(arg)?];
+                    Ast::FunctionCall {
+                        expr: inner,
+                        arg: Box::new(Ast::LiteralType {
+                            expr: TypeAst::Constructor {
+                                expr: Box::new(TypeAst::Identifier {
+                                    name: constructor_name,
+                                    info: constructor_info,
+                                }),
+                                params: args,
+                                info: inner_info.join(&info),
+                            },
+                        }),
+                        info: inner_info,
+                    }
+                }
+                // If the expression is not a type constructor, create a function call as is.
+                _ => Ast::FunctionCall {
+                    expr: Box::new(Ast::FunctionCall {
+                        expr: inner,
+                        arg: arg_inner,
+                        info: inner_info,
+                    }),
+                    arg: Box::new(arg),
+                    info,
+                },
+            }
+        }
+        // If the expression is not a type constructor, create a function call as is.
+        _ => Ast::FunctionCall {
+            expr: Box::new(expr),
+            arg: Box::new(arg),
+            info,
+        },
+    })
 }
 
 fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
@@ -176,61 +211,358 @@ fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
 }
 
 /// Convert a loose AST expression into a binding pattern.
-fn binding_pattern_top(expr: Ast, types: &HashSet<String>) -> Result<BindPattern, ParseError> {
-    match expr {
-        // `_ = ...`
-        Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
-        // `x = ...`
-        Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
+pub fn assignment(
+    target: Ast,
+    body: Ast,
+    assignment_info: LineInfo,
+    types: &HashSet<String>,
+) -> Result<Ast, ParseError> {
+    log::debug!(
+        "Specializing assignment: {} = {}",
+        target.print_expr(),
+        body.print_expr()
+    );
+    log::trace!("Specializing assignment: {:?} = {:?}", target, body);
+    let target_info = target.info().clone();
+    match &target {
         // `x, y = ...`, `f x, y = ...`, `f int x, bool y = ...` or `int f int x, bool y = ...` etc.
         // Potentially a function definition.
-        Ast::Binary {
-            lhs, op_info, rhs, ..
-        } if op_info.symbol == COMMA_SYM => {
-            let exprs = flatten_sequence(*lhs, *rhs);
-            comma_function_definition(exprs)
+        Ast::Binary { op_info, .. } if op_info.symbol == COMMA_SYM => {
+            let mut exprs = flatten_sequence(target);
+            log::trace!(
+                "Flattened comma sequence: {:?}",
+                exprs.iter().map(|e| e.print_expr()).collect::<Vec<_>>()
+            );
+            let function = definition_start(flatten_calls(exprs.remove(0)), &target_info, types)?;
+            let mut params = exprs
+                .into_iter()
+                .map(|expr| {
+                    let mut exprs = flatten_calls(expr);
+                    let param = next_typed_binding_pattern(&mut exprs, types)?;
+                    if !exprs.is_empty() {
+                        let rest_info = exprs
+                            .first()
+                            .unwrap()
+                            .info()
+                            .join(exprs.last().unwrap().info());
+                        return Err(ParseError::new(
+                            format!(
+                                "Expected a single function parameter, found: {}",
+                                exprs
+                                    .iter()
+                                    .map(|e| e.print_expr())
+                                    .collect::<Vec<String>>()
+                                    .join(" ")
+                            ),
+                            rest_info,
+                        ));
+                    }
+                    Ok(param)
+                })
+                .collect::<Result<Vec<_>, ParseError>>()?;
+            // Insert the first parameter from the function definition start
+            params.insert(0, function.param.unwrap());
+            Ok(create_function_assignment(
+                function.annotation,
+                function.name,
+                function.name_info,
+                params,
+                body,
+                assignment_info,
+            ))
         }
         // `int x = ...`, `f x = ...`, `f int x = ...`, `int f x = ...` or `int f int x = ...`.
+        // Complex types can also be used here, like `List int list1 = ...` or `Map int str map1 = ...`.
         // Potentially a function definition.
-        Ast::FunctionCall { ref info, .. } => {
-            let mut exprs = flatten_calls(&expr);
-            match try_type_annotation(&exprs, types) {
-                Some(Ok((func_annotation, mut exprs))) => {
-                    // Found a function definition with a type annotation!
-                    let func = exprs.remove(0);
-                    if let Ast::Identifier { name, .. } = func {
-                        if exprs.is_empty() {
-                            // `int x = ...`
-                            // If no parameters are found, it's a typed variable binding
-                            Ok(BindPattern::Variable {
-                                name: name.to_string(),
-                                info: expr.info().clone(),
-                            })
-                        } else {
-                            function_definition(Some(func_annotation), name, exprs, info)
-                        }
-                    } else {
-                        Err(ParseError::new(
-                            format!("Invalid function binding pattern: {}", expr.print_expr()),
-                            expr.info().clone(),
-                        ))
-                    }
-                }
-                None => {
-                    // If no type annotation is found, we assume it's a function definition without type annotations.
-                    let func = exprs.remove(0);
-                    if let Ast::Identifier { name, .. } = func {
-                        function_definition(None, name, exprs, info)
-                    } else {
-                        Err(ParseError::new(
-                            format!("Invalid function binding pattern: {}", expr.print_expr()),
-                            expr.info().clone(),
-                        ))
-                    }
-                }
-                Some(Err(err)) => Err(err),
+        Ast::FunctionCall { .. } => {
+            let def = definition_start(flatten_calls(target), &target_info, types)?;
+            if let Some(param) = def.param {
+                Ok(create_function_assignment(
+                    def.annotation,
+                    def.name,
+                    def.name_info,
+                    vec![param],
+                    body,
+                    assignment_info,
+                ))
+            } else {
+                // If no parameters are found, it's a typed variable binding
+                Ok(Ast::Assignment {
+                    annotation: def.annotation,
+                    target: BindPattern::Variable {
+                        name: def.name,
+                        info: def.name_info,
+                    },
+                    expr: Box::new(body),
+                    info: assignment_info,
+                })
             }
         }
+        // Try parse other generic binding patterns (non-typed) for assignments like:
+        // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
+        _ => Ok(Ast::Assignment {
+            annotation: None,
+            target: binding_pattern(target)?,
+            expr: Box::new(body),
+            info: assignment_info,
+        }),
+    }
+}
+
+struct DefStart {
+    annotation: Option<TypeAst>,
+    name: String,
+    name_info: LineInfo,
+    param: Option<ParamAst>,
+}
+
+/// Parse the first part of a function definition, which can be either a single parameter or a function name with its first parameter.
+/// This is used to handle function definitions like:
+/// ```ignore
+/// x ...
+/// int x ...
+/// f x ...
+/// f int x ...
+/// int f x ...
+/// int f int x ...
+/// List int f int x ...
+/// Map int str f int x ...
+/// ```
+/// Complex types can also be used here as seen above.
+fn definition_start(
+    mut exprs: Vec<Ast>,
+    info: &LineInfo,
+    types: &HashSet<String>,
+) -> Result<DefStart, ParseError> {
+    log::trace!(
+        "Parsing function definition start from expressions: {:?}",
+        exprs
+            .iter()
+            .map(|e| e.print_expr())
+            .collect::<Vec<String>>()
+    );
+    let func = next_typed_binding_pattern(&mut exprs, types)?;
+    let BindPattern::Variable {
+        name,
+        info: name_info,
+    } = func.pattern
+    else {
+        return Err(ParseError::new(
+            format!(
+                "Invalid function binding pattern: {}",
+                func.pattern.print_expr()
+            ),
+            func.pattern.info().clone(),
+        )
+        .with_label(
+            format!(
+                "Expected a function name, found: {}",
+                func.pattern.print_expr()
+            ),
+            func.pattern.info().clone(),
+        ));
+    };
+    if exprs.is_empty() {
+        // `int x = ...`
+        // If no parameters are found, it's a typed variable binding
+        Ok(DefStart {
+            annotation: func.ty,
+            name,
+            name_info,
+            param: None,
+        })
+    } else {
+        // `f x = ...`, `int f x = ...`, `f int x = ...`, or `int f int x = ...` etc.
+        // If there are more expressions, we assume it's the first parameter of a function definition before any comma.
+        let param = next_typed_binding_pattern(&mut exprs, types)?;
+        if !exprs.is_empty() {
+            // If there are more expressions, we assume it's a function definition with multiple parameters.
+            let rest_info = exprs
+                .first()
+                .unwrap()
+                .info()
+                .join(exprs.last().unwrap().info());
+            return Err(ParseError::new(
+                "Expected a single function parameter in definition".to_string(),
+                rest_info,
+            ));
+        }
+        Ok(DefStart {
+            annotation: func.ty,
+            name,
+            name_info,
+            param: Some(param),
+        })
+    }
+}
+
+/// Create a function definition via nested lambda expressions assigned to a variable.
+fn create_function_assignment(
+    annotation: Option<TypeAst>,
+    name: String,
+    name_info: LineInfo,
+    params: Vec<ParamAst>,
+    body: Ast,
+    info: LineInfo,
+) -> Ast {
+    log::trace!(
+        "Creating function {}{}({}) = {}",
+        if let Some(annotation) = &annotation {
+            format!("{} ", annotation.pretty_print().light_blue())
+        } else {
+            "".to_string()
+        },
+        name,
+        params
+            .iter()
+            .map(|p| format!(
+                "{}{}",
+                if let Some(annotation) = &p.ty {
+                    format!("{} ", annotation.pretty_print().light_blue())
+                } else {
+                    "".to_string()
+                },
+                p.pattern.pretty_print()
+            ))
+            .collect::<Vec<String>>()
+            .join(", "),
+        body.print_expr()
+    );
+    let mut params = params.into_iter().rev();
+    let first = params.next().unwrap();
+    let mut lambda = Ast::Lambda {
+        info: first.pattern.info().join(body.info()),
+        param: first,
+        body: Box::new(body),
+        return_type: None,
+    };
+    for param in params {
+        lambda = Ast::Lambda {
+            info: lambda.info().join(param.pattern.info()),
+            param,
+            body: Box::new(lambda),
+            return_type: None,
+        };
+    }
+    Ast::Assignment {
+        info,
+        annotation,
+        target: BindPattern::Variable {
+            name,
+            info: name_info,
+        },
+        expr: Box::new(lambda),
+    }
+}
+
+//--------------------------------------------------------------------------------------//
+//                                     Utilities                                        //
+//--------------------------------------------------------------------------------------//
+
+fn flatten_calls(expr: Ast) -> Vec<Ast> {
+    let mut exprs = Vec::new();
+    let mut queue = vec![expr];
+    while let Some(current) = queue.pop() {
+        match current {
+            // Flatten function calls into a list of expressions
+            Ast::FunctionCall { expr, arg, .. } => {
+                queue.push(*arg);
+                queue.push(*expr);
+            }
+            _ => exprs.push(current),
+        }
+    }
+    exprs
+}
+
+fn flatten_sequence(expr: Ast) -> Vec<Ast> {
+    let mut exprs = Vec::new();
+    let mut queue = vec![expr];
+    while let Some(current) = queue.pop() {
+        match current {
+            // Flatten sequences of expressions
+            Ast::Binary {
+                lhs, op_info, rhs, ..
+            } if op_info.symbol == COMMA_SYM => {
+                queue.push(*rhs);
+                queue.push(*lhs);
+            }
+            _ => exprs.push(current),
+        }
+    }
+    exprs
+}
+
+/// Parse a typed binding pattern from a list of expressions, like:
+/// ```ignore
+/// int f str x, bool y
+/// ```
+/// Yelds the first parameter with its type annotation, like:
+/// ```ignore
+/// ParamAst {
+///    ty: Some(TypeAst::Identifier { name: "int".to_string(), info: ... }),
+///    pattern: BindPattern::Variable {
+///    name: "f".to_string(),
+///        info: ...,
+///   }
+/// }
+/// ```
+/// And modifies the `exprs` vector to remove the first parameter and its type annotation.
+/// So the remaining expressions will be the rest of the parameters, like:
+/// ```ignore
+/// str x, bool y
+/// ```
+fn next_typed_binding_pattern(
+    exprs: &mut Vec<Ast>,
+    types: &HashSet<String>,
+) -> Result<ParamAst, ParseError> {
+    if exprs.is_empty() {
+        unreachable!("Expected at least one expression for a binding pattern");
+    }
+    let annotation = match try_type_annotation(exprs, types) {
+        Some(Ok(annotation)) => Some(annotation),
+        Some(Err(err)) => return Err(err),
+        None => None,
+    };
+    if exprs.is_empty() {
+        return Err(ParseError::new(
+            "Expected a binding pattern".to_string(),
+            annotation.unwrap().info().clone(),
+        ));
+    }
+    Ok(ParamAst {
+        ty: annotation,
+        pattern: binding_pattern(exprs.remove(0))?,
+    })
+}
+
+// Convert a loose AST expression into a binding pattern.
+fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
+    match expr {
+        Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
+        Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
+        Ast::Tuple { exprs, info } => {
+            let elements = exprs
+                .into_iter()
+                .map(binding_pattern)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::Tuple { elements, info })
+        }
+        Ast::Record { fields, info } => {
+            let fields = fields
+                .into_iter()
+                .map(|(k, v)| Ok((k, binding_pattern(v)?)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::Record { fields, info })
+        }
+        Ast::List { exprs, info } => {
+            let elements = exprs
+                .into_iter()
+                .map(binding_pattern)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(BindPattern::List { elements, info })
+        }
+        Ast::Literal { value, info } => Ok(BindPattern::Literal { value, info }),
         _ => Err(ParseError::new(
             format!("Invalid binding pattern: {}", expr.print_expr()),
             expr.info().clone(),
@@ -238,177 +570,279 @@ fn binding_pattern_top(expr: Ast, types: &HashSet<String>) -> Result<BindPattern
     }
 }
 
-fn function_definition(
-    annotation: Option<TypeAst>,
-    name: &str,
-    rest: Vec<&Ast>,
-    start_info: &LineInfo,
-) -> Result<BindPattern, ParseError> {
-    let mut params = Vec::new();
-    for expr in rest {
-        match expr {
-            Ast::Identifier { name, info } => {
-                params.push(BindPattern::Variable {
-                    name: name.to_string(),
-                    info: info.clone(),
-                });
-            }
-            _ => {
-                return Err(ParseError::new(
-                    format!("Invalid function binding pattern: {}", expr.print_expr()),
-                    expr.info().clone(),
-                ));
-            }
-        }
-    }
-    let last_info = params
-        .last()
-        .map_or(start_info.clone(), |p| p.info().clone());
-    Ok(BindPattern::Function {
-        name: name.to_string(),
-        params,
-        info: start_info.join(&last_info),
-    })
-}
-
-// // Convert a loose AST expression into a binding pattern.
-// fn binding_pattern(expr: &Ast) -> Result<BindPattern, ParseError> {
-//     match expr {
-//         Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
-//         Ast::Identifier { name, info } => Ok(BindPattern::Variable {
-//             name,
-//             annotation: None,
-//             info,
-//         }),
-//         Ast::Tuple { exprs, info } => {
-//             let elements = exprs
-//                 .into_iter()
-//                 .map(binding_pattern)
-//                 .collect::<Result<Vec<_>, _>>()?;
-//             Ok(BindPattern::Tuple { elements, info })
-//         }
-//         Ast::Record { fields, info } => {
-//             let fields = fields
-//                 .into_iter()
-//                 .map(|(k, v)| Ok((k, binding_pattern(v)?)))
-//                 .collect::<Result<Vec<_>, _>>()?;
-//             Ok(BindPattern::Record { fields, info })
-//         }
-//         Ast::List { exprs, info } => {
-//             let elements = exprs
-//                 .into_iter()
-//                 .map(binding_pattern)
-//                 .collect::<Result<Vec<_>, _>>()?;
-//             Ok(BindPattern::List { elements, info })
-//         }
-//         Ast::Literal { value, info } => Ok(BindPattern::Literal { value, info }),
-//         _ if matches!(expr, Ast::FunctionCall { .. }) => {
-//             log::trace!(
-//                 "Specializing function binding pattern: {}",
-//                 expr.print_expr()
-//             );
-//             let mut args = flatten_calls(&expr);
-//             let func = args.remove(0);
-//             if let Ast::Identifier { name, info } = func {
-//                 let params = args
-//                     .into_iter()
-//                     .map(|arg| binding_pattern((*arg).clone()))
-//                     .collect::<Result<Vec<_>, _>>()?;
-//                 Ok(BindPattern::Function {
-//                     name: name.clone(),
-//                     annotation: None,
-//                     params,
-//                     info: info.clone(),
-//                 })
-//             } else {
-//                 Err(ParseError::new(
-//                     format!("Invalid function binding pattern: {}", expr.print_expr()),
-//                     expr.info().clone(),
-//                 ))
-//             }
-//         }
-//         _ => Err(ParseError::new(
-//             format!("Invalid binding pattern: {}", expr.print_expr()),
-//             expr.info().clone(),
-//         )),
-//     }
-// }
-
-fn comma_function_definition(exprs: Vec<Ast>) -> Result<BindPattern, ParseError> {
-    let mut params = Vec::new();
-    for expr in exprs {
-        match expr {
-            Ast::Identifier { name, info } => {
-                params.push(BindPattern::Variable { name, info });
-            }
-            _ => {
-                return Err(ParseError::new(
-                    format!("Invalid function binding pattern: {}", expr.print_expr()),
-                    expr.info().clone(),
-                ));
-            }
-        }
-    }
-    let last_info = params
-        .last()
-        .map_or(LineInfo::default(), |p| p.info().clone());
-    Ok(BindPattern::Function {
-        name: "<anonymous>".to_string(),
-        params,
-        info: last_info,
-    })
-}
-
 /// Try to parse a type annotation from a list of expressions given from a function definition assignment.
 ///
 /// ## Example
-/// ```ignored
+/// ```ignore
 /// int f str x, bool y
 /// ```
 /// Becomes: (`int`, `f(str(x)), bool(y)`)
 ///
 /// ## Example
-/// ```ignored
+/// ```ignore
 /// List int f int x
 /// ```
 /// Becomes: (`List(int)`, `f(int(x))`)
-fn try_type_annotation<'a>(
-    exprs: &'a [&'a Ast],
+fn try_type_annotation(
+    exprs: &mut Vec<Ast>,
     types: &HashSet<String>,
-) -> Option<Result<(TypeAst, Vec<&'a Ast>), ParseError>> {
-    let mut annotations = Vec::new();
-    let mut rest = Vec::new();
-    let mut is_annotation = true;
-    for expr in exprs {
-        if is_annotation {
-            match &expr {
-                // `int f str x, bool y` or `int f int x`
-                Ast::Identifier { name, .. } if types.contains(name) => {
-                    annotations.push(expr);
-                }
-                // `(((HashMap int) str) f) int x`
-                // We need to unwrap the type constructor call
-                // until we reach a non-type identifier
-                Ast::FunctionCall {
-                    expr: func,
-                    arg,
-                    info,
-                } => {
-                    let mut exprs = flatten_calls(func);
-                }
-                _ => {
-                    is_annotation = false;
-                    rest.push(expr);
+) -> Option<Result<TypeAst, ParseError>> {
+    let mut annotations: Vec<&Ast> = Vec::new();
+    let mut is_type_constructor = false;
+    for expr in exprs.iter() {
+        // Check if the expression is a type expression
+        if !is_type_expr(expr, types) {
+            break;
+        }
+        // If the expression is a type expression, we add it to the annotations
+        annotations.push(expr);
+        if annotations.is_empty() {
+            // `(((HashMap int) str) f) int x`
+            if let Ast::Identifier { name, .. } = expr {
+                if types.contains(name) {
+                    is_type_constructor = true;
                 }
             }
-        } else {
-            rest.push(expr);
         }
     }
-    None
-    // Create a type from the annotation expressoins
-    // Some(Ok((TypeAst::Constructor {
-    //     expr: types,
-    //     params,
-    // })))
+    // Make immutable for the rest of the function
+    let annotations = annotations;
+    is_type_constructor = is_type_constructor && annotations.len() > 1; // A constructor must have at least one type argument
+
+    // Create a type from the annotation expressions
+    if annotations.is_empty() {
+        return None;
+    }
+    // We have type annotation expressions! 🎉
+    if is_type_constructor {
+        // We have a type constructor, like `List int` or `Map str int`
+        // The first expression is the type constructor name, the rest are type arguments
+        let Ast::Identifier {
+            name: constructor_name,
+            info: constructor_info,
+        } = annotations.first().unwrap()
+        else {
+            unreachable!();
+        };
+        let mut params = Vec::new();
+        for param in annotations.iter().skip(1) {
+            match into_type_ast((*param).clone()) {
+                Ok(type_ast) => {
+                    params.push(type_ast);
+                }
+                Err(err) => {
+                    return Some(Err(err.with_label(
+                        format!("Invalid type argument: {}", param.print_expr()),
+                        param.info().clone(),
+                    )));
+                }
+            }
+        }
+        let last_info = params
+            .last()
+            .map_or(constructor_info.clone(), |p| p.info().clone());
+        let type_expr = TypeAst::Constructor {
+            expr: Box::new(TypeAst::Identifier {
+                name: constructor_name.clone(),
+                info: constructor_info.clone(),
+            }),
+            params,
+            info: constructor_info.join(&last_info),
+        };
+        // Remove the type annotation expressions from the list
+        exprs.drain(0..annotations.len());
+        Some(Ok(type_expr))
+    } else {
+        // No type constructor found, make sure there is only ONE type annotation expression
+        if annotations.len() != 1 {
+            let mut err = ParseError::new(
+                "Expected a single type annotation expression".to_string(),
+                annotations[0].info().clone(),
+            );
+            if let Some(invalid) = annotations.get(1..) {
+                let first_info = annotations.first().unwrap().info();
+                let last_info = invalid.last().unwrap().info();
+                err = err.with_label("These are invalid".to_string(), first_info.join(last_info));
+            }
+            err = err.with_hint("Did you mean to define a variable or function?".to_string());
+
+            return Some(Err(err));
+        }
+        match into_type_ast(annotations[0].clone()) {
+            Ok(type_ast) => {
+                // Remove the type annotation expressions from the list
+                exprs.drain(0..annotations.len());
+                Some(Ok(type_ast))
+            }
+            Err(err) => Some(Err(err.with_label(
+                "Invalid type annotation".to_string(),
+                annotations[0].info().clone(),
+            ))),
+        }
+    }
+}
+
+fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
+    match expr {
+        Ast::Identifier { name, .. } => types.contains(name),
+        // Sum types like `int | str`
+        Ast::Binary { lhs, rhs, .. } => is_type_expr(lhs, types) && is_type_expr(rhs, types),
+        Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
+        Ast::LiteralType { .. } => true,
+        Ast::Literal { .. } => false,
+        // Product type like `(int, str)`
+        Ast::Tuple { exprs, .. } => exprs.iter().all(|e| is_type_expr(e, types)),
+        // Product type like `{ a: int, b: str }`
+        Ast::Record { fields, .. } => fields.iter().all(|(_, v)| is_type_expr(v, types)),
+        _ => false,
+    }
+}
+
+fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
+    log::trace!(
+        "Converting expression into TypeAst: {}",
+        expr.print_expr().light_blue()
+    );
+    match expr {
+        Ast::Identifier { name, info } => Ok(TypeAst::Identifier {
+            name: name.clone(),
+            info: info.clone(),
+        }),
+        Ast::List { mut exprs, info } if exprs.len() == 1 => {
+            let inner = into_type_ast(exprs.remove(0))?;
+            Ok(TypeAst::Constructor {
+                expr: Box::new(TypeAst::Identifier {
+                    name: "List".to_string(),
+                    info: info.clone(),
+                }),
+                params: vec![inner],
+                info: info.clone(),
+            })
+        }
+        Ast::Record { fields, info } => {
+            let fields = fields
+                .into_iter()
+                .map(|(key, value)| Ok((key, into_type_ast(value)?)))
+                .collect::<Result<Vec<_>, ParseError>>()?;
+            Ok(TypeAst::Record { fields, info })
+        }
+        Ast::LiteralType { expr } => Ok(expr.clone()),
+        _ => Err(ParseError::new(
+            format!("Expected a type expression, found: {}", expr.print_expr()),
+            expr.info().clone(),
+        )),
+    }
+}
+
+/// Takes a function name, a list of parameters and a body and rolls them into a single assignment expression.
+/// Parameters are rolled into a nested function definition.
+/// All parameters are sorted like:
+/// ```lento
+/// func(a, b, c) = expr
+/// ```
+/// becomes:
+/// ```lento
+/// func = a -> b -> c -> expr
+/// ```
+///
+/// # Arguments
+/// - `func_name` The name of the function
+/// - `params` A list of parameters in left-to-right order: `a, b, c`
+/// - `body` The body of the function
+pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
+    assert!(!params.is_empty(), "Expected at least one parameter");
+    let info = body
+        .info()
+        .join(params.last().map(|p| p.pattern.info()).unwrap());
+    let mut params = params.iter().rev();
+    let mut function = Ast::Lambda {
+        param: params.next().unwrap().clone(),
+        body: Box::new(body),
+        return_type: None,
+        info,
+    };
+    for param in params {
+        function = Ast::Lambda {
+            info: function.info().join(param.pattern.info()),
+            param: param.clone(),
+            body: Box::new(function),
+            return_type: None,
+        };
+    }
+    function
+}
+
+/// Takes a function name, a list of arguments and rolls them into a single function call expression.
+/// Arguments are rolled into a nested function call.
+/// All arguments are sorted like:
+/// ```lento
+/// func(a, b, c)
+/// ```
+/// becomes:
+/// ```lento
+/// func(a)(b)(c)
+/// ```
+pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> Ast {
+    let last_info = args
+        .last()
+        .map(|a| a.info().clone())
+        .unwrap_or(expr.info().clone());
+    let call_info = expr.info().join(&last_info);
+    match expr {
+        Ast::Identifier {
+            name: constructor_name,
+            info: constructor_info,
+        } if types.contains(&constructor_name) && args.iter().all(|a| is_type_expr(a, types)) => {
+            // If the expression is a type constructor, we can specialize it as a literal type.
+            log::trace!(
+                "Specializing new type constructor: {}({})",
+                constructor_name.clone().light_blue(),
+                args.iter()
+                    .map(|a| a.print_expr().light_blue().to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
+            let args = args
+                .into_iter()
+                .map(into_type_ast)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            Ast::LiteralType {
+                expr: TypeAst::Constructor {
+                    expr: Box::new(TypeAst::Identifier {
+                        name: constructor_name,
+                        info: constructor_info,
+                    }),
+                    params: args,
+                    info: call_info.clone(),
+                },
+            }
+        }
+        expr => {
+            // If the expression is not a type constructor, we can create a function call as is.
+            log::trace!(
+                "Creating function call: {}({})",
+                expr.print_expr().light_blue(),
+                args.iter()
+                    .map(|a| a.print_expr().light_blue().to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
+            let mut args = args.into_iter();
+            let mut call = Ast::FunctionCall {
+                expr: Box::new(expr),
+                arg: Box::new(args.next().unwrap()),
+                info: call_info.clone(),
+            };
+            for arg in args {
+                let arg_info = call_info.join(arg.info());
+                call = Ast::FunctionCall {
+                    expr: Box::new(call),
+                    arg: Box::new(arg),
+                    info: arg_info,
+                };
+            }
+            call
+        }
+    }
 }

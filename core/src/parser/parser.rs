@@ -14,6 +14,7 @@ use crate::{
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{TokenInfo, TokenKind},
     },
+    parser::op::{ASSIGNMENT_SYM, MEMBER_ACCESS_SYM},
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -41,11 +42,11 @@ mod pred {
         matches!(t, TokenKind::EndOfFile)
     }
 
-    /// Check if the token is an ignored token.
+    /// Check if the token is an ignore token.
     /// These include:
     /// - `Newline`
     /// - `Comment`
-    pub fn ignored(t: &TokenKind) -> bool {
+    pub fn ignore(t: &TokenKind) -> bool {
         matches!(t, TokenKind::Comment(_) | TokenKind::Newline)
     }
 }
@@ -199,7 +200,7 @@ impl<R: Read> Parser<R> {
         condition: impl FnOnce(&TokenKind) -> bool,
         symbol: &'static str,
     ) -> Result<TokenInfo, ParseError> {
-        match self.lexer.expect_next_token_not(pred::ignored) {
+        match self.lexer.expect_next_token_not(pred::ignore) {
             Ok(t) if condition(&t.token) => Ok(t),
             Ok(t) => Err(ParseError::new(
                 format!(
@@ -254,7 +255,7 @@ impl<R: Read> Parser<R> {
     /// Parse a tuple from the lexer.
     ///
     /// ## Examples
-    /// ```ignored
+    /// ```ignore
     /// x = (1, 2, 3)
     /// ```
     fn parse_tuple(&mut self) -> ParseResult {
@@ -478,7 +479,7 @@ impl<R: Read> Parser<R> {
     fn parse_primary(&mut self) -> ParseResult {
         let t = self
             .lexer
-            .expect_next_token_not(pred::ignored)
+            .expect_next_token_not(pred::ignore)
             .map_err(|err| {
                 ParseError::new(
                     "Expected primary expression".to_string(),
@@ -489,30 +490,16 @@ impl<R: Read> Parser<R> {
         log::trace!("Parsing primary: {:?}", t.token);
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
-            TokenKind::Identifier(id) => {
-                // Check if function call with parentheses like `f(5, 6, 7)`, **NOT** `f (5, 6, 7)`
-                if let Ok(nt) = self.lexer.peek_token(0) {
-                    if matches!(&nt.token, TokenKind::LeftParen { is_function_call: true }) {
-                        self.lexer.next_token().unwrap();
-                        let args: Vec<Ast> = match self.parse_tuple()? {
-                            Ast::Tuple { exprs, .. } => exprs,
-                            single_expr => vec![single_expr],
-                        };
-                        return Ok(roll_function_call(id, args, t.info));
-                    }
-                }
-                // Else, just return the identifier as is
-                Ok(Ast::Identifier {
-                    name: id,
-                    info: t.info,
-                })
-            }
+            TokenKind::Identifier(id) => Ok(Ast::Identifier {
+                name: id,
+                info: t.info,
+            }),
             TokenKind::Op(op) => {
                 if let Some(op) = self.find_operator_pos(&op, OpPos::Prefix) {
                     log::trace!("Parsing prefix operator: {:?}", op);
                     Ok(Ast::Unary {
                         op_info: op.clone(),
-                        expr: Box::new(self.parse_primary()?),
+                        expr: Box::new(self.parse_term()?),
                         info: t.info,
                     })
                 } else {
@@ -526,7 +513,9 @@ impl<R: Read> Parser<R> {
 
             start if start.is_grouping_start() => {
                 match start {
-                    TokenKind::LeftParen { is_function_call: false } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
+                    TokenKind::LeftParen {
+                        is_function_call: false,
+                    } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
                     TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
                     TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),
@@ -544,6 +533,27 @@ impl<R: Read> Parser<R> {
                 t.info,
             )),
         }
+    }
+
+    fn parse_term(&mut self) -> ParseResult {
+        let primary = self.parse_primary()?;
+        // Check if function call with parentheses like `f(5, 6, 7)`, **NOT** `f (5, 6, 7)`
+        if let Ok(nt) = self.lexer.peek_token(0) {
+            if matches!(
+                &nt.token,
+                TokenKind::LeftParen {
+                    is_function_call: true
+                }
+            ) {
+                self.lexer.next_token().unwrap();
+                let args = match self.parse_tuple()? {
+                    Ast::Tuple { exprs, .. } => exprs,
+                    single_expr => vec![single_expr],
+                };
+                return Ok(specialize::roll_function_call(primary, args, &self.types));
+            }
+        }
+        Ok(primary)
     }
 
     /// Check if to continue parsing the next expression in the sequence
@@ -595,7 +605,7 @@ impl<R: Read> Parser<R> {
     /// ## Algorithm
     /// See: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
     fn parse_expr(&mut self, min_prec: OpPrec) -> ParseResult {
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_term()?;
         while let Ok(nt) = self.lexer.peek_token(0) {
             if nt.token.is_terminator() {
                 break; // Stop parsing on expression terminators
@@ -614,11 +624,17 @@ impl<R: Read> Parser<R> {
                     log::trace!("Parsing infix operator: {:?}", op);
                     self.lexer.next_token().unwrap();
                     let rhs = self.parse_expr(op.precedence)?;
-                    expr = Ast::Binary {
-                        info: expr.info().join(rhs.info()),
-                        lhs: Box::new(expr),
-                        op_info: op.clone(),
-                        rhs: Box::new(rhs),
+
+                    let info = expr.info().join(rhs.info());
+                    expr = match op.symbol.as_str() {
+                        ASSIGNMENT_SYM => specialize::assignment(expr, rhs, info, &self.types)?,
+                        MEMBER_ACCESS_SYM => specialize::member_access(expr, rhs, info)?,
+                        _ => Ast::Binary {
+                            lhs: Box::new(expr),
+                            op_info: op.clone(),
+                            rhs: Box::new(rhs),
+                            info,
+                        },
                     };
                     continue;
                 } else {
@@ -626,11 +642,8 @@ impl<R: Read> Parser<R> {
                 }
             }
             if FUNCTION_APP_PREC > min_prec {
-                expr = Ast::FunctionCall {
-                    info: expr.info().join(&nt.info),
-                    expr: Box::new(expr),
-                    arg: Box::new(self.parse_primary()?),
-                };
+                let call_info = expr.info().join(&nt.info);
+                expr = specialize::call(expr, self.parse_term()?, call_info, &self.types)?;
                 continue;
             }
             if nt.token.is_terminator() {
@@ -674,7 +687,7 @@ impl<R: Read> Parser<R> {
     /// There may be remaining tokens in the stream after the expression is parsed.
     pub fn parse_one(&mut self) -> ParseResult {
         // Check if the next token is an EOF, then return an empty unit top-level expression
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
             if pred::eof(&t.token) {
                 return Ok(Ast::Literal {
                     value: Value::Unit,
@@ -690,7 +703,7 @@ impl<R: Read> Parser<R> {
     pub fn parse_all(&mut self) -> ParseResults {
         let mut asts = Vec::new();
         loop {
-            if let Ok(t) = self.lexer.peek_token_not(pred::ignored, 0) {
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                 if pred::eof(&t.token) {
                     break;
                 }
@@ -702,80 +715,4 @@ impl<R: Read> Parser<R> {
         }
         Ok(asts)
     }
-}
-
-//--------------------------------------------------------------------------------------//
-//                                  Helper Functions                                    //
-//--------------------------------------------------------------------------------------//
-
-/// Takes a function name, a list of parameters and a body and rolls them into a single assignment expression.
-/// Parameters are rolled into a nested function definition.
-/// All parameters are sorted like:
-/// ```lento
-/// func(a, b, c) = expr
-/// ```
-/// becomes:
-/// ```lento
-/// func = a -> b -> c -> expr
-/// ```
-///
-/// # Arguments
-/// - `func_name` The name of the function
-/// - `params` A list of parameters in left-to-right order: `a, b, c`
-/// - `body` The body of the function
-pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
-    assert!(!params.is_empty(), "Expected at least one parameter");
-    let info = body.info().join(params.last().map(|p| &p.info).unwrap());
-    let mut params = params.iter().rev();
-    let mut function = Ast::Lambda {
-        param: params.next().unwrap().clone(),
-        body: Box::new(body),
-        return_type: None,
-        info,
-    };
-    for param in params {
-        function = Ast::Lambda {
-            info: function.info().join(&param.info),
-            param: param.clone(),
-            body: Box::new(function),
-            return_type: None,
-        };
-    }
-    function
-}
-
-/// Takes a function name, a list of arguments and rolls them into a single function call expression.
-/// Arguments are rolled into a nested function call.
-/// All arguments are sorted like:
-/// ```lento
-/// func(a, b, c)
-/// ```
-/// becomes:
-/// ```lento
-/// func(a)(b)(c)
-/// ```
-pub fn roll_function_call(name: String, args: Vec<Ast>, start_info: LineInfo) -> Ast {
-    let last_info = args
-        .last()
-        .map(|a| a.info().clone())
-        .unwrap_or(start_info.clone());
-    let call_info = start_info.join(&last_info);
-    let mut args = args.into_iter();
-    let mut call = Ast::FunctionCall {
-        expr: Box::new(Ast::Identifier {
-            name,
-            info: call_info.clone(),
-        }),
-        arg: Box::new(args.next().unwrap()),
-        info: call_info.clone(),
-    };
-    for arg in args {
-        let arg_info = call_info.join(arg.info());
-        call = Ast::FunctionCall {
-            expr: Box::new(call),
-            arg: Box::new(arg),
-            info: arg_info,
-        };
-    }
-    call
 }

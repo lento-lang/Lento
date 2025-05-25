@@ -175,7 +175,7 @@ impl TypeTrait for FunctionType {
     fn simplify(self) -> Self {
         FunctionType {
             param: CheckedParam {
-                name: self.param.name,
+                pattern: self.param.pattern,
                 ty: self.param.ty.simplify(),
             },
             return_type: self.return_type.simplify(),
@@ -185,7 +185,7 @@ impl TypeTrait for FunctionType {
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self {
         FunctionType {
             param: CheckedParam {
-                name: self.param.name.clone(),
+                pattern: self.param.pattern.clone(),
                 ty: self.param.ty.specialize(judgements, changed),
             },
             return_type: self.return_type.specialize(judgements, changed),

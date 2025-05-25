@@ -253,7 +253,7 @@ impl TypeChecker<'_> {
                     } => {
                         let checked_param = self.check_param(param)?;
                         let checked =
-                            self.check_function(checked_param.clone(), body, return_type, info)?;
+                            self.check_lambda(checked_param.clone(), body, return_type, info)?;
                         let variation = FunctionType {
                             param: checked_param,
                             return_type: checked.get_type().clone(),
@@ -294,7 +294,7 @@ impl TypeChecker<'_> {
                 body,
                 return_type,
                 info,
-            } => self.check_function(self.check_param(param)?, body, return_type, info)?,
+            } => self.check_lambda(self.check_param(param)?, body, return_type, info)?,
             Ast::Literal { value, info } => CheckedAst::Literal {
                 value: value.clone(),
                 info: info.clone(),
@@ -365,6 +365,13 @@ impl TypeChecker<'_> {
                     .collect::<TypeResult<Vec<_>>>()?;
                 Type::Constructor(base_name, args, base_type)
             }
+            TypeAst::Record { fields, .. } => {
+                let fields = fields
+                    .iter()
+                    .map(|(k, v)| Ok((k.clone(), self.check_type_expr(v)?)))
+                    .collect::<TypeResult<Vec<_>>>()?;
+                Type::Record(fields)
+            }
         })
     }
 
@@ -382,23 +389,26 @@ impl TypeChecker<'_> {
             self.check_type_expr(ty)?
         } else {
             return Err(TypeError::new(
-                format!("Missing parameter type for {}", param.name.clone().yellow()),
-                param.info.clone(),
+                format!(
+                    "Missing parameter type for {}",
+                    param.pattern.pretty_print().yellow()
+                ),
+                param.pattern.info().clone(),
             )
             .with_label(
                 "Add a type to this parameter".to_string(),
-                param.info.clone(),
+                param.pattern.info().clone(),
             )
             .into());
         };
         let param = CheckedParam {
-            name: param.name.clone(),
+            pattern: param.pattern.clone(),
             ty: param_ty,
         };
         Ok(param)
     }
 
-    fn check_function(
+    fn check_lambda(
         &mut self,
         param: CheckedParam,
         body: &Ast,
@@ -430,7 +440,7 @@ impl TypeChecker<'_> {
             body_type
         };
 
-        Ok(CheckedAst::function_def(
+        Ok(CheckedAst::lambda(
             param,
             checked_body,
             return_type,
@@ -615,22 +625,32 @@ impl TypeChecker<'_> {
             BindPattern::Variable { name, .. } => {
                 let expr = self.check_expr(expr)?;
                 let ty = expr.get_type().clone();
+                if let Some(ty_ast) = annotation {
+                    let expected_ty = self.check_type_expr(ty_ast)?;
+                    if !ty.subtype(&expected_ty).success {
+                        return Err(TypeError::new(
+                            format!(
+                                "Cannot assign {} to {}",
+                                ty.pretty_print_color(),
+                                expected_ty.pretty_print_color()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!("This is of type {}", ty.pretty_print_color()),
+                            expr.info().clone(),
+                        )
+                        .with_label(
+                            format!("This expected type {}", expected_ty.pretty_print_color()),
+                            info.clone(),
+                        )
+                        .into());
+                    }
+                }
+                self.env.add_variable(name, ty.clone());
                 Ok(CheckedAst::Assignment {
                     target: BindPattern::Variable {
                         name: name.clone(),
-                        info: info.clone(),
-                    },
-                    expr: Box::new(expr),
-                    info: info.clone(),
-                })
-            }
-            BindPattern::Function { name, params, .. } => {
-                let expr = self.check_expr(expr)?;
-                let ty = expr.get_type().clone();
-                Ok(CheckedAst::Assignment {
-                    target: BindPattern::Function {
-                        name: name.clone(),
-                        params: params.clone(),
                         info: info.clone(),
                     },
                     expr: Box::new(expr),
@@ -1079,15 +1099,6 @@ impl TypeChecker<'_> {
                 Ok(())
             }
             BindPattern::Rest { .. } => Ok(()),
-            BindPattern::Function { .. } => Err(TypeError::new(
-                "Function binding patterns are not supported in this context".to_string(),
-                info.clone(),
-            )
-            .with_label(
-                "This is a function binding pattern".to_string(),
-                pattern.info().clone(),
-            )
-            .into()),
         }
     }
 

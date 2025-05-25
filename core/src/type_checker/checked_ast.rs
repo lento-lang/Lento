@@ -16,17 +16,23 @@ pub struct CheckedOperator {
 
 #[derive(Debug, Clone)]
 pub struct CheckedParam {
-    pub name: String,
     pub ty: Type,
+    pub pattern: BindPattern,
 }
 
 impl CheckedParam {
-    pub fn new(name: String, ty: Type) -> CheckedParam {
-        CheckedParam { name, ty }
+    pub fn new(pattern: BindPattern, ty: Type) -> CheckedParam {
+        CheckedParam { pattern, ty }
     }
 
     pub fn from_str<S: Into<String>>(name: S, ty: Type) -> CheckedParam {
-        CheckedParam::new(name.into(), ty)
+        CheckedParam::new(
+            BindPattern::Variable {
+                name: name.into(),
+                info: LineInfo::default(),
+            },
+            ty,
+        )
     }
 }
 
@@ -89,11 +95,15 @@ pub enum CheckedAst {
         return_type: Type,
         info: LineInfo,
     },
-    /// A function definition is a named function with a list of parameters and a body expression
-    FunctionDef {
+    /// A lambda expression is an anonymous function that can be passed as a value.
+    Lambda {
+        /// The parameter of the lambda function
         param: CheckedParam,
+        /// The body of the lambda function
         body: Box<CheckedAst>,
+        /// The return type of the lambda function
         return_type: Type,
+        /// The type of the lambda function, which is a function type
         ty: Type,
         info: LineInfo,
     },
@@ -124,7 +134,7 @@ impl GetType for CheckedAst {
             CheckedAst::FieldAccess { ty, .. } => ty,
             CheckedAst::Identifier { ty, .. } => ty,
             CheckedAst::FunctionCall { return_type, .. } => return_type,
-            CheckedAst::FunctionDef { ty, .. } => ty,
+            CheckedAst::Lambda { ty, .. } => ty,
             CheckedAst::Assignment { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
         }
@@ -132,13 +142,13 @@ impl GetType for CheckedAst {
 }
 
 impl CheckedAst {
-    pub fn function_def(
+    pub fn lambda(
         param: CheckedParam,
         body: CheckedAst,
         return_type: Type,
         info: LineInfo,
     ) -> CheckedAst {
-        CheckedAst::FunctionDef {
+        CheckedAst::Lambda {
             ty: Type::Function(Box::new(FunctionType::new(
                 param.clone(),
                 return_type.clone(),
@@ -160,7 +170,7 @@ impl CheckedAst {
             CheckedAst::FieldAccess { info, .. } => info,
             CheckedAst::Identifier { info, .. } => info,
             CheckedAst::FunctionCall { info, .. } => info,
-            CheckedAst::FunctionDef { info, .. } => info,
+            CheckedAst::Lambda { info, .. } => info,
             CheckedAst::Assignment { info, .. } => info,
             CheckedAst::Block { info, .. } => info,
         }
@@ -222,7 +232,7 @@ impl CheckedAst {
                 arg.specialize(judgements, changed);
                 *return_type = return_type.specialize(judgements, changed);
             }
-            CheckedAst::FunctionDef {
+            CheckedAst::Lambda {
                 param,
                 body,
                 return_type,
@@ -320,8 +330,13 @@ impl CheckedAst {
                         .join(", ")
                 )
             }
-            CheckedAst::FunctionDef { param, body, .. } => {
-                format!("({} {} -> {})", param.ty, param.name, body.print_expr())
+            CheckedAst::Lambda { param, body, .. } => {
+                format!(
+                    "({} {} -> {})",
+                    param.ty,
+                    param.pattern.print_expr(),
+                    body.print_expr()
+                )
             }
             CheckedAst::Assignment {
                 target: lhs,
@@ -393,8 +408,12 @@ impl CheckedAst {
             } => {
                 format!("{}({})", function.pretty_print(), arg.pretty_print())
             }
-            Self::FunctionDef { param, body, .. } => {
-                format!("{} -> {}", param.name, body.pretty_print())
+            Self::Lambda { param, body, .. } => {
+                format!(
+                    "{} -> {}",
+                    param.pattern.pretty_print(),
+                    body.pretty_print()
+                )
             }
             Self::Assignment {
                 target: lhs,

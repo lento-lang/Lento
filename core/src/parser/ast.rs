@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     interpreter::value::{RecordKey, Value},
     util::error::LineInfo,
@@ -7,23 +9,20 @@ use super::{op::OpInfo, pattern::BindPattern};
 
 #[derive(Debug, Clone)]
 pub struct ParamAst {
-    pub name: String,
     pub ty: Option<TypeAst>,
-    pub info: LineInfo,
+    pub pattern: BindPattern,
 }
 
 impl PartialEq for ParamAst {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.ty == other.ty
+        self.pattern == other.pattern && self.ty == other.ty
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TypeAst {
     Identifier {
-        /// The name of the type.
         name: String,
-        /// The line information for the type.
         info: LineInfo,
     },
     Constructor {
@@ -31,6 +30,28 @@ pub enum TypeAst {
         params: Vec<TypeAst>,
         info: LineInfo,
     },
+    Record {
+        fields: Vec<(RecordKey, TypeAst)>,
+        info: LineInfo,
+    },
+}
+
+impl Debug for TypeAst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Identifier { name, .. } => {
+                f.debug_struct("Identifier").field("name", name).finish()
+            }
+            Self::Constructor { expr, params, .. } => f
+                .debug_struct("Constructor")
+                .field("expr", expr)
+                .field("params", params)
+                .finish(),
+            Self::Record { fields, .. } => {
+                f.debug_struct("Record").field("fields", fields).finish()
+            }
+        }
+    }
 }
 
 impl TypeAst {
@@ -38,6 +59,7 @@ impl TypeAst {
         match self {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Constructor { info, .. } => info,
+            TypeAst::Record { info, .. } => info,
         }
     }
 
@@ -56,6 +78,16 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
         }
     }
 
@@ -70,6 +102,16 @@ impl TypeAst {
                     expr.pretty_print(),
                     args.iter()
                         .map(|a| a.pretty_print())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.pretty_print()))
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
@@ -100,7 +142,7 @@ impl PartialEq for TypeAst {
 }
 
 /// **Expressions** in the program source code.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Ast {
     /// A literal is a constant value that is directly represented in the source code.
     Literal { value: Value, info: LineInfo },
@@ -166,6 +208,71 @@ pub enum Ast {
     },
     /// Block expression evaluates all expressions in the block and returns the value of the last expression.
     Block { exprs: Vec<Ast>, info: LineInfo },
+}
+
+impl Debug for Ast {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
+            Self::LiteralType { expr } => {
+                f.debug_struct("LiteralType").field("expr", expr).finish()
+            }
+            Self::Tuple { exprs, .. } => f.debug_struct("Tuple").field("exprs", exprs).finish(),
+            Self::List { exprs, .. } => f.debug_struct("List").field("exprs", exprs).finish(),
+            Self::Record { fields, .. } => {
+                f.debug_struct("Record").field("fields", fields).finish()
+            }
+            Self::MemderAccess { expr, field, .. } => f
+                .debug_struct("MemderAccess")
+                .field("expr", expr)
+                .field("field", field)
+                .finish(),
+            Self::Identifier { name, .. } => {
+                f.debug_struct("Identifier").field("name", name).finish()
+            }
+            Self::Assignment {
+                annotation,
+                target,
+                expr,
+                ..
+            } => f
+                .debug_struct("Assignment")
+                .field("annotation", annotation)
+                .field("target", target)
+                .field("expr", expr)
+                .finish(),
+            Self::Lambda {
+                param,
+                body,
+                return_type,
+                ..
+            } => f
+                .debug_struct("Lambda")
+                .field("param", param)
+                .field("body", body)
+                .field("return_type", return_type)
+                .finish(),
+            Self::FunctionCall { expr, arg, .. } => f
+                .debug_struct("FunctionCall")
+                .field("expr", expr)
+                .field("arg", arg)
+                .finish(),
+            Self::Binary {
+                lhs, op_info, rhs, ..
+            } => f
+                .debug_struct("Binary")
+                .field("lhs", lhs)
+                .field("op_info", op_info)
+                .field("rhs", rhs)
+                .finish(),
+            Self::Unary { op_info, expr, .. } => f
+                .debug_struct("Unary")
+                .field("op_info", op_info)
+                .field("expr", expr)
+                .finish(),
+            Self::Block { exprs, .. } => f.debug_struct("Block").field("exprs", exprs).finish(),
+        }
+    }
 }
 
 impl Ast {
@@ -238,13 +345,13 @@ impl Ast {
             } => {
                 if let Some(ty) = &params.ty {
                     format!(
-                        "({} {} -> {})",
+                        "({} {} => {})",
                         ty.print_expr(),
-                        params.name,
+                        params.pattern.print_expr(),
                         body.print_expr()
                     )
                 } else {
-                    format!("({} -> {})", params.name, body.print_expr())
+                    format!("({} => {})", params.pattern.print_expr(), body.print_expr())
                 }
             }
 

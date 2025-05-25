@@ -86,7 +86,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
                 }
             }
         }
-        CheckedAst::FunctionDef {
+        CheckedAst::Lambda {
             param,
             body,
             return_type,
@@ -160,7 +160,10 @@ fn eval_call(
             let arg = eval_expr(arg, env)?;
             let mut closure = env.new_child(Str::Str("<closure>"));
             // Bind the argument to the parameter of the function variation
-            closure.add_value(Str::String(param.name.clone()), arg.clone(), info)?;
+            let BindPattern::Variable { name, info } = &param.pattern else {
+                unreachable!("Other bind patterns are not supported yet");
+            };
+            closure.add_value(Str::String(name.clone()), arg.clone(), info)?;
             eval_expr(body, &mut closure)
         }
         Function::Native { .. } => {
@@ -278,9 +281,6 @@ fn eval_assignment(
         }
         BindPattern::Rest { .. } => {
             // Handle rest pattern if needed
-        }
-        BindPattern::Function { .. } => {
-            unreachable!("Function binding patterns are not supported in this context");
         }
     }
     Ok(())
