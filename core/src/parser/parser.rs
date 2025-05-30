@@ -24,7 +24,7 @@ use crate::{
 use crate::lexer::lexer::Lexer;
 
 use super::{
-    ast::{Ast, ParamAst},
+    ast::Ast,
     error::{ParseError, ParserOpError},
     op::{
         default_operators,
