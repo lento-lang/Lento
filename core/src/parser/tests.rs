@@ -1204,7 +1204,37 @@ mod tests {
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
             }
-            assert!(matches!(*expr, Ast::Binary { .. }));
+            assert!(matches!(*expr, Ast::Lambda { .. }));
+            if let Ast::Lambda { param, body, .. } = *expr {
+                assert!(param.ty.is_some());
+                if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                    assert_eq!(name, "int");
+                }
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, Ast::Lambda { .. }));
+                if let Ast::Lambda { param, body, .. } = *body {
+                    assert!(param.ty.is_some());
+                    if let Some(TypeAst::Identifier { name, .. }) = param.ty {
+                        assert_eq!(name, "int");
+                    }
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "y");
+                    }
+                    assert!(matches!(*body, Ast::Binary { .. }));
+                    if let Ast::Binary { lhs, rhs, .. } = *body {
+                        assert!(matches!(*lhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *lhs {
+                            assert_eq!(name, "x");
+                        }
+                        assert!(matches!(*rhs, Ast::Identifier { .. }));
+                        if let Ast::Identifier { name, .. } = *rhs {
+                            assert_eq!(name, "y");
+                        }
+                    }
+                }
+            }
         } else {
             panic!("Expected function definition");
         }
