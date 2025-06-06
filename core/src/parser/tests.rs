@@ -393,9 +393,8 @@ mod tests {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
-            if let RecordKey::String(key) = &fields[0].0 {
-                assert_eq!(key, "x");
-            }
+            let RecordKey::String(key) = &fields[0].0;
+            assert_eq!(key, "x");
             assert!(matches!(fields[0].1, Ast::Literal { .. }));
             assert_eq!(fields[0].1, lit(make_u1(1)));
         }
@@ -412,12 +411,10 @@ mod tests {
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
             assert!(matches!(fields[1].0, RecordKey::String(_)));
-            if let RecordKey::String(key) = &fields[0].0 {
-                assert_eq!(key, "x");
-            }
-            if let RecordKey::String(key) = &fields[1].0 {
-                assert_eq!(key, "y");
-            }
+            let RecordKey::String(key) = &fields[0].0;
+            assert_eq!(key, "x");
+            let RecordKey::String(key) = &fields[1].0;
+            assert_eq!(key, "y");
             assert!(matches!(fields[0].1, Ast::Literal { .. }));
             assert!(matches!(fields[1].1, Ast::Literal { .. }));
             assert_eq!(fields[0].1, lit(make_u1(1)));
@@ -435,9 +432,8 @@ mod tests {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
-            if let RecordKey::String(key) = &fields[0].0 {
-                assert_eq!(key, "x");
-            }
+            let RecordKey::String(key) = &fields[0].0;
+            assert_eq!(key, "x");
             assert!(matches!(fields[0].1, Ast::Record { .. }));
             if let Ast::Record {
                 fields: inner_fields,
@@ -447,9 +443,8 @@ mod tests {
                 assert_eq!(inner_fields.len(), 1);
                 let inner_fields = inner_fields.iter().collect::<Vec<_>>();
                 assert!(matches!(inner_fields[0].0, RecordKey::String(_)));
-                if let RecordKey::String(key) = &inner_fields[0].0 {
-                    assert_eq!(key, "y");
-                }
+                let RecordKey::String(key) = &inner_fields[0].0;
+                assert_eq!(key, "y");
                 assert!(matches!(inner_fields[0].1, Ast::Literal { .. }));
                 assert_eq!(inner_fields[0].1, lit(make_u1(1)));
             }
@@ -466,9 +461,8 @@ mod tests {
             assert_eq!(fields.len(), 1);
             let fields = fields.iter().collect::<Vec<_>>();
             assert!(matches!(fields[0].0, RecordKey::String(_)));
-            if let RecordKey::String(key) = &fields[0].0 {
-                assert_eq!(key, "x");
-            }
+            let RecordKey::String(key) = &fields[0].0;
+            assert_eq!(key, "x");
             assert!(matches!(fields[0].1, Ast::Block { .. }));
             if let Ast::Block { exprs: inner, .. } = &fields[0].1 {
                 assert_eq!(inner.len(), 1);
