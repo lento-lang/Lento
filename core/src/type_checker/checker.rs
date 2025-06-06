@@ -687,7 +687,7 @@ impl TypeChecker<'_> {
             }
             _ => Err(TypeErrorVariant::ParseError(ParseError::new(
                 format!("Invalid assignment target: {}", target.print_expr()),
-                info.clone(),
+                target.info().clone(),
             ))),
         }
     }
