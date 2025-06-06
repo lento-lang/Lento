@@ -399,6 +399,7 @@ impl TypeChecker<'_> {
         let param_ty = if let Some(ty) = &param.ty {
             self.check_type_expr(ty)?
         } else {
+            // TODO: Do not require explicit parameter types
             return Err(TypeError::new(
                 format!(
                     "Missing parameter type for {}",
@@ -639,6 +640,17 @@ impl TypeChecker<'_> {
     ) -> TypeResult<CheckedAst> {
         match target {
             BindPattern::Variable { name, .. } => {
+                if self.lookup_local_identifier(name).is_some() {
+                    return Err(TypeError::new(
+                        format!("{} is already defined", name.clone().yellow()),
+                        info.clone(),
+                    )
+                    .with_label(
+                        "This already exists in the current scope".to_string(),
+                        target.info().clone(),
+                    )
+                    .into());
+                }
                 let expr = self.check_expr(expr)?;
                 let ty = expr.get_type().clone();
                 if let Some(ty_ast) = annotation {
