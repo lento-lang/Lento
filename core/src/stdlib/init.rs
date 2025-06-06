@@ -209,7 +209,6 @@ pub fn stdlib() -> Initializer {
             ),
         ],
         types: vec![
-            std_types::ANY,
             std_types::TYPE,
             std_types::UNIT,
             std_types::STRING,
