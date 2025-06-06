@@ -399,19 +399,7 @@ impl TypeChecker<'_> {
         let param_ty = if let Some(ty) = &param.ty {
             self.check_type_expr(ty)?
         } else {
-            // TODO: Do not require explicit parameter types
-            return Err(TypeError::new(
-                format!(
-                    "Missing parameter type for {}",
-                    param.pattern.pretty_print().yellow()
-                ),
-                param.pattern.info().clone(),
-            )
-            .with_label(
-                "Add a type to this parameter".to_string(),
-                param.pattern.info().clone(),
-            )
-            .into());
+            std_types::ANY // TODO: Infer a more specific type
         };
         let param = CheckedParam {
             pattern: param.pattern.clone(),
