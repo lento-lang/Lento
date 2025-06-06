@@ -1,14 +1,13 @@
-use core::str;
-use std::io::{Read, Write};
-
+use crate::{commands::eval::eval_all, logger::init_logger_str, CLI_VERSION};
 use clap::{ArgMatches, Command};
 use colorful::Colorful;
+use core::str;
 use lento_core::{
     interpreter::env::global_env, lexer::lexer::InputSource, parser::parser, stdlib::init::stdlib,
     type_checker::checker::TypeChecker,
 };
+use std::io::{Read, Write};
 
-use crate::{commands::eval::eval_all, logger::init_logger_str, CLI_VERSION};
 const PROMPT: &str = "🠆";
 
 pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
