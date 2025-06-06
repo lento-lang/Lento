@@ -8,7 +8,7 @@ use lento_core::{
 };
 use std::io::{Read, Write};
 
-const PROMPT: &str = "🠆";
+const PROMPT: &str = "►";
 
 pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // Set the Ctrl-C handler to exit the program
