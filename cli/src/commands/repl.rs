@@ -9,6 +9,7 @@ use lento_core::{
 };
 
 use crate::{commands::eval::eval_all, logger::init_logger_str, CLI_VERSION};
+const PROMPT: &str = "🠆";
 
 pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     // Set the Ctrl-C handler to exit the program
@@ -51,7 +52,7 @@ pub fn handle_command_repl(args: &ArgMatches, _arg_parser: &mut Command) {
     let mut env = global_env();
     std.init_environment(&mut env);
     loop {
-        print!("> ");
+        print!("{} ", PROMPT);
         std::io::stdout().flush().unwrap();
         let found_expr = eval_all(
             &mut parser,
