@@ -372,7 +372,7 @@ impl<R: Read> Parser<R> {
                     })); // Empty record
                 }
                 TokenKind::Identifier(id) => RecordKey::String(id),
-                TokenKind::Number(n) => RecordKey::Number(n),
+                // TokenKind::Number(n) => RecordKey::Number(n),
                 TokenKind::String(s) => RecordKey::String(s),
                 TokenKind::Char(c) => RecordKey::String(c.to_string()),
                 _ => return None, // Not a record
@@ -423,7 +423,7 @@ impl<R: Read> Parser<R> {
             }
             let key = match t.token {
                 TokenKind::Identifier(id) => RecordKey::String(id),
-                TokenKind::Number(n) => RecordKey::Number(n),
+                // TokenKind::Number(n) => RecordKey::Number(n),
                 TokenKind::String(s) => RecordKey::String(s),
                 TokenKind::Char(c) => RecordKey::String(c.to_string()),
                 _ => {

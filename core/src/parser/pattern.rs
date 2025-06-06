@@ -1,5 +1,10 @@
+use std::hash::Hash;
+
 use crate::{
-    interpreter::value::{RecordKey, Value},
+    interpreter::{
+        number::{Number, SignedInteger, UnsignedInteger},
+        value::{RecordKey, Value},
+    },
     type_checker::types::TypeJudgements,
     util::error::LineInfo,
 };
@@ -9,7 +14,7 @@ use crate::{
 /// - Function definitions
 /// - Function arguments
 /// - Destructuring assignments
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub enum BindPattern {
     /// A variable binding pattern.
     Variable {
@@ -41,7 +46,7 @@ pub enum BindPattern {
     /// A literal pattern that matches a specific value.
     Literal {
         /// The value to match.
-        value: Value,
+        value: LiteralPattern,
         info: LineInfo,
     },
     /// A rest of a collection pattern that matches the rest of a list.
@@ -119,7 +124,7 @@ impl BindPattern {
                     .join(", ")
             ),
             BindPattern::Wildcard => "_".to_string(),
-            BindPattern::Literal { value, .. } => value.pretty_print(),
+            BindPattern::Literal { value, .. } => value.as_value().pretty_print(),
             BindPattern::Rest { name, .. } => format!("...{}", name),
         }
     }
@@ -161,7 +166,7 @@ impl BindPattern {
                 result
             }
             BindPattern::Wildcard => "_".to_string(),
-            BindPattern::Literal { value, .. } => value.pretty_print(),
+            BindPattern::Literal { value, .. } => value.as_value().pretty_print(),
             BindPattern::Rest { name, .. } => format!("...{}", name),
         }
     }
@@ -182,6 +187,68 @@ impl PartialEq for BindPattern {
             (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
             (Self::Rest { name: l0, .. }, Self::Rest { name: r0, .. }) => l0 == r0,
             _ => false,
+        }
+    }
+}
+
+impl Hash for BindPattern {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            BindPattern::Variable { name, .. } => name.hash(state),
+            BindPattern::Tuple { elements, .. } => {
+                for element in elements {
+                    element.hash(state);
+                }
+            }
+            BindPattern::Record { fields, .. } => {
+                for (key, value) in fields {
+                    key.hash(state);
+                    value.hash(state);
+                }
+            }
+            BindPattern::List { elements, .. } => {
+                for element in elements {
+                    element.hash(state);
+                }
+            }
+            BindPattern::Wildcard => "Wildcard".hash(state),
+            BindPattern::Literal { value, .. } => value.hash(state),
+            BindPattern::Rest { name, .. } => name.hash(state),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LiteralPattern {
+    UnsignedInteger(UnsignedInteger),
+    SignedInteger(SignedInteger),
+    String(String),
+    Char(char),
+    Boolean(bool),
+}
+
+impl LiteralPattern {
+    pub fn into_value(self) -> Value {
+        match self {
+            LiteralPattern::UnsignedInteger(value) => Value::Number(Number::UnsignedInteger(value)),
+            LiteralPattern::SignedInteger(value) => Value::Number(Number::SignedInteger(value)),
+            LiteralPattern::String(value) => Value::String(value),
+            LiteralPattern::Char(value) => Value::Char(value),
+            LiteralPattern::Boolean(value) => Value::Boolean(value),
+        }
+    }
+
+    pub fn as_value(&self) -> Value {
+        match self {
+            LiteralPattern::UnsignedInteger(value) => {
+                Value::Number(Number::UnsignedInteger(value.clone()))
+            }
+            LiteralPattern::SignedInteger(value) => {
+                Value::Number(Number::SignedInteger(value.clone()))
+            }
+            LiteralPattern::String(value) => Value::String(value.clone()),
+            LiteralPattern::Char(value) => Value::Char(*value),
+            LiteralPattern::Boolean(value) => Value::Boolean(*value),
         }
     }
 }

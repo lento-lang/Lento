@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct LocationInfo {
     pub index: usize,
     pub line: usize,
@@ -37,7 +37,7 @@ impl Default for LocationInfo {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct LineInfo {
     pub start: LocationInfo,
     pub end: LocationInfo,

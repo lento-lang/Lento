@@ -16,7 +16,7 @@ use crate::{
     stdlib::arithmetic,
     type_checker::{
         checker::TypeChecker,
-        types::{std_types, Type, TypeTrait},
+        types::{std_types, GetType, Type, TypeTrait},
     },
     util::{
         error::{BaseErrorExt, LineInfo},
@@ -75,6 +75,9 @@ impl Initializer {
             self.functions.len(),
             self.operators.len()
         );
+        for (name, val) in &self.constants {
+            type_checker.add_variable(name.to_string(), val.get_type().clone());
+        }
         for op in &self.operators {
             type_checker.add_operator(op.clone());
         }

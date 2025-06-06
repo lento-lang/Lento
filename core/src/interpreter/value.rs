@@ -17,17 +17,17 @@ use super::{env::Environment, eval::InterpretResult, number::Number};
 /// ```ignore
 /// record = { "key": 1, 2: 3.0, 'c': "value", 4.0: 'd' }
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RecordKey {
     String(String),
-    Number(Number),
+    // Number(Number), // TODO: Support numbers as keys
 }
 
 impl Display for RecordKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RecordKey::String(s) => write!(f, "{}", s),
-            RecordKey::Number(n) => write!(f, "{}", n),
+            // RecordKey::Number(n) => write!(f, "{}", n),
         }
     }
 }

@@ -1,4 +1,7 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+};
 
 use colorful::Colorful;
 
@@ -10,7 +13,10 @@ use crate::{
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
         pattern::BindPattern,
     },
-    util::error::{BaseError, BaseErrorExt, LineInfo},
+    util::{
+        error::{BaseError, BaseErrorExt, LineInfo},
+        str::Str,
+    },
 };
 
 use super::{
@@ -119,8 +125,8 @@ impl TypeEnv {
     }
 
     // Add a variable to the type environment
-    pub fn add_variable(&mut self, name: &str, ty: Type) {
-        self.variables.insert(name.to_string(), ty);
+    pub fn add_variable(&mut self, name: String, ty: Type) {
+        self.variables.insert(name, ty);
     }
 
     // Add an operator to the type environment
@@ -160,6 +166,10 @@ impl TypeChecker<'_> {
 
     pub fn add_function(&mut self, name: &str, variation: FunctionType) {
         self.env.add_function(name.to_string(), variation);
+    }
+
+    pub fn add_variable(&mut self, name: String, ty: Type) {
+        self.env.add_variable(name, ty);
     }
 
     fn new_scope(&self) -> TypeChecker {
@@ -267,7 +277,8 @@ impl TypeChecker<'_> {
                     }
                     _ => {
                         let checked = self.check_expr(expr)?;
-                        self.env.add_variable(name, checked.get_type().clone());
+                        self.env
+                            .add_variable(name.clone(), checked.get_type().clone());
                     }
                 }
             }
@@ -415,7 +426,12 @@ impl TypeChecker<'_> {
         return_type: &Option<TypeAst>,
         info: &LineInfo,
     ) -> TypeResult<CheckedAst> {
-        let checked_body = self.new_scope().check_expr(body)?;
+        let mut body_scope = self.new_scope();
+        let pattern_names = binding_typed_names(&param.pattern, &param.ty);
+        for (name, ty) in pattern_names.into_iter() {
+            body_scope.add_variable(name, ty);
+        }
+        let checked_body = body_scope.check_expr(body)?;
         let body_type = checked_body.get_type().clone();
         let return_type = if let Some(ty) = &return_type {
             let ty = self.check_type_expr(ty)?;
@@ -647,7 +663,7 @@ impl TypeChecker<'_> {
                         .into());
                     }
                 }
-                self.env.add_variable(name, ty.clone());
+                self.add_variable(name.clone(), ty.clone());
                 Ok(CheckedAst::Assignment {
                     target: BindPattern::Variable {
                         name: name.clone(),
@@ -983,7 +999,7 @@ impl TypeChecker<'_> {
     ) -> TypeResult<()> {
         match pattern {
             BindPattern::Variable { name, .. } => {
-                self.env.add_variable(name, expr_ty.clone());
+                self.add_variable(name.clone(), expr_ty.clone());
                 Ok(())
             }
             BindPattern::Tuple { elements, .. } => {
@@ -1080,6 +1096,7 @@ impl TypeChecker<'_> {
             }
             BindPattern::Wildcard => Ok(()),
             BindPattern::Literal { value, .. } => {
+                let value = value.as_value();
                 let value_type = value.get_type();
                 if !value_type.subtype(expr_ty).success {
                     return Err(TypeError::new(
@@ -1103,4 +1120,42 @@ impl TypeChecker<'_> {
     }
 
     // ================== Type inference functions ==================
+}
+
+/// Extract all names and their types from a binding pattern
+fn binding_typed_names(pattern: &BindPattern, ty: &Type) -> HashSet<(String, Type)> {
+    fn visit(pattern: &BindPattern, ty: &Type, names: &mut HashSet<(String, Type)>) {
+        match pattern {
+            BindPattern::Variable { name, .. } => {
+                names.insert((name.clone(), ty.clone()));
+            }
+            BindPattern::Tuple { elements, .. } => {
+                if let Type::Tuple(types) = ty {
+                    for (element, t) in elements.iter().zip(types) {
+                        visit(element, t, names);
+                    }
+                }
+            }
+            BindPattern::Record { fields, .. } => {
+                if let Type::Record(types) = ty {
+                    for (key, pattern) in fields {
+                        if let Some((_, t)) = types.iter().find(|(k, _)| k == key) {
+                            visit(pattern, t, names);
+                        }
+                    }
+                }
+            }
+            BindPattern::List { elements, .. } => {
+                if let Type::List(element_type) = ty {
+                    for element in elements {
+                        visit(element, &element_type, names);
+                    }
+                }
+            }
+            BindPattern::Wildcard | BindPattern::Rest { .. } | BindPattern::Literal { .. } => {}
+        }
+    }
+    let mut names = HashSet::new();
+    visit(pattern, ty, &mut names);
+    names
 }

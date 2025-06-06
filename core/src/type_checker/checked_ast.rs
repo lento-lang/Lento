@@ -14,7 +14,7 @@ pub struct CheckedOperator {
     pub handler: Function,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckedParam {
     pub ty: Type,
     pub pattern: BindPattern,

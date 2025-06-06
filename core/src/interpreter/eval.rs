@@ -268,11 +268,11 @@ fn eval_assignment(
         }
         BindPattern::Wildcard => {}
         BindPattern::Literal { value: lit, .. } => {
-            if value != lit {
+            if *value != lit.as_value() {
                 return Err(RuntimeError::new(
                     format!(
                         "Literal pattern match failed: expected {}, found {}",
-                        lit.pretty_print(),
+                        lit.as_value().pretty_print(),
                         value.pretty_print()
                     ),
                     pattern.info().clone(),

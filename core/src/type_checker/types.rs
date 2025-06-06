@@ -135,7 +135,7 @@ pub trait TypeTrait {
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FunctionType {
     pub param: CheckedParam,
     pub return_type: Type,
@@ -193,7 +193,7 @@ impl TypeTrait for FunctionType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Type {
     /// A literal type (name).
     /// Examples such as `int`, `float`, `string`, `char`, `bool`, `unit`, `any`.
