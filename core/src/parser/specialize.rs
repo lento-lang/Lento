@@ -10,7 +10,7 @@ use crate::{
         number::Number,
         value::{RecordKey, Value},
     },
-    parser::pattern::BindPattern,
+    parser::{op::OpInfo, pattern::BindPattern},
     type_checker::types::std_types,
     util::error::{BaseErrorExt, LineInfo},
 };
@@ -31,35 +31,31 @@ use std::collections::HashSet;
 /// - `f x, y = b` into `Assignment { target: BindPattern::Function { name: f, params: [x, y] }, expr: b }`
 /// - `int f str x, bool y = b` into `Assignment { annotation: Some(int), target: BindPattern::Function { name: f, params: [str x, bool y] }, expr: b }`
 /// - `List int` into `LiteralType { expr: TypeAst::Constructor { expr: List }, args: [int] }`
-pub fn top(expr: Ast, types: &HashSet<String>) -> ParseResult {
+pub fn top(expr: Ast, types: &HashSet<String>, variables: Option<&HashSet<String>>) -> ParseResult {
     match expr {
         // Specialize type constructors to literal types
-        Ast::FunctionCall { expr, arg, info } => call(*expr, *arg, info, types),
+        Ast::FunctionCall { expr, arg, info } => call(*expr, *arg, info, types, variables),
         // Specialize assignments to binding patterns with optional type annotations
         Ast::Binary {
             lhs,
             op_info,
             rhs,
             info,
-        } if op_info.symbol == ASSIGNMENT_SYM => assignment(*lhs, *rhs, info, types),
+        } if op_info.symbol == ASSIGNMENT_SYM => assignment(*lhs, *rhs, info, types, variables),
         Ast::Binary {
             lhs,
             op_info,
             rhs,
             info,
         } if op_info.symbol == MEMBER_ACCESS_SYM => member_access(*lhs, *rhs, info),
-        Ast::Binary { ref op_info, .. } if op_info.symbol == COMMA_SYM => {
-            let info = expr.info().clone();
-            let mut exprs = flatten_sequence(expr);
-            if exprs.len() == 1 {
-                Ok(exprs.pop().unwrap())
-            } else {
-                log::trace!("Specializing comma sequence: {:?}", exprs);
-                Ok(Ast::Tuple {
-                    info: info.join(exprs.last().unwrap().info()),
-                    exprs,
-                })
-            }
+        Ast::Binary {
+            lhs,
+            op_info,
+            rhs,
+            info,
+            ..
+        } if op_info.symbol == COMMA_SYM => {
+            comma_sequence(*lhs, op_info, *rhs, info, types, variables)
         }
         // No specialization available
         _ => Ok(expr),
@@ -79,8 +75,90 @@ pub fn member_access(expr: Ast, rhs: Ast, info: LineInfo) -> ParseResult {
     })
 }
 
+/// Specialize a comma-separated sequence of expressions into a more specific expression.
+/// E.g:
+/// - `f x, y, z {...}` becomes `f x, y, z = {...}` if `f` is a function definition.
+pub fn comma_sequence(
+    expr: Ast,
+    op_info: OpInfo,
+    rhs: Ast,
+    info: LineInfo,
+    types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
+) -> ParseResult {
+    log::trace!("Specializing comma sequence: {:?}, {:?}", expr, rhs);
+    if let Some(res) = block_def_comma_sequence(&expr, op_info, &rhs, &info, types, variables) {
+        return res;
+    }
+    let mut exprs = flatten_sequence(expr);
+    exprs.push(rhs);
+    Ok(Ast::Tuple {
+        info: info.join(exprs.last().unwrap().info()),
+        exprs,
+    })
+}
+
+// Specialize function definitions with blocks
+/// This is used to handle function definitions like:
+/// ```ignore
+/// f x, y, z {...}
+/// List int f str x, int y {...}
+/// ```
+/// Complex types can also be used here as seen above.
+pub fn block_def_comma_sequence(
+    expr: &Ast,
+    op_info: OpInfo,
+    rhs: &Ast,
+    info: &LineInfo,
+    types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
+) -> Option<ParseResult> {
+    if variables.is_some() && matches!(rhs, Ast::FunctionCall { .. }) {
+        let Ast::FunctionCall {
+            expr: last_expr,
+            arg: last_arg,
+            ..
+        } = rhs
+        else {
+            unreachable!();
+        };
+        if matches!(**last_arg, Ast::Block { .. }) {
+            // If the outer arg is a block, we can potentially specialize it as a function definition with a block.
+            log::trace!("Trying to specialize potential function definition with block");
+            let res = assignment(
+                Ast::Binary {
+                    lhs: Box::new(expr.clone()),
+                    op_info,
+                    rhs: last_expr.clone(),
+                    info: info.clone(),
+                },
+                *last_arg.clone(),
+                info.clone(),
+                types,
+                variables,
+            );
+            if res.is_ok() {
+                log::trace!("Specialized function definition successfully!");
+                return Some(res);
+            } else {
+                log::trace!("Failed to specialize function definition: {:?}", res);
+            }
+        }
+    }
+    None
+}
+
 // Specialize type constructors to literal types
-pub fn call(expr: Ast, arg: Ast, info: LineInfo, types: &HashSet<String>) -> ParseResult {
+pub fn call(
+    expr: Ast,
+    arg: Ast,
+    info: LineInfo,
+    types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
+) -> ParseResult {
+    if let Some(res) = block_def_call(&expr, &arg, &info, types, variables) {
+        return res;
+    }
     Ok(match expr {
         Ast::Identifier {
             name: constructor_name,
@@ -182,7 +260,39 @@ pub fn call(expr: Ast, arg: Ast, info: LineInfo, types: &HashSet<String>) -> Par
     })
 }
 
-fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
+// Specialize function definitions with blocks
+/// This is used to handle function definitions like:
+/// ```ignore
+/// f() {...}
+/// f(x) {...}
+/// bool f() {...}
+/// int f str x {...}
+/// Map int str f int x {...}
+/// ```
+/// Complex types can also be used here as seen above.
+pub fn block_def_call(
+    expr: &Ast,
+    arg: &Ast,
+    info: &LineInfo,
+    types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
+) -> Option<ParseResult> {
+    if variables.is_some() && matches!(arg, Ast::Block { .. }) {
+        // Check if function definition with block:
+        // `f() {...}`, `bool f() {...}`, `f(x) {...}` or `int f str x {...}` etc.
+        log::trace!("Trying to specializing potential function definition with block");
+        let res = assignment(expr.clone(), arg.clone(), info.clone(), types, variables);
+        if res.is_ok() {
+            log::trace!("Specialized function definition successfully!");
+            return Some(res);
+        } else {
+            log::trace!("Failed to specialize function definition: {:?}", res);
+        }
+    }
+    None
+}
+
+pub fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
     match expr {
         Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),
         // Ast::Literal {
@@ -217,6 +327,7 @@ pub fn assignment(
     body: Ast,
     assignment_info: LineInfo,
     types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
 ) -> ParseResult {
     log::debug!(
         "Specializing assignment: {} = {}",
@@ -234,11 +345,12 @@ pub fn assignment(
                 .collect::<Vec<Ast>>(),
             body,
             types,
+            variables,
         ),
         // `int x = ...`, `f x = ...`, `f int x = ...`, `int f x = ...` or `int f int x = ...`.
         // Complex types can also be used here, like `List int list1 = ...` or `Map int str map1 = ...`.
         // Potentially a function definition.
-        Ast::FunctionCall { .. } => definition(flatten_calls(target), body, types),
+        Ast::FunctionCall { .. } => definition(flatten_calls(target), body, types, variables),
         // Try parse other generic binding patterns (non-typed) for assignments like:
         // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
         _ => Ok(Ast::Assignment {
@@ -250,7 +362,7 @@ pub fn assignment(
     }
 }
 
-/// Parse a variable or function definition.
+/// Parse a variable or function definition unless the variable is already defined (known per scope).
 /// This is used to handle function definitions like:
 /// ```ignore
 /// x ...
@@ -268,7 +380,12 @@ pub fn assignment(
 /// Map int str f int x, List int y ...
 /// ```
 /// Complex types can also be used here as seen above.
-fn definition(mut exprs: Vec<Ast>, body: Ast, types: &HashSet<String>) -> ParseResult {
+pub fn definition(
+    mut exprs: Vec<Ast>,
+    body: Ast,
+    types: &HashSet<String>,
+    variables: Option<&HashSet<String>>,
+) -> ParseResult {
     log::trace!(
         "Parsing function definition start from expressions: {:?}",
         exprs
@@ -297,6 +414,22 @@ fn definition(mut exprs: Vec<Ast>, body: Ast, types: &HashSet<String>) -> ParseR
             func.pattern.info().clone(),
         ));
     };
+    log::trace!("Found variable or function name: {}", name.clone().yellow());
+    if let Some(variables) = variables {
+        // Check if the variable is already defined in the current scope
+        // Otherwise create a new variable binding
+        log::trace!(
+            "Checking if variable `{}` is already defined in the current scope",
+            name
+        );
+        if variables.contains(&name) {
+            return Err(ParseError::new(
+                format!("Variable `{}` is already defined", name),
+                name_info.clone(),
+            )
+            .with_label("This already exist".to_string(), name_info.clone()));
+        }
+    }
     if exprs.is_empty() {
         // `int x = ...`
         // If no parameters are found, it's a typed variable binding
@@ -344,7 +477,7 @@ fn definition(mut exprs: Vec<Ast>, body: Ast, types: &HashSet<String>) -> ParseR
 }
 
 /// Create a function definition via nested lambda expressions assigned to a variable.
-fn create_function_assignment(
+pub fn create_function_assignment(
     annotation: Option<TypeAst>,
     name: String,
     name_info: LineInfo,
@@ -406,7 +539,7 @@ fn create_function_assignment(
 //                                     Utilities                                        //
 //--------------------------------------------------------------------------------------//
 
-fn flatten_calls(expr: Ast) -> Vec<Ast> {
+pub fn flatten_calls(expr: Ast) -> Vec<Ast> {
     let mut exprs = Vec::new();
     let mut queue = vec![expr];
     while let Some(current) = queue.pop() {
@@ -422,7 +555,7 @@ fn flatten_calls(expr: Ast) -> Vec<Ast> {
     exprs
 }
 
-fn flatten_sequence(expr: Ast) -> Vec<Ast> {
+pub fn flatten_sequence(expr: Ast) -> Vec<Ast> {
     let mut exprs = Vec::new();
     let mut queue = vec![expr];
     while let Some(current) = queue.pop() {
@@ -459,7 +592,7 @@ fn flatten_sequence(expr: Ast) -> Vec<Ast> {
 /// ```ignore
 /// str x, bool y
 /// ```
-fn next_typed_binding_pattern(
+pub fn next_typed_binding_pattern(
     exprs: &mut Vec<Ast>,
     types: &HashSet<String>,
 ) -> Result<ParamAst, ParseError> {
@@ -484,7 +617,7 @@ fn next_typed_binding_pattern(
 }
 
 // Convert a loose AST expression into a binding pattern.
-fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
+pub fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
     match expr {
         Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
         Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
@@ -524,7 +657,7 @@ fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
 }
 
 /// A helper function to convert a `Value` into a `LiteralPattern`.
-fn literal_pattern(value: Value) -> Option<LiteralPattern> {
+pub fn literal_pattern(value: Value) -> Option<LiteralPattern> {
     Some(match value {
         Value::Number(n) => match n {
             Number::UnsignedInteger(u) => LiteralPattern::UnsignedInteger(u),
@@ -551,7 +684,7 @@ fn literal_pattern(value: Value) -> Option<LiteralPattern> {
 /// List int f int x
 /// ```
 /// Becomes: (`List(int)`, `f(int(x))`)
-fn try_type_annotation(
+pub fn try_type_annotation(
     exprs: &mut Vec<Ast>,
     types: &HashSet<String>,
 ) -> Option<Result<TypeAst, ParseError>> {
@@ -650,7 +783,8 @@ fn try_type_annotation(
     }
 }
 
-fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
+/// Quick check if a single expression can be converted into a `TypeAst`.
+pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
     match expr {
         Ast::Identifier { name, .. } => types.contains(name),
         // Sum types like `int | str`
@@ -666,7 +800,7 @@ fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
     }
 }
 
-fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
+pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
     log::trace!(
         "Converting expression into TypeAst: {}",
         expr.print_expr().light_blue()

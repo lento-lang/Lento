@@ -8,15 +8,13 @@ use colorful::Colorful;
 use crate::{
     interpreter::value::{RecordKey, Value},
     parser::{
+        self,
         ast::{Ast, ParamAst, TypeAst},
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
         pattern::BindPattern,
     },
-    util::{
-        error::{BaseError, BaseErrorExt, LineInfo},
-        str::Str,
-    },
+    util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 
 use super::{
@@ -82,7 +80,7 @@ impl From<ParseError> for TypeErrorVariant {
 }
 
 // The result of the type checker stage
-pub type TypeResult<T> = Result<T, TypeErrorVariant>;
+pub type TypeCheckerResult<T> = Result<T, TypeErrorVariant>;
 
 /// The type environment contains all the types and functions in the program.
 /// It is used to check the types of expressions and functions.
@@ -248,7 +246,7 @@ impl TypeChecker<'_> {
 
     // ================== Scanning functions ==================
 
-    fn scan_forward(&mut self, expr: &[Ast]) -> TypeResult<()> {
+    fn scan_forward(&mut self, expr: &[Ast]) -> TypeCheckerResult<()> {
         for e in expr {
             if let Ast::Assignment { target, expr, .. } = e {
                 let BindPattern::Variable { name, .. } = target else {
@@ -288,7 +286,7 @@ impl TypeChecker<'_> {
 
     // ================== Type checking functions ==================
 
-    pub fn check_top_exprs(&mut self, exprs: &[Ast]) -> TypeResult<Vec<CheckedAst>> {
+    pub fn check_top_exprs(&mut self, exprs: &[Ast]) -> TypeCheckerResult<Vec<CheckedAst>> {
         self.scan_forward(exprs)?;
         let mut res = vec![];
         for e in exprs {
@@ -298,7 +296,7 @@ impl TypeChecker<'_> {
     }
 
     /// Check the type of an expression
-    pub fn check_expr(&mut self, expr: &Ast) -> TypeResult<CheckedAst> {
+    pub fn check_expr(&mut self, expr: &Ast) -> TypeCheckerResult<CheckedAst> {
         Ok(match expr {
             Ast::Lambda {
                 param,
@@ -320,11 +318,18 @@ impl TypeChecker<'_> {
                 info,
             } => self.check_field_access(record, field, info)?,
             Ast::Identifier { name, info } => self.check_identifier(name, info)?,
-            Ast::FunctionCall {
-                expr,
-                arg: args,
-                info,
-            } => self.check_call(expr, args, info)?,
+            Ast::FunctionCall { expr, arg, info } => {
+                // Try to specialize it
+                let types = self.env.types.keys().cloned().collect::<HashSet<_>>();
+                let variables = self.env.variables.keys().cloned().collect::<HashSet<_>>();
+                if let Some(res) =
+                    parser::specialize::block_def_call(expr, arg, info, &types, Some(&variables))
+                {
+                    self.check_expr(&res?)?
+                } else {
+                    self.check_call(expr, arg, info)?
+                }
+            }
             Ast::Binary {
                 lhs,
                 op_info,
@@ -346,7 +351,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
+    fn check_type_expr(&self, expr: &TypeAst) -> TypeCheckerResult<Type> {
         Ok(match expr {
             TypeAst::Identifier { name, info } => {
                 self.lookup_type(name).cloned().ok_or_else(|| {
@@ -373,20 +378,20 @@ impl TypeChecker<'_> {
                 let args = params
                     .iter()
                     .map(|a| self.check_type_expr(a))
-                    .collect::<TypeResult<Vec<_>>>()?;
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Constructor(base_name, args, base_type)
             }
             TypeAst::Record { fields, .. } => {
                 let fields = fields
                     .iter()
                     .map(|(k, v)| Ok((k.clone(), self.check_type_expr(v)?)))
-                    .collect::<TypeResult<Vec<_>>>()?;
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
             }
         })
     }
 
-    fn check_literal_type(&self, expr: &TypeAst) -> TypeResult<CheckedAst> {
+    fn check_literal_type(&self, expr: &TypeAst) -> TypeCheckerResult<CheckedAst> {
         let info = expr.info();
         let ty = self.check_type_expr(expr)?;
         Ok(CheckedAst::LiteralType {
@@ -395,7 +400,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_param(&self, param: &ParamAst) -> TypeResult<CheckedParam> {
+    fn check_param(&self, param: &ParamAst) -> TypeCheckerResult<CheckedParam> {
         let param_ty = if let Some(ty) = &param.ty {
             self.check_type_expr(ty)?
         } else {
@@ -414,7 +419,7 @@ impl TypeChecker<'_> {
         body: &Ast,
         return_type: &Option<TypeAst>,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let mut body_scope = self.new_scope();
         let pattern_names = binding_typed_names(&param.pattern, &param.ty);
         for (name, ty) in pattern_names.into_iter() {
@@ -453,7 +458,7 @@ impl TypeChecker<'_> {
         ))
     }
 
-    fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         if elems.is_empty() {
             return Ok(CheckedAst::Tuple {
                 exprs: vec![],
@@ -474,7 +479,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
             .iter()
@@ -505,11 +510,11 @@ impl TypeChecker<'_> {
         &mut self,
         pairs: &[(RecordKey, Ast)],
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let pairs = pairs
             .iter()
             .map(|(k, v)| Ok((k.clone(), self.check_expr(v)?)))
-            .collect::<TypeResult<Vec<_>>>()?;
+            .collect::<TypeCheckerResult<Vec<_>>>()?;
         let record_type = Type::Record(
             pairs
                 .iter()
@@ -528,7 +533,7 @@ impl TypeChecker<'_> {
         record: &Ast,
         field: &RecordKey,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let record = self.check_expr(record)?;
         let record_ty = record.get_type();
         if let Type::Record(fields) = record_ty {
@@ -578,7 +583,7 @@ impl TypeChecker<'_> {
         }
     }
 
-    fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
             Some(IdentifierType::Variable(ty)) => CheckedAst::Identifier {
                 name: name.to_string(),
@@ -625,7 +630,7 @@ impl TypeChecker<'_> {
         target: &BindPattern,
         expr: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         match target {
             BindPattern::Variable { name, .. } => {
                 if self.lookup_local_identifier(name).is_some() {
@@ -680,7 +685,7 @@ impl TypeChecker<'_> {
         }
     }
 
-    fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         let mut scope = self.new_scope();
         let exprs = scope.check_top_exprs(exprs)?;
         let ty = if let Some(expr) = exprs.last() {
@@ -695,7 +700,12 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_call(&mut self, expr: &Ast, arg: &Ast, info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_call(
+        &mut self,
+        expr: &Ast,
+        arg: &Ast,
+        info: &LineInfo,
+    ) -> TypeCheckerResult<CheckedAst> {
         // TODO: Add support for multiple function variants
         // TODO: This job should be done in the type checker
         // TODO: so that the interpreter can just call the function
@@ -788,7 +798,7 @@ impl TypeChecker<'_> {
         op_info: &OpInfo,
         rhs: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         if let Some(op) = self.lookup_static_operator(&op_info.symbol) {
             log::trace!("Found static operator: {}", op_info.symbol);
             return self.check_expr(&(op.handler)(StaticOpAst::Infix(lhs.clone(), rhs.clone()))?);
@@ -949,7 +959,7 @@ impl TypeChecker<'_> {
         op_info: &OpInfo,
         operand: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let checked_operand = self.check_expr(operand)?;
         let operand_type = checked_operand.get_type();
         let mut closest_match = None;
@@ -996,7 +1006,7 @@ impl TypeChecker<'_> {
         pattern: &BindPattern,
         expr_ty: &Type,
         info: &LineInfo,
-    ) -> TypeResult<()> {
+    ) -> TypeCheckerResult<()> {
         match pattern {
             BindPattern::Variable { name, .. } => {
                 self.add_variable(name.clone(), expr_ty.clone());

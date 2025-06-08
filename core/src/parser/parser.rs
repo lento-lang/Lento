@@ -633,7 +633,10 @@ impl<R: Read> Parser<R> {
 
                     let info = expr.info().join(rhs.info());
                     expr = match op.symbol.as_str() {
-                        ASSIGNMENT_SYM => specialize::assignment(expr, rhs, info, &self.types)?,
+                        ASSIGNMENT_SYM => {
+                            // Allow all definitions in the parser, even if they are not valid in the current context
+                            specialize::assignment(expr, rhs, info, &self.types, None)?
+                        }
                         MEMBER_ACCESS_SYM => specialize::member_access(expr, rhs, info)?,
                         _ => Ast::Binary {
                             lhs: Box::new(expr),
@@ -649,7 +652,8 @@ impl<R: Read> Parser<R> {
             }
             if FUNCTION_APP_PREC > min_prec {
                 let call_info = expr.info().join(&nt.info);
-                expr = specialize::call(expr, self.parse_term()?, call_info, &self.types)?;
+                // Allow all definitions in the parser, even if they are not valid in the current context
+                expr = specialize::call(expr, self.parse_term()?, call_info, &self.types, None)?;
                 continue;
             }
             if nt.token.is_terminator() {
@@ -673,7 +677,8 @@ impl<R: Read> Parser<R> {
         match self.parse_expr(0) {
             Ok(expr) => {
                 self.skip_terminal_and_ignored();
-                specialize::top(expr, &self.types)
+                // Allow all definitions in the parser, even if they are not valid in the current context
+                specialize::top(expr, &self.types, None)
             }
             Err(err) => Err(err),
         }

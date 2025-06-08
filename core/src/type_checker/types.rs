@@ -21,14 +21,14 @@ pub trait GetType {
 
 pub type TypeJudgements = HashMap<Str, Type>;
 
-pub struct TypeResult {
+pub struct TypeJudgeResult {
     pub success: bool,
     pub judgements: TypeJudgements,
 }
 
-impl TypeResult {
+impl TypeJudgeResult {
     pub fn success() -> Self {
-        TypeResult {
+        TypeJudgeResult {
             success: true,
             judgements: HashMap::new(),
         }
@@ -37,14 +37,14 @@ impl TypeResult {
     pub fn judge(self, name: Str, ty: Type) -> Self {
         let mut judgements = self.judgements;
         judgements.insert(name, ty);
-        TypeResult {
+        TypeJudgeResult {
             success: self.success,
             judgements,
         }
     }
 
     pub fn fail() -> Self {
-        TypeResult {
+        TypeJudgeResult {
             success: false,
             judgements: HashMap::new(),
         }
@@ -52,7 +52,7 @@ impl TypeResult {
 
     pub fn and(self, other: Self) -> Self {
         if self.success && other.success {
-            TypeResult {
+            TypeJudgeResult {
                 success: true,
                 judgements: self
                     .judgements
@@ -61,7 +61,7 @@ impl TypeResult {
                     .collect(),
             }
         } else {
-            TypeResult::fail()
+            TypeJudgeResult::fail()
         }
     }
 
@@ -91,12 +91,12 @@ impl TypeResult {
     }
 }
 
-impl From<bool> for TypeResult {
+impl From<bool> for TypeJudgeResult {
     fn from(success: bool) -> Self {
         if success {
-            TypeResult::success()
+            TypeJudgeResult::success()
         } else {
-            TypeResult::fail()
+            TypeJudgeResult::fail()
         }
     }
 }
@@ -106,7 +106,7 @@ pub trait TypeTrait {
     /// Check if the type is equal to the other type.
     /// Two types are equal if they are the same type.
     /// The equality relation is reflexive, symmetric, and transitive.
-    fn equals(&self, other: &Self) -> TypeResult {
+    fn equals(&self, other: &Self) -> TypeJudgeResult {
         self.subtype(other).and(other.subtype(self))
     }
 
@@ -130,7 +130,7 @@ pub trait TypeTrait {
     ///
     /// **Covariant return type**: The return type of the subtype function (int) is a subtype of the return type of the supertype function (number). \
     /// **Contravariant parameter type** : The parameter type of the supertype function (number) is a supertype of the parameter type of the subtype function (int).
-    fn subtype(&self, other: &Self) -> TypeResult;
+    fn subtype(&self, other: &Self) -> TypeJudgeResult;
     fn simplify(self) -> Self;
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self;
 }
@@ -165,7 +165,7 @@ impl FunctionType {
 }
 
 impl TypeTrait for FunctionType {
-    fn subtype(&self, other: &Self) -> TypeResult {
+    fn subtype(&self, other: &Self) -> TypeJudgeResult {
         self.param
             .ty
             .subtype(&other.param.ty)
@@ -283,7 +283,7 @@ pub enum Type {
 }
 
 impl TypeTrait for Type {
-    fn subtype(&self, other: &Type) -> TypeResult {
+    fn subtype(&self, other: &Type) -> TypeJudgeResult {
         let subtype = match (self, other) {
             (Type::Literal(Str::Str("any")), _) => true.into(), // TODO: Find a way to use `std_types::ANY` here.
             (_, Type::Literal(Str::Str("any"))) => true.into(),
@@ -291,18 +291,18 @@ impl TypeTrait for Type {
             (Type::Alias(_, ty1), _) => ty1.subtype(other),
             (_, Type::Alias(_, ty)) => self.subtype(ty),
             (Type::Variable(s1), Type::Variable(s2)) => (s1 == s2).into(),
-            (Type::Variable(v), t) => TypeResult::success().judge(v.clone(), t.clone()),
-            (t, Type::Variable(v)) => TypeResult::success().judge(v.clone(), t.clone()),
+            (Type::Variable(v), t) => TypeJudgeResult::success().judge(v.clone(), t.clone()),
+            (t, Type::Variable(v)) => TypeJudgeResult::success().judge(v.clone(), t.clone()),
             (Type::Constructor(s1, params1, _), Type::Constructor(s2, params2, _)) => {
                 if s1 == s2 && params1.len() == params2.len() {
                     params1
                         .iter()
                         .zip(params2)
-                        .fold(TypeResult::success(), |acc, (p1, p2)| {
+                        .fold(TypeJudgeResult::success(), |acc, (p1, p2)| {
                             acc.and(p1.subtype(p2))
                         })
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::Function(ty1), Type::Function(ty2)) => {
@@ -314,42 +314,42 @@ impl TypeTrait for Type {
                     types1
                         .iter()
                         .zip(types2)
-                        .fold(TypeResult::success(), |acc, (t1, t2)| {
+                        .fold(TypeJudgeResult::success(), |acc, (t1, t2)| {
                             acc.and(t1.subtype(t2))
                         })
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::List(t1), Type::List(t2)) => t1.subtype(t2),
             (Type::Record(fields1), Type::Record(fields2)) => {
                 if fields1.len() == fields2.len() {
                     fields1.iter().zip(fields2).fold(
-                        TypeResult::success(),
+                        TypeJudgeResult::success(),
                         |acc, ((n1, t1), (n2, t2))| {
                             if n1 == n2 {
                                 acc.and(t1.subtype(t2))
                             } else {
-                                TypeResult::fail()
+                                TypeJudgeResult::fail()
                             }
                         },
                     )
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::Sum(types1), Type::Sum(types2)) => {
-                types1.iter().fold(TypeResult::success(), |acc, t1| {
+                types1.iter().fold(TypeJudgeResult::success(), |acc, t1| {
                     acc.and(
                         types2
                             .iter()
-                            .fold(TypeResult::fail(), |acc, t2| acc.or(t1.subtype(t2))),
+                            .fold(TypeJudgeResult::fail(), |acc, t2| acc.or(t1.subtype(t2))),
                     )
                 })
             }
             (_, Type::Sum(types)) => types
                 .iter()
-                .fold(TypeResult::fail(), |acc, t| acc.or(self.subtype(t))),
+                .fold(TypeJudgeResult::fail(), |acc, t| acc.or(self.subtype(t))),
             (Type::Variant(parent1, name1, fields1), Type::Variant(parent2, name2, fields2)) => {
                 parent1
                     .equals(parent2)
@@ -359,7 +359,7 @@ impl TypeTrait for Type {
                         fields1
                             .iter()
                             .zip(fields2)
-                            .fold(TypeResult::success(), |acc, (t1, t2)| {
+                            .fold(TypeJudgeResult::success(), |acc, (t1, t2)| {
                                 acc.and(t1.subtype(t2))
                             }),
                     )

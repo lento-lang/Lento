@@ -153,6 +153,20 @@ impl Initializer {
             }
         }
     }
+
+    pub fn extend(&mut self, other: Initializer) {
+        log::trace!(
+            "Extending initializer with additional {} operators, {} types, {} constants, and {} functions",
+            other.operators.len(),
+            other.types.len(),
+            other.constants.len(),
+            other.functions.len()
+        );
+        self.operators.extend(other.operators);
+        self.types.extend(other.types);
+        self.constants.extend(other.constants);
+        self.functions.extend(other.functions);
+    }
 }
 
 //--------------------------------------------------------------------------------------//

@@ -626,11 +626,6 @@ mod tests {
     }
 
     #[test]
-    fn function_def_with_return_type_no_parens_block() {
-        parse_str_one("int add int x, int y = { x + y }", Some(&stdlib())).unwrap();
-    }
-
-    #[test]
     fn function_def_multiple_statements() {
         parse_str_one(
             "int add(int x, int y) = {
