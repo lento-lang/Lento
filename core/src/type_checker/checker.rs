@@ -1001,6 +1001,8 @@ impl TypeChecker<'_> {
         Err(err.into())
     }
 
+    /// TODO: Check the binding pattern against the expression type.
+    /// TODO: Create a new CheckedBindPattern that contains the type information for each variable in the pattern.
     fn check_binding_pattern(
         &mut self,
         pattern: &BindPattern,
