@@ -368,6 +368,7 @@ impl<R: Read> Parser<R> {
     /// ```
     #[allow(clippy::type_complexity)]
     fn parse_record_fields(&mut self, start_info: &LineInfo) -> Option<Result<Ast, ParseError>> {
+        let mut last_info = LineInfo::default();
         let mut fields = Vec::new();
         // Initial soft parse to check if the record is empty
         // Or if it is a block
@@ -386,19 +387,26 @@ impl<R: Read> Parser<R> {
                 TokenKind::Char(c) => RecordKey::String(c.to_string()),
                 _ => return None, // Not a record
             };
-            if let Ok(t) = self.lexer.peek_token(1) {
-                if t.token != TokenKind::Colon {
-                    return None; // Not a record
-                }
+            let Ok(t) = self.lexer.peek_token(1) else {
+                return None;
+            };
+            if t.token != TokenKind::Colon {
+                return None; // Not a record
             }
+
             // If we found both a valid key and a colon, we found a record!
-            self.lexer.next_token().unwrap();
-            self.parse_expected_eq(TokenKind::Colon, ":").ok()?;
-            let value = self.parse_top_expr().ok()?;
+            self.lexer.next_token().unwrap(); // Consume the key
+            self.lexer.next_token().unwrap(); // Consume the colon
+            let value = match self.parse_expr(COMMA_PREC) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Op(op) if op == COMMA_SYM => (), // Continue parsing
+                    TokenKind::Op(op) if op == COMMA_SYM => {
+                        last_info = t.info;
+                    }
                     TokenKind::RightBrace => {
                         return Some(Ok(Ast::Record {
                             fields,
@@ -423,7 +431,6 @@ impl<R: Read> Parser<R> {
                 }
             }
         }
-        let mut last_info = LineInfo::default();
         // Parse the rest of the fields more strictly
         while let Ok(t) = self.lexer.next_token() {
             if t.token == TokenKind::RightBrace {
@@ -449,7 +456,7 @@ impl<R: Read> Parser<R> {
             if let Err(err) = self.parse_expected_eq(TokenKind::Colon, ":") {
                 return Some(Err(err));
             }
-            let value = match self.parse_top_expr() {
+            let value = match self.parse_expr(COMMA_PREC) {
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
