@@ -69,15 +69,6 @@ mod tests {
 
     #[test]
     fn invalid_function() {
-        // let ast = Ast::FunctionCall {
-        //     expr: Box::new(CheckedAst::unit(LineInfo::default())),
-        //     arg: Box::new(CheckedAst::Literal {
-        //         value: make_u8(1),
-        //         info: LineInfo::default(),
-        //     }),
-        //     ret_ty: std_types::UNIT,
-        //     info: LineInfo::default(),
-        // };
         let result = check_str_one("() 1", Some(&stdlib()));
         dbg!("{:?}", &result);
         assert!(result.is_err());
