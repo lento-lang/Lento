@@ -999,7 +999,7 @@ impl TypeChecker<'_> {
 
     /// TODO: Check the binding pattern against the expression type.
     /// TODO: Create a new CheckedBindPattern that contains the type information for each variable in the pattern.
-    fn check_binding_pattern(
+    fn _check_binding_pattern(
         &mut self,
         pattern: &BindPattern,
         expr_ty: &Type,
@@ -1032,7 +1032,7 @@ impl TypeChecker<'_> {
                         .into());
                     }
                     for (element, ty) in elements.iter().zip(types) {
-                        self.check_binding_pattern(element, ty, info)?;
+                        self._check_binding_pattern(element, ty, info)?;
                     }
                     Ok(())
                 } else {
@@ -1051,7 +1051,7 @@ impl TypeChecker<'_> {
                 if let Type::Record(types) = expr_ty {
                     for (key, pattern) in fields {
                         if let Some((_, ty)) = types.iter().find(|(k, _)| k == key) {
-                            self.check_binding_pattern(pattern, ty, info)?;
+                            self._check_binding_pattern(pattern, ty, info)?;
                         } else {
                             return Err(TypeError::new(
                                 format!(
@@ -1087,7 +1087,7 @@ impl TypeChecker<'_> {
             BindPattern::List { elements, .. } => {
                 if let Type::List(element_type) = expr_ty {
                     for element in elements {
-                        self.check_binding_pattern(element, element_type, info)?;
+                        self._check_binding_pattern(element, element_type, info)?;
                     }
                     Ok(())
                 } else {
