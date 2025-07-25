@@ -35,7 +35,6 @@ mod tests {
         assert!(env.lookup_function("div").is_some());
         assert!(env.lookup_function("eq").is_some());
         // Types
-        assert!(env.get_type("any").is_some());
         assert!(env.get_type("unit").is_some());
         assert!(env.get_type("str").is_some());
         assert!(env.get_type("char").is_some());

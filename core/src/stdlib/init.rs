@@ -37,10 +37,7 @@ impl Initializer {
     pub fn init_lexer(&self, lexer: &mut Lexer<impl Read>) {
         log::trace!("Initializing lexer with {} operators", self.operators.len());
         for op in &self.operators {
-            // TODO: Why does this only add static operators to the lexer?
-            if let OpHandler::Static(_) = &op.handler {
-                lexer.add_operator(op.info.symbol.clone());
-            }
+            lexer.add_operator(op.info.symbol.clone());
         }
     }
 

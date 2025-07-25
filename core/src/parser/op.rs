@@ -253,7 +253,7 @@ pub(super) const MEMBER_ACCESS_SYM: &str = ".";
 /// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
 /// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Assignment` node.
 /// - `member access`: `.` - Used to access members of records becomes an `Ast::MemberAccess` node.
-pub fn default_operators() -> Vec<OpInfo> {
+pub fn intrinsic_operators() -> Vec<OpInfo> {
     vec![
         OpInfo {
             symbol: COMMA_SYM.to_string(),

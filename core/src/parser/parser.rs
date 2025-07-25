@@ -27,7 +27,7 @@ use super::{
     ast::Ast,
     error::{ParseError, ParserOpError},
     op::{
-        default_operators,
+        intrinsic_operators,
         prec::{COMMA_PREC, FUNCTION_APP_PREC},
         OpAssoc, OpInfo, OpPos, OpPrec, COMMA_SYM,
     },
@@ -141,7 +141,7 @@ impl<R: Read> Parser<R> {
 
     /// Initialize the parser with default operators.
     fn init_default_operators(mut self) -> Self {
-        default_operators().into_iter().for_each(|op| {
+        intrinsic_operators().into_iter().for_each(|op| {
             self.define_op(op)
                 .expect("Failed to define default operator")
         });
