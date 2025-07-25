@@ -53,7 +53,6 @@ impl TokenKind {
         matches!(
             self,
             TokenKind::EndOfFile
-                | TokenKind::Newline
                 | TokenKind::SemiColon
                 | TokenKind::RightParen
                 | TokenKind::RightBrace

@@ -1189,12 +1189,13 @@ mod tests {
                   = x + y;",
             Some(&stdlib()),
         );
+        let result = result.unwrap();
         if let Ast::Assignment {
             target,
             expr,
             annotation,
             ..
-        } = result.unwrap()
+        } = result
         {
             assert!(annotation.is_some());
             if let Some(TypeAst::Identifier { name, .. }) = annotation {
@@ -1236,6 +1237,7 @@ mod tests {
                 }
             }
         } else {
+            dbg!(result);
             panic!("Expected function definition");
         }
     }
