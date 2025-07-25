@@ -256,9 +256,18 @@ impl<R: Read> Parser<R> {
     ///
     /// ## Examples
     /// ```ignore
-    /// x = (1, 2, 3)
+    /// ()
+    /// (1, 2)
+    /// (1, 2, 3)
     /// ```
     fn parse_tuple(&mut self) -> ParseResult {
+        // Check if the next token is a right parenthesis `)`, then return an empty tuple
+        if let Ok(t) = self.lexer.peek_token(0) {
+            if t.token == TokenKind::RightParen {
+                self.lexer.next_token().unwrap();
+                return Ok(Ast::unit(t.info));
+            }
+        }
         log::trace!("Parsing elements...");
         let tuple = self.parse_top_expr()?;
         log::trace!("Parsed tuple elements: {:?}", tuple);

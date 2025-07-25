@@ -53,6 +53,17 @@ mod tests {
     }
 
     #[test]
+    fn unit() {
+        let result = parse_str_one("()", None);
+        let result = result.unwrap();
+
+        assert!(matches!(result, Ast::Tuple { .. }));
+        if let Ast::Tuple { exprs, info: _ } = &result {
+            assert_eq!(exprs.len(), 0);
+        }
+    }
+
+    #[test]
     fn number() {
         let result = parse_str_one("1", None);
         let result = result.unwrap();

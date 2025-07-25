@@ -50,7 +50,7 @@ pub enum CheckedAst {
         exprs: Vec<CheckedAst>,
         /// The type of the tuple, made up of the types of the elements.
         /// Each element's type is listed in the same order as the elements.
-        expr_types: Type,
+        ty: Type,
         info: LineInfo,
     },
     /// A dynamic list of elements.
@@ -92,7 +92,7 @@ pub enum CheckedAst {
         /// The argument to the function call
         arg: Box<CheckedAst>,
         /// The return type of the function call
-        return_type: Type,
+        ret_ty: Type,
         info: LineInfo,
     },
     /// A lambda expression is an anonymous function that can be passed as a value.
@@ -128,12 +128,12 @@ impl GetType for CheckedAst {
         match self {
             CheckedAst::Literal { value: v, info: _ } => v.get_type(),
             CheckedAst::LiteralType { .. } => &std_types::TYPE,
-            CheckedAst::Tuple { expr_types: ty, .. } => ty,
+            CheckedAst::Tuple { ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
             CheckedAst::FieldAccess { ty, .. } => ty,
             CheckedAst::Identifier { ty, .. } => ty,
-            CheckedAst::FunctionCall { return_type, .. } => return_type,
+            CheckedAst::FunctionCall { ret_ty, .. } => ret_ty,
             CheckedAst::Lambda { ty, .. } => ty,
             CheckedAst::Assignment { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
@@ -142,6 +142,14 @@ impl GetType for CheckedAst {
 }
 
 impl CheckedAst {
+    pub fn unit(info: LineInfo) -> CheckedAst {
+        CheckedAst::Tuple {
+            exprs: vec![],
+            ty: std_types::UNIT,
+            info,
+        }
+    }
+
     pub fn lambda(
         param: CheckedParam,
         body: CheckedAst,
@@ -182,7 +190,7 @@ impl CheckedAst {
             CheckedAst::LiteralType { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
-                expr_types: ty,
+                ty,
                 ..
             } => {
                 for element in elements {
@@ -225,7 +233,7 @@ impl CheckedAst {
             CheckedAst::FunctionCall {
                 expr: function,
                 arg,
-                return_type,
+                ret_ty: return_type,
                 ..
             } => {
                 function.specialize(judgements, changed);

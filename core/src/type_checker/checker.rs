@@ -460,11 +460,7 @@ impl TypeChecker<'_> {
 
     fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         if elems.is_empty() {
-            return Ok(CheckedAst::Tuple {
-                exprs: vec![],
-                expr_types: std_types::UNIT,
-                info: info.clone(),
-            });
+            return Ok(CheckedAst::unit(info.clone()));
         }
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
@@ -474,7 +470,7 @@ impl TypeChecker<'_> {
             .collect::<Vec<_>>();
         Ok(CheckedAst::Tuple {
             exprs: checked_elems,
-            expr_types: Type::Tuple(elem_types),
+            ty: Type::Tuple(elem_types),
             info: info.clone(),
         })
     }
@@ -745,7 +741,7 @@ impl TypeChecker<'_> {
                 }
 
                 Ok(CheckedAst::FunctionCall {
-                    return_type: ret.clone(),
+                    ret_ty: ret.clone(),
                     expr: Box::new(expr),
                     arg: Box::new(arg),
                     info: info.clone(),
@@ -895,11 +891,11 @@ impl TypeChecker<'_> {
                                 info: info.clone(),
                             }),
                             arg: Box::new(checked_lhs),
-                            return_type: inner_ret.clone(),
+                            ret_ty: inner_ret.clone(),
                             info: info.clone(),
                         }),
                         arg: Box::new(checked_rhs),
-                        return_type: outer_ret.clone(),
+                        ret_ty: outer_ret.clone(),
                         info: info.clone(),
                     };
 

@@ -276,6 +276,13 @@ impl Debug for Ast {
 }
 
 impl Ast {
+    pub fn unit(info: LineInfo) -> Self {
+        Ast::Tuple {
+            exprs: vec![],
+            info,
+        }
+    }
+
     pub fn info(&self) -> &LineInfo {
         match self {
             Ast::Literal { info, .. } => info,
