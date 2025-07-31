@@ -14,7 +14,7 @@ use crate::{
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{TokenInfo, TokenKind},
     },
-    parser::op::{ASSIGNMENT_SYM, MEMBER_ACCESS_SYM},
+    parser::op::{prec, ASSIGNMENT_SYM, MEMBER_ACCESS_SYM},
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -27,7 +27,6 @@ use super::{
     ast::Ast,
     error::{ParseError, ParserOpError},
     op::{
-        intrinsic_operators,
         prec::{COMMA_PREC, FUNCTION_APP_PREC},
         OpAssoc, OpInfo, OpPos, OpPrec, COMMA_SYM,
     },
@@ -79,6 +78,43 @@ pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
 //                                        Parser                                        //
 //--------------------------------------------------------------------------------------//
 
+pub(super) const COMMA_SYM: &str = ",";
+pub(super) const ASSIGNMENT_SYM: &str = "=";
+pub(super) const MEMBER_ACCESS_SYM: &str = ".";
+
+/// Default operators used in the language grammar and required for parsing. \
+/// These operators are defined in the parser and are required to produce valid ASTs. \
+/// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top_expr` expression.
+/// - `semicolon`: `;` - Used to separate statements becomes an `Ast::Block` node.
+/// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
+/// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Assignment` node.
+/// - `member access`: `.` - Used to access members of records becomes an `Ast::MemberAccess` node.
+pub fn intrinsic_operators() -> Vec<OpInfo> {
+    vec![
+        OpInfo {
+            symbol: COMMA_SYM.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::COMMA_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: true,
+        },
+        OpInfo {
+            symbol: ASSIGNMENT_SYM.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::ASSIGNMENT_PREC,
+            associativity: OpAssoc::Right,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: MEMBER_ACCESS_SYM.to_string(),
+            position: OpPos::Infix,
+            precedence: prec::MEMBER_ACCESS_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+    ]
+}
+
 /// A parse results is a list of AST nodes or a parse error.
 pub type ParseResults = Result<Vec<Ast>, ParseError>;
 
@@ -100,7 +136,6 @@ where
     /// - They have different positions
     /// - The symbol is a built-in operator that is overloadable
     operators: HashMap<String, Vec<OpInfo>>,
-    types: HashSet<String>,
 }
 
 impl<R: Read> Parser<R> {
@@ -108,7 +143,6 @@ impl<R: Read> Parser<R> {
         Self {
             lexer,
             operators: HashMap::new(),
-            types: HashSet::new(),
         }
         .init_default_operators()
     }
@@ -127,16 +161,6 @@ impl<R: Read> Parser<R> {
 
     pub fn move_content(self) -> Vec<u8> {
         self.lexer.move_content()
-    }
-
-    /// Add a new type to the parser.
-    pub fn add_type(&mut self, name: String) {
-        self.types.insert(name);
-    }
-
-    /// Get a type by its name.
-    pub fn is_type(&self, name: &str) -> bool {
-        self.types.contains(name)
     }
 
     /// Initialize the parser with default operators.
@@ -506,12 +530,6 @@ impl<R: Read> Parser<R> {
         log::trace!("Parsing primary: {:?}", t.token);
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
-            TokenKind::Identifier(id) if self.types.contains(&id) => Ok(Ast::LiteralType {
-                expr: crate::parser::ast::TypeAst::Identifier {
-                    name: id,
-                    info: t.info,
-                },
-            }),
             TokenKind::Identifier(id) => Ok(Ast::Identifier {
                 name: id,
                 info: t.info,
@@ -572,7 +590,7 @@ impl<R: Read> Parser<R> {
                     Ast::Tuple { exprs, .. } => exprs,
                     single_expr => vec![single_expr],
                 };
-                return Ok(specialize::roll_function_call(primary, args, &self.types));
+                return Ok(specialize::roll_function_call(primary, args));
             }
         }
         Ok(primary)
@@ -628,6 +646,7 @@ impl<R: Read> Parser<R> {
     /// See: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
     fn parse_expr(&mut self, min_prec: OpPrec) -> ParseResult {
         let mut expr = self.parse_term()?;
+        // println!("Parsed term: {:?}", expr);
         while let Ok(nt) = self.lexer.peek_token(0) {
             if nt.token.is_terminator() {
                 break; // Stop parsing on expression terminators
@@ -651,7 +670,7 @@ impl<R: Read> Parser<R> {
                     expr = match op.symbol.as_str() {
                         ASSIGNMENT_SYM => {
                             // Allow all definitions in the parser, even if they are not valid in the current context
-                            specialize::assignment(expr, rhs, info, &self.types, None)?
+                            specialize::assignment(expr, rhs, info, None)?
                         }
                         MEMBER_ACCESS_SYM => specialize::member_access(expr, rhs, info)?,
                         _ => Ast::Binary {

@@ -1,4 +1,4 @@
-use super::{
+use crate::parser::{
     ast::{Ast, ParamAst, TypeAst},
     error::ParseError,
     op::{ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
