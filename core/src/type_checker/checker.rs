@@ -8,12 +8,12 @@ use colorful::Colorful;
 use crate::{
     interpreter::value::{RecordKey, Value},
     parser::{
-        self,
         ast::{Ast, ParamAst, TypeAst},
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
         pattern::BindPattern,
     },
+    type_checker,
     util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 
@@ -63,7 +63,7 @@ pub enum TypeErrorVariant {
     /// A type error occurred during type checking
     TypeError(TypeError),
     /// A parse error occurred during type checking,
-    /// this should only happen iff a static operator handler is used.
+    /// this should only happen if a static operator handler is used.
     ParseError(ParseError),
 }
 
@@ -312,7 +312,7 @@ impl TypeChecker<'_> {
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
-            Ast::MemderAccess {
+            Ast::MemberAccess {
                 expr: record,
                 field,
                 info,
@@ -322,9 +322,13 @@ impl TypeChecker<'_> {
                 // Try to specialize it
                 let types = self.env.types.keys().cloned().collect::<HashSet<_>>();
                 let variables = self.env.variables.keys().cloned().collect::<HashSet<_>>();
-                if let Some(res) =
-                    parser::specialize::block_def_call(expr, arg, info, &types, Some(&variables))
-                {
+                if let Some(res) = type_checker::specialize::block_def_call(
+                    expr,
+                    arg,
+                    info,
+                    &types,
+                    Some(&variables),
+                ) {
                     self.check_expr(&res?)?
                 } else {
                     self.check_call(expr, arg, info)?

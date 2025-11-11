@@ -1,17 +1,12 @@
-use crate::parser::{
-    ast::{Ast, ParamAst, TypeAst},
-    error::ParseError,
-    op::{ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
-    parser::ParseResult,
-    pattern::LiteralPattern,
-};
 use crate::{
-    interpreter::{
-        number::Number,
-        value::{RecordKey, Value},
+    parser::{
+        ast::{Ast, ParamAst, TypeAst},
+        error::ParseError,
+        op::OpInfo,
+        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
+        pattern::BindPattern,
+        utils::{binding_pattern, member_access},
     },
-    parser::{op::OpInfo, pattern::BindPattern},
-    type_checker::types::std_types,
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -60,19 +55,6 @@ pub fn top(expr: Ast, types: &HashSet<String>, variables: Option<&HashSet<String
         // No specialization available
         _ => Ok(expr),
     }
-}
-
-pub fn member_access(expr: Ast, rhs: Ast, info: LineInfo) -> ParseResult {
-    log::trace!(
-        "Specializing member access: {}.{}",
-        expr.print_expr().light_blue(),
-        rhs.print_expr().light_blue()
-    );
-    Ok(Ast::MemderAccess {
-        expr: Box::new(expr),
-        field: record_key(rhs)?,
-        info,
-    })
 }
 
 /// Specialize a comma-separated sequence of expressions into a more specific expression.
@@ -290,35 +272,6 @@ pub fn block_def_call(
         }
     }
     None
-}
-
-pub fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
-    match expr {
-        Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),
-        // Ast::Literal {
-        //     value: Value::Number(Number::UnsignedInteger(n)),
-        //     ..
-        // } => Ok(RecordKey::Number(Number::UnsignedInteger(n.clone()))),
-        _ => Err(ParseError::new(
-            format!(
-                "Field access via {} requires a identifier or {} literal",
-                ".".yellow(),
-                std_types::UINT().pretty_print_color()
-            ),
-            expr.info().clone(),
-        )
-        .with_label(
-            format!(
-                "This is not an identifier or {}",
-                std_types::UINT().pretty_print_color()
-            ),
-            expr.info().clone(),
-        )
-        .with_hint(format!(
-            "Did you mean to use indexing via {} instead?",
-            "[]".yellow()
-        ))),
-    }
 }
 
 /// Convert a loose AST expression into a binding pattern.
@@ -613,61 +566,6 @@ pub fn next_typed_binding_pattern(
     Ok(ParamAst {
         ty: annotation,
         pattern: binding_pattern(exprs.remove(0))?,
-    })
-}
-
-// Convert a loose AST expression into a binding pattern.
-pub fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
-    match expr {
-        Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
-        Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
-        Ast::Tuple { exprs, info } => {
-            let elements = exprs
-                .into_iter()
-                .map(binding_pattern)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(BindPattern::Tuple { elements, info })
-        }
-        Ast::Record { fields, info } => {
-            let fields = fields
-                .into_iter()
-                .map(|(k, v)| Ok((k, binding_pattern(v)?)))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(BindPattern::Record { fields, info })
-        }
-        Ast::List { exprs, info } => {
-            let elements = exprs
-                .into_iter()
-                .map(binding_pattern)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(BindPattern::List { elements, info })
-        }
-        Ast::Literal { value, info } => Ok(BindPattern::Literal {
-            value: literal_pattern(value).ok_or(
-                ParseError::new("Expected a literal value pattern".to_string(), info.clone())
-                    .with_label("This is not valid".to_string(), info.clone()),
-            )?,
-            info,
-        }),
-        _ => Err(ParseError::new(
-            format!("Invalid binding pattern: {}", expr.print_expr()),
-            expr.info().clone(),
-        )),
-    }
-}
-
-/// A helper function to convert a `Value` into a `LiteralPattern`.
-pub fn literal_pattern(value: Value) -> Option<LiteralPattern> {
-    Some(match value {
-        Value::Number(n) => match n {
-            Number::UnsignedInteger(u) => LiteralPattern::UnsignedInteger(u),
-            Number::SignedInteger(i) => LiteralPattern::SignedInteger(i),
-            _ => return None, // Only unsigned and signed integers are supported as literals
-        },
-        Value::String(s) => LiteralPattern::String(s),
-        Value::Char(c) => LiteralPattern::Char(c),
-        Value::Boolean(b) => LiteralPattern::Boolean(b),
-        _ => return None,
     })
 }
 

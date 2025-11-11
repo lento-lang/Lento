@@ -9,7 +9,7 @@ mod tests {
             lexer::{from_str, Lexer},
             token::TokenKind,
         },
-        parser::op::intrinsic_operators,
+        parser::parser::intrinsic_operators,
         stdlib::init::stdlib,
     };
 

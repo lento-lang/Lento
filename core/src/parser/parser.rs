@@ -1,36 +1,30 @@
-use core::str;
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    io::{BufReader, Cursor, Read},
-};
-
-use colorful::Colorful;
-
-use crate::{
-    interpreter::value::{RecordKey, Value},
-    lexer::{
-        lexer,
-        readers::{bytes_reader::BytesReader, stdin::StdinReader},
-        token::{TokenInfo, TokenKind},
-    },
-    parser::op::{prec, ASSIGNMENT_SYM, MEMBER_ACCESS_SYM},
-    util::{
-        error::{BaseErrorExt, LineInfo},
-        failable::Failable,
-    },
-};
-
-use crate::lexer::lexer::Lexer;
-
 use super::{
     ast::Ast,
     error::{ParseError, ParserOpError},
     op::{
         prec::{COMMA_PREC, FUNCTION_APP_PREC},
-        OpAssoc, OpInfo, OpPos, OpPrec, COMMA_SYM,
+        OpAssoc, OpInfo, OpPos, OpPrec,
     },
-    specialize,
+    utils,
+};
+use crate::{
+    interpreter::value::{RecordKey, Value},
+    lexer::{
+        lexer::{self, Lexer},
+        readers::{bytes_reader::BytesReader, stdin::StdinReader},
+        token::{TokenInfo, TokenKind},
+    },
+    parser::op::prec,
+    util::{
+        error::{BaseErrorExt, LineInfo},
+        failable::Failable,
+    },
+};
+use colorful::Colorful;
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufReader, Cursor, Read},
 };
 
 /// Token predicates for parsing
@@ -78,9 +72,9 @@ pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
 //                                        Parser                                        //
 //--------------------------------------------------------------------------------------//
 
-pub(super) const COMMA_SYM: &str = ",";
-pub(super) const ASSIGNMENT_SYM: &str = "=";
-pub(super) const MEMBER_ACCESS_SYM: &str = ".";
+pub(crate) const COMMA_SYM: &str = ",";
+pub(crate) const ASSIGNMENT_SYM: &str = "=";
+pub(crate) const MEMBER_ACCESS_SYM: &str = ".";
 
 /// Default operators used in the language grammar and required for parsing. \
 /// These operators are defined in the parser and are required to produce valid ASTs. \
@@ -134,7 +128,7 @@ where
     /// The parser will allow redefining operators with the same symbol **only if**:
     /// - They have different signatures
     /// - They have different positions
-    /// - The symbol is a built-in operator that is overloadable
+    /// - The symbol is a built-in operator that is overload:able
     operators: HashMap<String, Vec<OpInfo>>,
 }
 
@@ -211,7 +205,7 @@ impl<R: Read> Parser<R> {
         for _ in 0..count {
             match self.parse_one() {
                 //? Ignore empty unit expressions,
-                //? add top-level expressions to the global AST anyway
+                //? Add top-level expressions to the global AST anyway
                 Ok(expr) => ast.push(expr),
                 Err(e) => return Err(e),
             }
@@ -555,7 +549,7 @@ impl<R: Read> Parser<R> {
                 match start {
                     TokenKind::LeftParen {
                         is_function_call: false,
-                    } => self.parse_tuple(), // Tuples, Units and Parentheses: ()
+                    } => self.parse_tuple(), // Tuples, Units, and Parentheses: ()
                     TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
                     TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),
@@ -590,7 +584,7 @@ impl<R: Read> Parser<R> {
                     Ast::Tuple { exprs, .. } => exprs,
                     single_expr => vec![single_expr],
                 };
-                return Ok(specialize::roll_function_call(primary, args));
+                return Ok(utils::roll_function_call(primary, args));
             }
         }
         Ok(primary)
@@ -601,13 +595,13 @@ impl<R: Read> Parser<R> {
     ///
     /// ## Returns
     /// - `Some(op)`: If the next token is an infix binary operator that either:
-    ///     - has a precedence **greater than** `min_prec`
-    ///     - is **right-associative** with a precedence **greater than or equal** to `min_prec`
-    ///     - `allow_eq` is `true` and precedence **equal** to `min_prec`
+    ///     - Has a precedence **greater than** `min_prec`.
+    ///     - Is **right-associative** with a precedence **greater than or equal** to `min_prec`.
+    ///     - `allow_eq` is `true` and precedence **equal** to `min_prec`.
     /// - `None`: If the next token is either:
-    ///     - **not an infix operator**
-    ///     - its **precedence is lower than** `min_prec`
-    ///     - it is a **terminator**
+    ///     - **Not an infix operator**.
+    ///     - Its **precedence is lower than** `min_prec`.
+    ///     - It is a **terminator**.
     fn check_binary_op(&self, min_prec: OpPrec, op: &str) -> Option<OpInfo> {
         let op = self.find_operator(op, |op| op.position == OpPos::Infix)?;
         let is_greater = op.precedence > min_prec;
@@ -633,7 +627,7 @@ impl<R: Read> Parser<R> {
     }
 
     /// Parse an expression with a given left-hand side and minimum precedence level
-    /// using the operator precedence parsing (pratt parsing) algorithm.
+    /// using the operator precedence parsing (Pratt parsing) algorithm.
     ///
     /// ## Arguments
     /// - `lhs` The left-hand side of the expression
@@ -670,9 +664,9 @@ impl<R: Read> Parser<R> {
                     expr = match op.symbol.as_str() {
                         ASSIGNMENT_SYM => {
                             // Allow all definitions in the parser, even if they are not valid in the current context
-                            specialize::assignment(expr, rhs, info, None)?
+                            utils::assignment(expr, rhs, info)?
                         }
-                        MEMBER_ACCESS_SYM => specialize::member_access(expr, rhs, info)?,
+                        MEMBER_ACCESS_SYM => utils::member_access(expr, rhs, info)?,
                         _ => Ast::Binary {
                             lhs: Box::new(expr),
                             op_info: op.clone(),
@@ -688,7 +682,7 @@ impl<R: Read> Parser<R> {
             if FUNCTION_APP_PREC > min_prec {
                 let call_info = expr.info().join(&nt.info);
                 // Allow all definitions in the parser, even if they are not valid in the current context
-                expr = specialize::call(expr, self.parse_term()?, call_info, &self.types, None)?;
+                expr = utils::call(expr, self.parse_term()?, call_info)?;
                 continue;
             }
             if nt.token.is_terminator() {
@@ -713,7 +707,7 @@ impl<R: Read> Parser<R> {
             Ok(expr) => {
                 self.skip_terminal_and_ignored();
                 // Allow all definitions in the parser, even if they are not valid in the current context
-                specialize::top(expr, &self.types, None)
+                utils::top(expr)
             }
             Err(err) => Err(err),
         }

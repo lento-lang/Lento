@@ -55,14 +55,6 @@ impl Initializer {
                 );
             }
         }
-        for ty in self.types.values() {
-            match ty {
-                Type::Literal(ref name) => parser.add_type(name.to_string()),
-                Type::Constructor(ref name, _, _) => parser.add_type(name.to_string()),
-                Type::Alias(ref name, _) => parser.add_type(name.to_string()),
-                _ => panic!("Expected literal or alias type but got {:?}", ty),
-            }
-        }
     }
 
     pub fn init_type_checker(&self, type_checker: &mut TypeChecker) {

@@ -146,11 +146,6 @@ impl PartialEq for TypeAst {
 pub enum Ast {
     /// A literal is a constant value that is directly represented in the source code.
     Literal { value: Value, info: LineInfo },
-    /// A literal type expression
-    LiteralType {
-        /// The literal type value.
-        expr: TypeAst,
-    },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple { exprs: Vec<Ast>, info: LineInfo },
     /// A dynamic list of elements.
@@ -161,7 +156,7 @@ pub enum Ast {
         info: LineInfo,
     },
     /// A member field access expression is a reference to a field in a record.
-    MemderAccess {
+    MemberAccess {
         /// The record expression to access the field from.
         expr: Box<Ast>,
         /// The field key to access.
@@ -172,8 +167,6 @@ pub enum Ast {
     Identifier { name: String, info: LineInfo },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
     Assignment {
-        /// Any type annotation for the target expression.
-        annotation: Option<TypeAst>,
         /// The target expression to assign to.
         target: BindPattern,
         /// The source expression to assign to the target.
@@ -222,7 +215,7 @@ impl Debug for Ast {
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
-            Self::MemderAccess { expr, field, .. } => f
+            Self::MemberAccess { expr, field, .. } => f
                 .debug_struct("MemderAccess")
                 .field("expr", expr)
                 .field("field", field)
@@ -289,7 +282,7 @@ impl Ast {
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
-            Ast::MemderAccess { info, .. } => info,
+            Ast::MemberAccess { info, .. } => info,
             Ast::LiteralType { expr, .. } => expr.info(),
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall { info, .. } => info,
@@ -340,7 +333,7 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Ast::MemderAccess { expr, field, .. } => format!("({}.{})", expr.print_expr(), field),
+            Ast::MemberAccess { expr, field, .. } => format!("({}.{})", expr.print_expr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
                 format!("({} {})", expr.print_expr(), arg.print_expr())
