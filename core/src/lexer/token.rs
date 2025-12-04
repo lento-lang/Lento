@@ -59,7 +59,7 @@ impl Token {
     }
 
     pub fn is_newline(&self) -> bool {
-        matches!(self, TokenKind::Newline)
+        matches!(self, Token::Newline)
     }
 
     pub fn is_grouping_start(&self) -> bool {
