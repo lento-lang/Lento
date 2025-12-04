@@ -1,7 +1,6 @@
 use crate::{
     parser::{
         ast::{Ast, ParamAst, TypeAst},
-        binding::binding_pattern,
         error::ParseError,
         op::OpInfo,
         parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
@@ -307,7 +306,7 @@ pub fn assignment(
         // Try parse other generic binding patterns (non-typed) for assignments like:
         // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
         _ => Ok(Ast::Assignment {
-            target: binding_pattern(target)?,
+            target: BindPattern::from_expr(target)?,
             expr: Box::new(body),
             info: assignment_info,
         }),
@@ -567,7 +566,7 @@ pub fn next_typed_binding_pattern(
     }
     Ok(ParamAst {
         ty: annotation,
-        pattern: binding_pattern(exprs.remove(0))?,
+        pattern: BindPattern::from_expr(exprs.remove(0))?,
     })
 }
 
@@ -690,7 +689,7 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
         // Sum types like `int | str`
         Ast::Binary { lhs, rhs, .. } => is_type_expr(lhs, types) && is_type_expr(rhs, types),
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
-        Ast::LiteralType { .. } => true,
+        // Ast::LiteralType { .. } => true,
         Ast::Literal { .. } => false,
         // Product type like `(int, str)`
         Ast::Tuple { exprs, .. } => exprs.iter().all(|e| is_type_expr(e, types)),
@@ -728,7 +727,7 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
                 .collect::<Result<Vec<_>, ParseError>>()?;
             Ok(TypeAst::Record { fields, info })
         }
-        Ast::LiteralType { expr } => Ok(expr.clone()),
+        // Ast::LiteralType { expr } => Ok(expr.clone()),
         _ => Err(ParseError::new(
             format!("Expected a type expression, found: {}", expr.print_expr()),
             expr.info().clone(),
