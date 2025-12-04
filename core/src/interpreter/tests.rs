@@ -84,11 +84,11 @@ mod tests {
     #[test]
     fn binary_add() {
         let ast = add(
-            CheckedAst::Literal {
+            CheckedAst::LiteralValue {
                 value: make_u8(1),
                 info: LineInfo::default(),
             },
-            CheckedAst::Literal {
+            CheckedAst::LiteralValue {
                 value: make_u8(2),
                 info: LineInfo::default(),
             },
@@ -104,15 +104,15 @@ mod tests {
     fn tuple() {
         let ast = CheckedAst::Tuple {
             exprs: vec![
-                CheckedAst::Literal {
+                CheckedAst::LiteralValue {
                     value: make_u8(1),
                     info: LineInfo::default(),
                 },
-                CheckedAst::Literal {
+                CheckedAst::LiteralValue {
                     value: make_u8(2),
                     info: LineInfo::default(),
                 },
-                CheckedAst::Literal {
+                CheckedAst::LiteralValue {
                     value: make_u8(3),
                     info: LineInfo::default(),
                 },
@@ -141,11 +141,11 @@ mod tests {
     #[test]
     fn function_call() {
         let ast = add(
-            CheckedAst::Literal {
+            CheckedAst::LiteralValue {
                 value: make_u8(1),
                 info: LineInfo::default(),
             },
-            CheckedAst::Literal {
+            CheckedAst::LiteralValue {
                 value: make_u8(2),
                 info: LineInfo::default(),
             },
@@ -161,7 +161,7 @@ mod tests {
     fn unit_function() {
         let ast = CheckedAst::FunctionCall {
             expr: Box::new(fn_unit()),
-            arg: Box::new(CheckedAst::Literal {
+            arg: Box::new(CheckedAst::LiteralValue {
                 value: Value::Unit,
                 info: LineInfo::default(),
             }),
@@ -182,7 +182,7 @@ mod tests {
                 name: "x".into(),
                 info: LineInfo::default(),
             },
-            expr: Box::new(CheckedAst::Literal {
+            expr: Box::new(CheckedAst::LiteralValue {
                 value: make_u8(1),
                 info: LineInfo::default(),
             }),

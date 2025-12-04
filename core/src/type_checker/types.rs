@@ -195,6 +195,12 @@ impl TypeTrait for FunctionType {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Type {
+    /// Placeholder for unknown types during type inference.
+    /// Used when the type is not yet determined.
+    ///
+    /// **MUST** be resolved before finalizing type checking.
+    Unknown,
+
     /// A literal type (name).
     /// Examples such as `int`, `float`, `string`, `char`, `bool`, `unit`, `any`.
     /// Or `IO`, `List`, `Option`, `Result`, `Either`, `Tuple`, `Record`, `Function`, `UserDefinedType`.
@@ -371,6 +377,7 @@ impl TypeTrait for Type {
 
     fn simplify(self) -> Self {
         match self {
+            Type::Unknown => self,
             Type::Literal(_) => self,
             Type::Alias(name, ty) => Type::Alias(name, Box::new(ty.simplify())),
             Type::Variable(s) => Type::Variable(s),
@@ -412,6 +419,7 @@ impl TypeTrait for Type {
 
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self {
         match self {
+            Type::Unknown => self.clone(),
             Type::Literal(_) => self.clone(),
             Type::Alias(_, _) => self.clone(),
             Type::Variable(s) => {
@@ -469,6 +477,7 @@ impl TypeTrait for Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.clone().simplify() {
+            Type::Unknown => write!(f, "Unknown"),
             Type::Literal(t) => write!(f, "{}", t),
             Type::Alias(name, _) => write!(f, "{}", name),
             Type::Variable(s) => write!(f, "{}", s),
@@ -537,6 +546,7 @@ impl Display for Type {
 impl Type {
     pub fn pretty_print(&self) -> String {
         match self.clone().simplify() {
+            Type::Unknown => "Unknown".to_string(),
             Type::Literal(t) => t.to_string(),
             Type::Alias(name, _) => name.to_string(),
             Type::Variable(s) => s.to_string(),
@@ -622,6 +632,7 @@ impl Type {
 
     pub fn pretty_print_color(&self) -> String {
         match self.clone().simplify() {
+            Type::Unknown => "Unknown".to_string().light_red().to_string(),
             Type::Literal(t) => t.to_string().light_blue().to_string(),
             Type::Alias(name, _) => name.to_string().light_blue().to_string(),
             Type::Variable(s) => s.to_string().yellow().to_string(),

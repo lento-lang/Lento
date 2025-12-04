@@ -1,11 +1,12 @@
 use crate::{
     parser::{
-        ast::{Ast, ParamAst, TypeAst},
+        ast::Ast,
         error::ParseError,
         op::OpInfo,
-        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
+        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM},
         pattern::BindPattern,
     },
+    type_checker::checked_ast::{CheckedAst, ParamAst, TypeAst},
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -36,12 +37,6 @@ pub fn top(expr: Ast, types: &HashSet<String>, variables: Option<&HashSet<String
             rhs,
             info,
         } if op_info.symbol == ASSIGNMENT_SYM => assignment(*lhs, *rhs, info, types, variables),
-        Ast::Binary {
-            lhs,
-            op: op_info,
-            rhs,
-            info,
-        } if op_info.symbol == MEMBER_ACCESS_SYM => member_access(*lhs, *rhs, info),
         Ast::Binary {
             lhs,
             op: op_info,
@@ -783,7 +778,7 @@ pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
 /// ```lento
 /// func(a)(b)(c)
 /// ```
-pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> Ast {
+pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> CheckedAst {
     let last_info = args
         .last()
         .map(|a| a.info().clone())
@@ -808,8 +803,8 @@ pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) ->
                 .map(into_type_ast)
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap();
-            Ast::LiteralType {
-                expr: TypeAst::Constructor {
+            CheckedAst::LiteralType {
+                ty: TypeAst::Constructor {
                     expr: Box::new(TypeAst::Identifier {
                         name: constructor_name,
                         info: constructor_info,
@@ -817,6 +812,7 @@ pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) ->
                     params: args,
                     info: call_info.clone(),
                 },
+                info: call_info.clone(),
             }
         }
         expr => {

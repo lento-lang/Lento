@@ -1,145 +1,9 @@
-use std::fmt::Debug;
-
+use super::{op::OpInfo, pattern::BindPattern};
 use crate::{
     interpreter::value::{RecordKey, Value},
     util::error::LineInfo,
 };
-
-use super::{op::OpInfo, pattern::BindPattern};
-
-#[derive(Debug, Clone)]
-pub struct ParamAst {
-    pub ty: Option<TypeAst>,
-    pub pattern: BindPattern,
-}
-
-impl PartialEq for ParamAst {
-    fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern && self.ty == other.ty
-    }
-}
-
-#[derive(Clone)]
-pub enum TypeAst {
-    Identifier {
-        name: String,
-        info: LineInfo,
-    },
-    Constructor {
-        expr: Box<TypeAst>,
-        params: Vec<TypeAst>,
-        info: LineInfo,
-    },
-    Record {
-        fields: Vec<(RecordKey, TypeAst)>,
-        info: LineInfo,
-    },
-}
-
-impl Debug for TypeAst {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Identifier { name, .. } => {
-                f.debug_struct("Identifier").field("name", name).finish()
-            }
-            Self::Constructor { expr, params, .. } => f
-                .debug_struct("Constructor")
-                .field("expr", expr)
-                .field("params", params)
-                .finish(),
-            Self::Record { fields, .. } => {
-                f.debug_struct("Record").field("fields", fields).finish()
-            }
-        }
-    }
-}
-
-impl TypeAst {
-    pub fn info(&self) -> &LineInfo {
-        match self {
-            TypeAst::Identifier { info, .. } => info,
-            TypeAst::Constructor { info, .. } => info,
-            TypeAst::Record { info, .. } => info,
-        }
-    }
-
-    pub fn print_expr(&self) -> String {
-        match self {
-            TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor {
-                expr, params: args, ..
-            } => {
-                format!(
-                    "{}({})",
-                    expr.print_expr(),
-                    args.iter()
-                        .map(|a| a.print_expr())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
-            TypeAst::Record { fields, .. } => {
-                format!(
-                    "{{ {} }}",
-                    fields
-                        .iter()
-                        .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
-        }
-    }
-
-    pub fn pretty_print(&self) -> String {
-        match self {
-            TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor {
-                expr, params: args, ..
-            } => {
-                format!(
-                    "{}({})",
-                    expr.pretty_print(),
-                    args.iter()
-                        .map(|a| a.pretty_print())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
-            TypeAst::Record { fields, .. } => {
-                format!(
-                    "{{ {} }}",
-                    fields
-                        .iter()
-                        .map(|(k, v)| format!("{}: {}", k, v.pretty_print()))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
-        }
-    }
-}
-
-impl PartialEq for TypeAst {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
-            (
-                Self::Constructor {
-                    expr: l0,
-                    params: l1,
-                    info: _,
-                },
-                Self::Constructor {
-                    expr: r0,
-                    params: r1,
-                    info: _,
-                },
-            ) => l0 == r0 && l1 == r1,
-            _ => false,
-        }
-    }
-}
+use std::fmt::Debug;
 
 /// **Expressions** in the program source code.
 #[derive(Clone)]
@@ -175,9 +39,8 @@ pub enum Ast {
     },
     /// A lambda expression is an anonymous function that can be passed as a value.
     Lambda {
-        param: ParamAst,
+        param: Box<Ast>,
         body: Box<Ast>,
-        return_type: Option<TypeAst>,
         info: LineInfo,
     },
     /// A function call is an invocation of a function with a list of arguments.
@@ -225,16 +88,10 @@ impl Debug for Ast {
                 .field("target", target)
                 .field("expr", expr)
                 .finish(),
-            Self::Lambda {
-                param,
-                body,
-                return_type,
-                ..
-            } => f
+            Self::Lambda { param, body, .. } => f
                 .debug_struct("Lambda")
                 .field("param", param)
                 .field("body", body)
-                .field("return_type", return_type)
                 .finish(),
             Self::FunctionCall { expr, arg, .. } => f
                 .debug_struct("FunctionCall")
@@ -332,21 +189,8 @@ impl Ast {
             Ast::FunctionCall { expr, arg, info: _ } => {
                 format!("({} {})", expr.print_expr(), arg.print_expr())
             }
-            Ast::Lambda {
-                param: params,
-                body,
-                ..
-            } => {
-                if let Some(ty) = &params.ty {
-                    format!(
-                        "({} {} => {})",
-                        ty.print_expr(),
-                        params.pattern.print_expr(),
-                        body.print_expr()
-                    )
-                } else {
-                    format!("({} => {})", params.pattern.print_expr(), body.print_expr())
-                }
+            Ast::Lambda { param, body, .. } => {
+                format!("({} => {})", param.print_expr(), body.print_expr())
             }
 
             Ast::Binary {
@@ -406,16 +250,14 @@ impl PartialEq for Ast {
                 Self::Lambda {
                     param: l_param,
                     body: l_body,
-                    return_type: l_return_type,
                     ..
                 },
                 Self::Lambda {
                     param: r_param,
                     body: r_body,
-                    return_type: r_return_type,
                     ..
                 },
-            ) => l_param == r_param && l_body == r_body && l_return_type == r_return_type,
+            ) => l_param == r_param && l_body == r_body,
             (
                 Self::Binary {
                     rhs: rhs1,

@@ -1,11 +1,145 @@
+use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
     parser::pattern::BindPattern,
     type_checker::types::Type,
     util::error::LineInfo,
 };
+use std::fmt::Debug;
 
-use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
+#[derive(Debug, Clone)]
+pub struct ParamAst {
+    pub ty: Option<TypeAst>,
+    pub pattern: BindPattern,
+}
+
+impl PartialEq for ParamAst {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern && self.ty == other.ty
+    }
+}
+
+#[derive(Clone)]
+pub enum TypeAst {
+    Identifier {
+        name: String,
+        info: LineInfo,
+    },
+    Constructor {
+        expr: Box<TypeAst>,
+        params: Vec<TypeAst>,
+        info: LineInfo,
+    },
+    Record {
+        fields: Vec<(RecordKey, TypeAst)>,
+        info: LineInfo,
+    },
+}
+
+impl Debug for TypeAst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Identifier { name, .. } => {
+                f.debug_struct("Identifier").field("name", name).finish()
+            }
+            Self::Constructor { expr, params, .. } => f
+                .debug_struct("Constructor")
+                .field("expr", expr)
+                .field("params", params)
+                .finish(),
+            Self::Record { fields, .. } => {
+                f.debug_struct("Record").field("fields", fields).finish()
+            }
+        }
+    }
+}
+
+impl TypeAst {
+    pub fn info(&self) -> &LineInfo {
+        match self {
+            TypeAst::Identifier { info, .. } => info,
+            TypeAst::Constructor { info, .. } => info,
+            TypeAst::Record { info, .. } => info,
+        }
+    }
+
+    pub fn print_expr(&self) -> String {
+        match self {
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
+                format!(
+                    "{}({})",
+                    expr.print_expr(),
+                    args.iter()
+                        .map(|a| a.print_expr())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        match self {
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
+                format!(
+                    "{}({})",
+                    expr.pretty_print(),
+                    args.iter()
+                        .map(|a| a.pretty_print())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.pretty_print()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+}
+
+impl PartialEq for TypeAst {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
+            (
+                Self::Constructor {
+                    expr: l0,
+                    params: l1,
+                    info: _,
+                },
+                Self::Constructor {
+                    expr: r0,
+                    params: r1,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1,
+            _ => false,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CheckedOperator {
@@ -42,9 +176,9 @@ impl CheckedParam {
 #[derive(Debug, Clone)]
 pub enum CheckedAst {
     /// A literal is a constant value that is directly represented in the source code.
-    Literal { value: Value, info: LineInfo },
+    LiteralValue { value: Value, info: LineInfo },
     /// A literal type is a type that is directly represented in the source code.
-    LiteralType { value: Type, info: LineInfo },
+    LiteralType { ty: Type, info: LineInfo },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple {
         exprs: Vec<CheckedAst>,
@@ -126,7 +260,7 @@ pub enum CheckedAst {
 impl GetType for CheckedAst {
     fn get_type(&self) -> &Type {
         match self {
-            CheckedAst::Literal { value: v, info: _ } => v.get_type(),
+            CheckedAst::LiteralValue { value: v, info: _ } => v.get_type(),
             CheckedAst::LiteralType { .. } => &std_types::TYPE,
             CheckedAst::Tuple { ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
@@ -170,7 +304,7 @@ impl CheckedAst {
 
     pub fn info(&self) -> &LineInfo {
         match self {
-            CheckedAst::Literal { info, .. } => info,
+            CheckedAst::LiteralValue { info, .. } => info,
             CheckedAst::LiteralType { info, .. } => info,
             CheckedAst::Tuple { info, .. } => info,
             CheckedAst::List { info, .. } => info,
@@ -186,7 +320,7 @@ impl CheckedAst {
 
     pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
         match self {
-            CheckedAst::Literal { .. } => (),
+            CheckedAst::LiteralValue { .. } => (),
             CheckedAst::LiteralType { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
@@ -275,8 +409,8 @@ impl CheckedAst {
 
     pub fn print_expr(&self) -> String {
         match self {
-            CheckedAst::Literal { value, info: _ } => value.pretty_print(),
-            CheckedAst::LiteralType { value, info: _ } => value.pretty_print(),
+            CheckedAst::LiteralValue { value, info: _ } => value.pretty_print(),
+            CheckedAst::LiteralType { ty: value, info: _ } => value.pretty_print(),
             CheckedAst::Tuple {
                 exprs: elements, ..
             } => format!(
@@ -368,8 +502,8 @@ impl CheckedAst {
 
     pub fn pretty_print(&self) -> String {
         match self {
-            Self::Literal { value: l, .. } => l.pretty_print(),
-            Self::LiteralType { value: l, .. } => l.pretty_print(),
+            Self::LiteralValue { value: l, .. } => l.pretty_print(),
+            Self::LiteralType { ty: l, .. } => l.pretty_print(),
             Self::Tuple { exprs: t, .. } => {
                 let mut result = "(".to_string();
                 for (i, v) in t.iter().enumerate() {

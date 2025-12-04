@@ -39,7 +39,7 @@ mod tests {
         let ast = parser.parse_all().unwrap();
         let checked_ast = checker.check_top_exprs(&ast).unwrap();
         assert!(checked_ast.iter().zip(types).all(|(ast, ty)| {
-            if let CheckedAst::Literal {
+            if let CheckedAst::LiteralValue {
                 value: Value::Type(t),
                 info: _,
             } = ast

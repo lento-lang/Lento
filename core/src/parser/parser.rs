@@ -679,6 +679,7 @@ impl<R: Read> Parser<R> {
                             }
                         }
                         MEMBER_ACCESS_SYM => utils::member_access(expr, rhs, info)?,
+                        // COMMA_SYM => utils::into_tuple(expr, rhs, info)?,
                         _ => Ast::Binary {
                             lhs: Box::new(expr),
                             op: op.clone(),
@@ -716,6 +717,9 @@ impl<R: Read> Parser<R> {
                 .with_label("Not valid in this context".to_string(), nt.info));
             }
         }
+        log::trace!("Completed expression (pre): {:?}", expr);
+        let expr = utils::expr_top(expr)?;
+        log::trace!("Completed expression (post): {:?}", expr);
         Ok(expr)
     }
 
@@ -800,6 +804,27 @@ mod utils {
     use super::*;
     use crate::type_checker::types::std_types;
 
+    pub fn flatten_sequence(expr: Ast, binary_op_symbol: &str) -> Vec<Ast> {
+        let mut exprs = Vec::new();
+        let mut queue = vec![expr];
+        while let Some(current) = queue.pop() {
+            match current {
+                // Flatten sequences of expressions
+                Ast::Binary {
+                    lhs,
+                    op: op_info,
+                    rhs,
+                    ..
+                } if op_info.symbol == binary_op_symbol => {
+                    queue.push(*rhs);
+                    queue.push(*lhs);
+                }
+                _ => exprs.push(current),
+            }
+        }
+        exprs
+    }
+
     /// Takes a function name, a list of arguments and rolls them into a single function call expression.
     /// Arguments are rolled into a nested function call.
     /// All arguments are sorted like:
@@ -855,6 +880,25 @@ mod utils {
             info,
         })
     }
+
+    pub fn expr_top(expr: Ast) -> ParseResult {
+        match expr {
+            // Specialize a comma-separated sequence of expressions into a tuple.
+            // E.g:
+            // - `x, y, z` becomes `(x, y, z)`
+            Ast::Binary { lhs, op, rhs, info } if op.symbol == COMMA_SYM => {
+                log::trace!("Specializing comma sequence: {:?}, {:?}", lhs, rhs);
+                let mut exprs = flatten_sequence(*lhs, COMMA_SYM);
+                exprs.push(*rhs);
+                Ok(Ast::Tuple {
+                    info: info.join(exprs.last().unwrap().info()),
+                    exprs,
+                })
+            }
+            _ => Ok(expr),
+        }
+    }
+
     pub fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
         match expr {
             Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),

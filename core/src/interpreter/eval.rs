@@ -44,8 +44,8 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             ..
         } => eval_call(function, arg, env, ast.info())?,
         CheckedAst::Tuple { exprs, .. } => eval_tuple(exprs, env)?,
-        CheckedAst::Literal { value, .. } => value.clone(),
-        CheckedAst::LiteralType { value, .. } => Value::Type(value.clone()),
+        CheckedAst::LiteralValue { value, .. } => value.clone(),
+        CheckedAst::LiteralType { ty: value, .. } => Value::Type(value.clone()),
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
@@ -106,7 +106,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             result
         }
     };
-    if !matches!(ast, CheckedAst::Literal { .. }) {
+    if !matches!(ast, CheckedAst::LiteralValue { .. }) {
         log::trace!(
             "Eval: {} -> {}",
             ast.print_expr(),
