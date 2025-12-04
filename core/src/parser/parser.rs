@@ -7,19 +7,13 @@ use super::{
     },
 };
 use crate::{
-    interpreter::{
-        number::Number,
-        value::{RecordKey, Value},
-    },
+    interpreter::value::{RecordKey, Value},
     lexer::{
         lexer::{self, Lexer},
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
         token::{Token, TokenInfo},
     },
-    parser::{
-        op::prec,
-        pattern::{BindPattern, LiteralPattern},
-    },
+    parser::{op::prec, pattern::BindPattern},
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -679,7 +673,7 @@ impl<R: Read> Parser<R> {
                             // Try to parse other generic binding patterns (non-typed) for assignments like:
                             // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
                             Ast::Assignment {
-                                target: utils::binding_pattern(expr)?,
+                                target: BindPattern::from_expr(expr)?,
                                 expr: Box::new(rhs),
                                 info,
                             }
@@ -714,7 +708,7 @@ impl<R: Read> Parser<R> {
             } else {
                 return Err(ParseError::new(
                     format!(
-                        "Expected operator or funciton application, but found {}",
+                        "Expected operator or function application, but found {}",
                         nt.token.to_string().light_red()
                     ),
                     nt.info.clone(),
@@ -888,60 +882,5 @@ mod utils {
                 "[]".yellow()
             ))),
         }
-    }
-
-    // Convert a loose AST expression into a binding pattern.
-    pub fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
-        match expr {
-            Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
-            Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
-            Ast::Tuple { exprs, info } => {
-                let elements = exprs
-                    .into_iter()
-                    .map(binding_pattern)
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(BindPattern::Tuple { elements, info })
-            }
-            Ast::Record { fields, info } => {
-                let fields = fields
-                    .into_iter()
-                    .map(|(k, v)| Ok((k, binding_pattern(v)?)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(BindPattern::Record { fields, info })
-            }
-            Ast::List { exprs, info } => {
-                let elements = exprs
-                    .into_iter()
-                    .map(binding_pattern)
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(BindPattern::List { elements, info })
-            }
-            Ast::Literal { value, info } => Ok(BindPattern::Literal {
-                value: literal_pattern(value).ok_or(
-                    ParseError::new("Expected a literal value pattern".to_string(), info.clone())
-                        .with_label("This is not valid".to_string(), info.clone()),
-                )?,
-                info,
-            }),
-            _ => Err(ParseError::new(
-                format!("Invalid binding pattern: {}", expr.print_expr()),
-                expr.info().clone(),
-            )),
-        }
-    }
-
-    /// A helper function to convert a `Value` into a `LiteralPattern`.
-    pub fn literal_pattern(value: Value) -> Option<LiteralPattern> {
-        Some(match value {
-            Value::Number(n) => match n {
-                Number::UnsignedInteger(u) => LiteralPattern::UnsignedInteger(u),
-                Number::SignedInteger(i) => LiteralPattern::SignedInteger(i),
-                _ => return None, // Only unsigned and signed integers are supported as literals
-            },
-            Value::String(s) => LiteralPattern::String(s),
-            Value::Char(c) => LiteralPattern::Char(c),
-            Value::Boolean(b) => LiteralPattern::Boolean(b),
-            _ => return None,
-        })
     }
 }

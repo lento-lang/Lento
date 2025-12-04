@@ -1,11 +1,11 @@
 use crate::{
     parser::{
         ast::{Ast, ParamAst, TypeAst},
+        binding::binding_pattern,
         error::ParseError,
         op::OpInfo,
         parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, MEMBER_ACCESS_SYM},
         pattern::BindPattern,
-        utils::{binding_pattern, member_access},
     },
     util::error::{BaseErrorExt, LineInfo},
 };
@@ -532,7 +532,7 @@ pub fn flatten_sequence(expr: Ast) -> Vec<Ast> {
 /// ```ignore
 /// int f str x, bool y
 /// ```
-/// Yelds the first parameter with its type annotation, like:
+/// Yields the first parameter with its type annotation, like:
 /// ```ignore
 /// ParamAst {
 ///    ty: Some(TypeAst::Identifier { name: "int".to_string(), info: ... }),

@@ -1,13 +1,13 @@
-use std::hash::Hash;
-
+use super::{ast::Ast, error::ParseError};
 use crate::{
     interpreter::{
         number::{Number, SignedInteger, UnsignedInteger},
         value::{RecordKey, Value},
     },
     type_checker::types::TypeJudgements,
-    util::error::LineInfo,
+    util::error::{BaseErrorExt, LineInfo},
 };
+use std::hash::Hash;
 
 /// A pattern used for binding variables in:
 /// - Variable assignments
@@ -68,6 +68,46 @@ impl BindPattern {
             BindPattern::Wildcard => panic!("Wildcard pattern has no line info"),
             BindPattern::Literal { info, .. } => info,
             BindPattern::Rest { info, .. } => info,
+        }
+    }
+
+    // Convert a loose AST expression into a binding pattern.
+    pub fn from_expr(expr: Ast) -> Result<Self, ParseError> {
+        match expr {
+            Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
+            Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
+            Ast::Tuple { exprs, info } => {
+                let elements = exprs
+                    .into_iter()
+                    .map(BindPattern::from_expr)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::Tuple { elements, info })
+            }
+            Ast::Record { fields, info } => {
+                let fields = fields
+                    .into_iter()
+                    .map(|(k, v)| Ok((k, BindPattern::from_expr(v)?)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::Record { fields, info })
+            }
+            Ast::List { exprs, info } => {
+                let elements = exprs
+                    .into_iter()
+                    .map(BindPattern::from_expr)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::List { elements, info })
+            }
+            Ast::Literal { value, info } => Ok(BindPattern::Literal {
+                value: LiteralPattern::from_value(value).ok_or(
+                    ParseError::new("Expected a literal value pattern".to_string(), info.clone())
+                        .with_label("This is not valid".to_string(), info.clone()),
+                )?,
+                info,
+            }),
+            _ => Err(ParseError::new(
+                format!("Invalid binding pattern: {}", expr.print_expr()),
+                expr.info().clone(),
+            )),
         }
     }
 
@@ -228,6 +268,21 @@ pub enum LiteralPattern {
 }
 
 impl LiteralPattern {
+    /// A helper function to convert a `Value` into a `LiteralPattern`.
+    pub fn from_value(value: Value) -> Option<Self> {
+        Some(match value {
+            Value::Number(n) => match n {
+                Number::UnsignedInteger(u) => LiteralPattern::UnsignedInteger(u),
+                Number::SignedInteger(i) => LiteralPattern::SignedInteger(i),
+                _ => return None, // Only unsigned and signed integers are supported as literals
+            },
+            Value::String(s) => LiteralPattern::String(s),
+            Value::Char(c) => LiteralPattern::Char(c),
+            Value::Boolean(b) => LiteralPattern::Boolean(b),
+            _ => return None,
+        })
+    }
+
     pub fn into_value(self) -> Value {
         match self {
             LiteralPattern::UnsignedInteger(value) => Value::Number(Number::UnsignedInteger(value)),
