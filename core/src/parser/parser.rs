@@ -5,16 +5,21 @@ use super::{
         prec::{COMMA_PREC, FUNCTION_APP_PREC},
         OpAssoc, OpInfo, OpPos, OpPrec,
     },
-    utils,
 };
 use crate::{
-    interpreter::value::{RecordKey, Value},
+    interpreter::{
+        number::Number,
+        value::{RecordKey, Value},
+    },
     lexer::{
         lexer::{self, Lexer},
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
-        token::{TokenInfo, TokenKind},
+        token::{Token, TokenInfo},
     },
-    parser::op::prec,
+    parser::{
+        op::prec,
+        pattern::{BindPattern, LiteralPattern},
+    },
     util::{
         error::{BaseErrorExt, LineInfo},
         failable::Failable,
@@ -29,18 +34,18 @@ use std::{
 
 /// Token predicates for parsing
 mod pred {
-    use crate::lexer::token::TokenKind;
+    use crate::lexer::token::Token;
 
-    pub fn eof(t: &TokenKind) -> bool {
-        matches!(t, TokenKind::EndOfFile)
+    pub fn eof(t: &Token) -> bool {
+        matches!(t, Token::EndOfFile)
     }
 
     /// Check if the token is an ignore token.
     /// These include:
     /// - `Newline`
     /// - `Comment`
-    pub fn ignore(t: &TokenKind) -> bool {
-        matches!(t, TokenKind::Comment(_) | TokenKind::Newline)
+    pub fn ignore(t: &Token) -> bool {
+        matches!(t, Token::Comment(_) | Token::Newline)
     }
 }
 
@@ -215,7 +220,7 @@ impl<R: Read> Parser<R> {
 
     fn parse_expected(
         &mut self,
-        condition: impl FnOnce(&TokenKind) -> bool,
+        condition: impl FnOnce(&Token) -> bool,
         symbol: &'static str,
     ) -> Result<TokenInfo, ParseError> {
         match self.lexer.expect_next_token_not(pred::ignore) {
@@ -239,7 +244,7 @@ impl<R: Read> Parser<R> {
 
     fn parse_expected_eq(
         &mut self,
-        expected_token: TokenKind,
+        expected_token: Token,
         symbol: &'static str,
     ) -> Result<TokenInfo, ParseError> {
         self.parse_expected(|t| t == &expected_token, symbol)
@@ -248,13 +253,13 @@ impl<R: Read> Parser<R> {
     // ======================================== EXPRESSION PARSING ======================================== //
 
     /// Parse a literal `Value` from the lexer.
-    fn parse_literal(&mut self, token: &TokenKind, info: LineInfo) -> ParseResult {
+    fn parse_literal(&mut self, token: &Token, info: LineInfo) -> ParseResult {
         Ok(Ast::Literal {
             value: match token {
-                TokenKind::Number(n) => Value::Number(n.clone()),
-                TokenKind::String(s) => Value::String(s.clone()),
-                TokenKind::Char(c) => Value::Char(*c),
-                TokenKind::Boolean(b) => Value::Boolean(*b),
+                Token::Number(n) => Value::Number(n.clone()),
+                Token::String(s) => Value::String(s.clone()),
+                Token::Char(c) => Value::Char(*c),
+                Token::Boolean(b) => Value::Boolean(*b),
                 _ => {
                     return Err(ParseError::new(
                         format!(
@@ -281,7 +286,7 @@ impl<R: Read> Parser<R> {
     fn parse_tuple(&mut self) -> ParseResult {
         // Check if the next token is a right parenthesis `)`, then return an empty tuple
         if let Ok(t) = self.lexer.peek_token(0) {
-            if t.token == TokenKind::RightParen {
+            if t.token == Token::RightParen {
                 self.lexer.next_token().unwrap();
                 return Ok(Ast::unit(t.info));
             }
@@ -289,7 +294,7 @@ impl<R: Read> Parser<R> {
         log::trace!("Parsing elements...");
         let tuple = self.parse_top_expr()?;
         log::trace!("Parsed tuple elements: {:?}", tuple);
-        self.parse_expected_eq(TokenKind::RightParen, ")")?;
+        self.parse_expected_eq(Token::RightParen, ")")?;
         Ok(tuple)
     }
 
@@ -301,12 +306,12 @@ impl<R: Read> Parser<R> {
             // Parse as block
             let mut exprs = Vec::new();
             while let Ok(end) = self.lexer.peek_token(0) {
-                if end.token == TokenKind::RightBrace {
+                if end.token == Token::RightBrace {
                     break;
                 }
                 exprs.push(self.parse_top_expr()?);
             }
-            let last = self.parse_expected_eq(TokenKind::RightBrace, "}")?;
+            let last = self.parse_expected_eq(Token::RightBrace, "}")?;
             Ok(Ast::Block {
                 exprs,
                 info: start_info.join(&last.info),
@@ -317,15 +322,15 @@ impl<R: Read> Parser<R> {
     fn parse_list(&mut self, start_info: LineInfo) -> ParseResult {
         let mut exprs = Vec::new();
         while let Ok(end) = self.lexer.peek_token(0) {
-            if end.token == TokenKind::RightBracket {
+            if end.token == Token::RightBracket {
                 break;
             }
             exprs.push(self.parse_expr(COMMA_PREC)?);
             if let Ok(nt) = self.lexer.peek_token(0) {
-                if nt.token == TokenKind::Op(COMMA_SYM.to_string()) {
+                if nt.token == Token::Operator(COMMA_SYM.to_string()) {
                     self.lexer.next_token().unwrap();
                     continue;
-                } else if nt.token == TokenKind::RightBracket {
+                } else if nt.token == Token::RightBracket {
                     break;
                 }
             }
@@ -350,7 +355,7 @@ impl<R: Read> Parser<R> {
                 ));
             }
         }
-        let last = self.parse_expected_eq(TokenKind::RightBracket, "]")?;
+        let last = self.parse_expected_eq(Token::RightBracket, "]")?;
         Ok(Ast::List {
             exprs,
             info: start_info.join(&last.info),
@@ -392,23 +397,23 @@ impl<R: Read> Parser<R> {
         // Or if it is a block
         if let Ok(t) = self.lexer.peek_token(0) {
             let key = match t.token {
-                TokenKind::RightBrace => {
+                Token::RightBrace => {
                     self.lexer.next_token().unwrap();
                     return Some(Ok(Ast::Record {
                         fields,
                         info: t.info,
                     })); // Empty record
                 }
-                TokenKind::Identifier(id) => RecordKey::String(id),
+                Token::Identifier(id) => RecordKey::String(id),
                 // TokenKind::Number(n) => RecordKey::Number(n),
-                TokenKind::String(s) => RecordKey::String(s),
-                TokenKind::Char(c) => RecordKey::String(c.to_string()),
+                Token::String(s) => RecordKey::String(s),
+                Token::Char(c) => RecordKey::String(c.to_string()),
                 _ => return None, // Not a record
             };
             let Ok(t) = self.lexer.peek_token(1) else {
                 return None;
             };
-            if t.token != TokenKind::Colon {
+            if t.token != Token::Colon {
                 return None; // Not a record
             }
 
@@ -422,10 +427,10 @@ impl<R: Read> Parser<R> {
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Op(op) if op == COMMA_SYM => {
+                    Token::Operator(op) if op == COMMA_SYM => {
                         last_info = t.info;
                     }
-                    TokenKind::RightBrace => {
+                    Token::RightBrace => {
                         return Some(Ok(Ast::Record {
                             fields,
                             info: t.info,
@@ -451,15 +456,15 @@ impl<R: Read> Parser<R> {
         }
         // Parse the rest of the fields more strictly
         while let Ok(t) = self.lexer.next_token() {
-            if t.token == TokenKind::RightBrace {
+            if t.token == Token::RightBrace {
                 last_info = t.info;
                 break;
             }
             let key = match t.token {
-                TokenKind::Identifier(id) => RecordKey::String(id),
+                Token::Identifier(id) => RecordKey::String(id),
                 // TokenKind::Number(n) => RecordKey::Number(n),
-                TokenKind::String(s) => RecordKey::String(s),
-                TokenKind::Char(c) => RecordKey::String(c.to_string()),
+                Token::String(s) => RecordKey::String(s),
+                Token::Char(c) => RecordKey::String(c.to_string()),
                 _ => {
                     return Some(Err(ParseError::new(
                         format!(
@@ -471,7 +476,7 @@ impl<R: Read> Parser<R> {
                     .with_label("This is not a valid record key".to_string(), t.info)));
                 }
             };
-            if let Err(err) = self.parse_expected_eq(TokenKind::Colon, ":") {
+            if let Err(err) = self.parse_expected_eq(Token::Colon, ":") {
                 return Some(Err(err));
             }
             let value = match self.parse_expr(COMMA_PREC) {
@@ -481,8 +486,8 @@ impl<R: Read> Parser<R> {
             fields.push((key, value));
             if let Ok(t) = self.lexer.next_token() {
                 match t.token {
-                    TokenKind::Op(op) if op == COMMA_SYM => continue,
-                    TokenKind::RightBrace => {
+                    Token::Operator(op) if op == COMMA_SYM => continue,
+                    Token::RightBrace => {
                         last_info = t.info;
                         break;
                     }
@@ -524,15 +529,15 @@ impl<R: Read> Parser<R> {
         log::trace!("Parsing primary: {:?}", t.token);
         match t.token {
             lit if lit.is_literal() => self.parse_literal(&lit, t.info),
-            TokenKind::Identifier(id) => Ok(Ast::Identifier {
+            Token::Identifier(id) => Ok(Ast::Identifier {
                 name: id,
                 info: t.info,
             }),
-            TokenKind::Op(op) => {
+            Token::Operator(op) => {
                 if let Some(op) = self.find_operator_pos(&op, OpPos::Prefix) {
                     log::trace!("Parsing prefix operator: {:?}", op);
                     Ok(Ast::Unary {
-                        op_info: op.clone(),
+                        op: op.clone(),
                         expr: Box::new(self.parse_term()?),
                         info: t.info,
                     })
@@ -547,11 +552,11 @@ impl<R: Read> Parser<R> {
 
             start if start.is_grouping_start() => {
                 match start {
-                    TokenKind::LeftParen {
+                    Token::LeftParen {
                         is_function_call: false,
                     } => self.parse_tuple(), // Tuples, Units, and Parentheses: ()
-                    TokenKind::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
-                    TokenKind::LeftBracket => self.parse_list(t.info),          // Lists: []
+                    Token::LeftBrace => self.parse_record_or_block(t.info), // Records and Blocks: {}
+                    Token::LeftBracket => self.parse_list(t.info),          // Lists: []
                     _ => unreachable!(),
                 }
             }
@@ -575,7 +580,7 @@ impl<R: Read> Parser<R> {
         if let Ok(nt) = self.lexer.peek_token(0) {
             if matches!(
                 &nt.token,
-                TokenKind::LeftParen {
+                Token::LeftParen {
                     is_function_call: true
                 }
             ) {
@@ -645,13 +650,13 @@ impl<R: Read> Parser<R> {
             if nt.token.is_terminator() {
                 break; // Stop parsing on expression terminators
             }
-            if let TokenKind::Op(op) = &nt.token {
+            if let Token::Operator(op) = &nt.token {
                 if let Some(op) = self.check_postfix_op(min_prec, op) {
                     log::trace!("Parsing postfix operator: {:?}", op);
                     self.lexer.next_token().unwrap();
                     expr = Ast::Unary {
                         info: expr.info().join(&nt.info),
-                        op_info: op.clone(),
+                        op: op.clone(),
                         expr: Box::new(expr),
                     };
                     continue;
@@ -664,12 +669,25 @@ impl<R: Read> Parser<R> {
                     expr = match op.symbol.as_str() {
                         ASSIGNMENT_SYM => {
                             // Allow all definitions in the parser, even if they are not valid in the current context
-                            utils::assignment(expr, rhs, info)?
+                            log::debug!(
+                                "Specializing assignment: {} = {}",
+                                expr.print_expr(),
+                                rhs.print_expr()
+                            );
+                            log::trace!("Specializing assignment: {:?} = {:?}", expr, rhs);
+
+                            // Try to parse other generic binding patterns (non-typed) for assignments like:
+                            // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
+                            Ast::Assignment {
+                                target: utils::binding_pattern(expr)?,
+                                expr: Box::new(rhs),
+                                info,
+                            }
                         }
                         MEMBER_ACCESS_SYM => utils::member_access(expr, rhs, info)?,
                         _ => Ast::Binary {
                             lhs: Box::new(expr),
-                            op_info: op.clone(),
+                            op: op.clone(),
                             rhs: Box::new(rhs),
                             info,
                         },
@@ -682,7 +700,13 @@ impl<R: Read> Parser<R> {
             if FUNCTION_APP_PREC > min_prec {
                 let call_info = expr.info().join(&nt.info);
                 // Allow all definitions in the parser, even if they are not valid in the current context
-                expr = utils::call(expr, self.parse_term()?, call_info)?;
+                // expr = utils::call(expr, self.parse_term()?, call_info)?;
+                let arg = self.parse_term()?;
+                expr = Ast::FunctionCall {
+                    expr: Box::new(expr),
+                    arg: Box::new(arg),
+                    info: call_info,
+                };
                 continue;
             }
             if nt.token.is_terminator() {
@@ -706,8 +730,7 @@ impl<R: Read> Parser<R> {
         match self.parse_expr(0) {
             Ok(expr) => {
                 self.skip_terminal_and_ignored();
-                // Allow all definitions in the parser, even if they are not valid in the current context
-                utils::top(expr)
+                Ok(expr)
             }
             Err(err) => Err(err),
         }
@@ -776,5 +799,149 @@ impl<R: Read> Parser<R> {
             }
         }
         Ok(asts)
+    }
+}
+
+mod utils {
+    use super::*;
+    use crate::type_checker::types::std_types;
+
+    /// Takes a function name, a list of arguments and rolls them into a single function call expression.
+    /// Arguments are rolled into a nested function call.
+    /// All arguments are sorted like:
+    /// ```lento
+    /// func(a, b, c)
+    /// ```
+    /// becomes:
+    /// ```lento
+    /// func(a)(b)(c)
+    /// ```
+    pub fn roll_function_call(expr: Ast, args: Vec<Ast>) -> Ast {
+        let last_info = args
+            .last()
+            .map(|a| a.info().clone())
+            .unwrap_or(expr.info().clone());
+        let call_info = expr.info().join(&last_info);
+
+        // If the expression is not a type constructor, we can create a function call as is.
+        log::trace!(
+            "Creating function call: {}({})",
+            expr.print_expr().light_blue(),
+            args.iter()
+                .map(|a| a.print_expr().light_blue().to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+        let mut args = args.into_iter();
+        let mut call = Ast::FunctionCall {
+            expr: Box::new(expr),
+            arg: Box::new(args.next().unwrap()),
+            info: call_info.clone(),
+        };
+        for arg in args {
+            let arg_info = call_info.join(arg.info());
+            call = Ast::FunctionCall {
+                expr: Box::new(call),
+                arg: Box::new(arg),
+                info: arg_info,
+            };
+        }
+        call
+    }
+
+    pub fn member_access(expr: Ast, rhs: Ast, info: LineInfo) -> ParseResult {
+        log::trace!(
+            "Specializing member access: {}.{}",
+            expr.print_expr().light_blue(),
+            rhs.print_expr().light_blue()
+        );
+        Ok(Ast::MemberAccess {
+            expr: Box::new(expr),
+            field: record_key(rhs)?,
+            info,
+        })
+    }
+    pub fn record_key(expr: Ast) -> Result<RecordKey, ParseError> {
+        match expr {
+            Ast::Identifier { name, .. } => Ok(RecordKey::String(name.to_string())),
+            // Ast::Literal {
+            //     value: Value::Number(Number::UnsignedInteger(n)),
+            //     ..
+            // } => Ok(RecordKey::Number(Number::UnsignedInteger(n.clone()))),
+            _ => Err(ParseError::new(
+                format!(
+                    "Field access via {} requires an identifier or {} literal",
+                    ".".yellow(),
+                    std_types::UINT().pretty_print_color()
+                ),
+                expr.info().clone(),
+            )
+            .with_label(
+                format!(
+                    "This is not an identifier or {}",
+                    std_types::UINT().pretty_print_color()
+                ),
+                expr.info().clone(),
+            )
+            .with_hint(format!(
+                "Did you mean to use indexing via {} instead?",
+                "[]".yellow()
+            ))),
+        }
+    }
+
+    // Convert a loose AST expression into a binding pattern.
+    pub fn binding_pattern(expr: Ast) -> Result<BindPattern, ParseError> {
+        match expr {
+            Ast::Identifier { name, .. } if name.starts_with("_") => Ok(BindPattern::Wildcard),
+            Ast::Identifier { name, info } => Ok(BindPattern::Variable { name, info }),
+            Ast::Tuple { exprs, info } => {
+                let elements = exprs
+                    .into_iter()
+                    .map(binding_pattern)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::Tuple { elements, info })
+            }
+            Ast::Record { fields, info } => {
+                let fields = fields
+                    .into_iter()
+                    .map(|(k, v)| Ok((k, binding_pattern(v)?)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::Record { fields, info })
+            }
+            Ast::List { exprs, info } => {
+                let elements = exprs
+                    .into_iter()
+                    .map(binding_pattern)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(BindPattern::List { elements, info })
+            }
+            Ast::Literal { value, info } => Ok(BindPattern::Literal {
+                value: literal_pattern(value).ok_or(
+                    ParseError::new("Expected a literal value pattern".to_string(), info.clone())
+                        .with_label("This is not valid".to_string(), info.clone()),
+                )?,
+                info,
+            }),
+            _ => Err(ParseError::new(
+                format!("Invalid binding pattern: {}", expr.print_expr()),
+                expr.info().clone(),
+            )),
+        }
+    }
+
+    /// A helper function to convert a `Value` into a `LiteralPattern`.
+    pub fn literal_pattern(value: Value) -> Option<LiteralPattern> {
+        Some(match value {
+            Value::Number(n) => match n {
+                Number::UnsignedInteger(u) => LiteralPattern::UnsignedInteger(u),
+                Number::SignedInteger(i) => LiteralPattern::SignedInteger(i),
+                _ => return None, // Only unsigned and signed integers are supported as literals
+            },
+            Value::String(s) => LiteralPattern::String(s),
+            Value::Char(c) => LiteralPattern::Char(c),
+            Value::Boolean(b) => LiteralPattern::Boolean(b),
+            _ => return None,
+        })
     }
 }

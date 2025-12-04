@@ -336,12 +336,12 @@ impl TypeChecker<'_> {
             }
             Ast::Binary {
                 lhs,
-                op_info,
+                op: op_info,
                 rhs,
                 info,
             } => self.check_binary(lhs, op_info, rhs, info)?,
             Ast::Unary {
-                op_info: op,
+                op,
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,

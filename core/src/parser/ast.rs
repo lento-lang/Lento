@@ -189,13 +189,13 @@ pub enum Ast {
     /// A binary expression is an operation with two operands.
     Binary {
         lhs: Box<Ast>,
-        op_info: OpInfo,
+        op: OpInfo,
         rhs: Box<Ast>,
         info: LineInfo,
     },
     /// A unary expression is an operation with one operand.
     Unary {
-        op_info: OpInfo,
+        op: OpInfo,
         expr: Box<Ast>,
         info: LineInfo,
     },
@@ -207,30 +207,21 @@ impl Debug for Ast {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
-            Self::LiteralType { expr } => {
-                f.debug_struct("LiteralType").field("expr", expr).finish()
-            }
             Self::Tuple { exprs, .. } => f.debug_struct("Tuple").field("exprs", exprs).finish(),
             Self::List { exprs, .. } => f.debug_struct("List").field("exprs", exprs).finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
             Self::MemberAccess { expr, field, .. } => f
-                .debug_struct("MemderAccess")
+                .debug_struct("MemberAccess")
                 .field("expr", expr)
                 .field("field", field)
                 .finish(),
             Self::Identifier { name, .. } => {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
-            Self::Assignment {
-                annotation,
-                target,
-                expr,
-                ..
-            } => f
+            Self::Assignment { target, expr, .. } => f
                 .debug_struct("Assignment")
-                .field("annotation", annotation)
                 .field("target", target)
                 .field("expr", expr)
                 .finish(),
@@ -251,14 +242,19 @@ impl Debug for Ast {
                 .field("arg", arg)
                 .finish(),
             Self::Binary {
-                lhs, op_info, rhs, ..
+                lhs,
+                op: op_info,
+                rhs,
+                ..
             } => f
                 .debug_struct("Binary")
                 .field("lhs", lhs)
                 .field("op_info", op_info)
                 .field("rhs", rhs)
                 .finish(),
-            Self::Unary { op_info, expr, .. } => f
+            Self::Unary {
+                op: op_info, expr, ..
+            } => f
                 .debug_struct("Unary")
                 .field("op_info", op_info)
                 .field("expr", expr)
@@ -283,7 +279,6 @@ impl Ast {
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
             Ast::MemberAccess { info, .. } => info,
-            Ast::LiteralType { expr, .. } => expr.info(),
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall { info, .. } => info,
             Ast::Lambda { info, .. } => info,
@@ -304,7 +299,6 @@ impl Ast {
     pub fn print_expr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
-            Ast::LiteralType { expr, .. } => expr.print_expr(),
             Ast::Tuple {
                 exprs: elements, ..
             } => format!(
@@ -356,7 +350,10 @@ impl Ast {
             }
 
             Ast::Binary {
-                lhs, op_info, rhs, ..
+                lhs,
+                op: op_info,
+                rhs,
+                ..
             } => format!(
                 "({} {} {})",
                 lhs.print_expr(),
@@ -364,28 +361,16 @@ impl Ast {
                 rhs.print_expr()
             ),
             Ast::Unary {
-                op_info: op,
-                expr: operand,
-                ..
+                op, expr: operand, ..
             } => {
                 format!("({} {})", op.symbol.clone(), operand.print_expr())
             }
             Ast::Assignment {
-                annotation: ty,
                 target: lhs,
                 expr: rhs,
                 ..
             } => {
-                if let Some(ty) = ty {
-                    format!(
-                        "({} {} = {})",
-                        ty.print_expr(),
-                        lhs.print_expr(),
-                        rhs.print_expr()
-                    )
-                } else {
-                    format!("({} = {})", lhs.print_expr(), rhs.print_expr())
-                }
+                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
             }
             Ast::Block { exprs, .. } => format!(
                 "{{ {} }}",
@@ -434,43 +419,37 @@ impl PartialEq for Ast {
             (
                 Self::Binary {
                     rhs: rhs1,
-                    op_info: op1,
+                    op: op1,
                     lhs: lhs2,
                     ..
                 },
                 Self::Binary {
                     rhs: rhs2,
-                    op_info: op2,
+                    op: op2,
                     lhs: lhs1,
                     ..
                 },
             ) => rhs1 == rhs2 && op1 == op2 && lhs2 == lhs1,
             (
                 Self::Unary {
-                    op_info: l0,
-                    expr: l1,
-                    ..
+                    op: l0, expr: l1, ..
                 },
                 Self::Unary {
-                    op_info: r0,
-                    expr: r1,
-                    ..
+                    op: r0, expr: r1, ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
                 Self::Assignment {
-                    annotation: l0,
                     target: l1,
                     expr: l2,
                     ..
                 },
                 Self::Assignment {
-                    annotation: r0,
                     target: r1,
                     expr: r2,
                     ..
                 },
-            ) => l0 == r0 && l1 == r1 && l2 == r2,
+            ) => l1 == r1 && l2 == r2,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
             _ => false,
         }

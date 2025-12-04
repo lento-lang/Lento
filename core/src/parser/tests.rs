@@ -135,7 +135,10 @@ mod tests {
 
         assert!(matches!(result, Ast::Binary { .. }));
         if let Ast::Binary {
-            lhs, op_info, rhs, ..
+            lhs,
+            op: op_info,
+            rhs,
+            ..
         } = &result
         {
             assert_eq!(&op_info.symbol, "+");
@@ -239,7 +242,7 @@ mod tests {
 
         assert!(matches!(result, Ast::Binary { .. }));
         // Assert "add"
-        if let Ast::Binary { op_info, .. } = &result {
+        if let Ast::Binary { op: op_info, .. } = &result {
             assert_eq!(&op_info.symbol, "+");
         }
         if let Ast::Binary { lhs, rhs, .. } = &result {
@@ -276,16 +279,14 @@ mod tests {
 
     #[test]
     fn literal_type_identifier() {
-        let result = parse_str_one("int", Some(&stdlib()));
+        let result = parse_str_one("int", None);
         let result = result.unwrap();
-        assert!(matches!(result, Ast::LiteralType { .. }));
-        if let Ast::LiteralType { expr, .. } = &result {
-            assert!(matches!(expr, TypeAst::Identifier { .. }));
-            let TypeAst::Identifier { name, .. } = &expr else {
-                panic!("Expected identifier");
-            };
+        assert!(matches!(result, Ast::Identifier { .. }));
+        if let Ast::Identifier { name, .. } = &result {
             assert_eq!(name, "int");
-        }
+        } else {
+            panic!("Expected identifier");
+        };
     }
 
     #[test]
@@ -294,27 +295,16 @@ mod tests {
         let result = result.unwrap();
 
         assert!(matches!(result, Ast::Assignment { .. }));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = &result
-        {
+        if let Ast::Assignment { target, expr, .. } = &result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
-            assert!(annotation.to_owned().is_some());
-            assert!(matches!(
-                annotation.to_owned().unwrap(),
-                TypeAst::Identifier { .. }
-            ));
-            if let Some(annotation) = annotation {
-                assert!(matches!(annotation, TypeAst::Identifier { .. }));
-                let TypeAst::Identifier { name, .. } = &annotation else {
-                    panic!("Expected identifier");
-                };
-                assert_eq!(name, "int");
-            }
+            // if let Some(annotation) = annotation {
+            //     assert!(matches!(annotation, TypeAst::Identifier { .. }));
+            //     let TypeAst::Identifier { name, .. } = &annotation else {
+            //         panic!("Expected identifier");
+            //     };
+            //     assert_eq!(name, "int");
+            // }
         }
     }
 
@@ -663,21 +653,15 @@ mod tests {
     #[test]
     fn assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "x");
             }
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = &annotation {
-                assert_eq!(name, "int");
-            }
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = &annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(*expr, Ast::Literal { .. }));
         } else {
             panic!("Expected assignment");
@@ -687,17 +671,11 @@ mod tests {
     #[test]
     fn function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -734,14 +712,7 @@ mod tests {
     #[test]
     fn function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_none());
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -778,17 +749,11 @@ mod tests {
     #[test]
     fn function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -822,14 +787,7 @@ mod tests {
     #[test]
     fn function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_none());
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -863,21 +821,15 @@ mod tests {
     #[test]
     fn function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
             }
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(*expr, Ast::Lambda { .. }));
             if let Ast::Lambda { param, body, .. } = *expr {
                 assert!(param.ty.is_some());
@@ -910,19 +862,11 @@ mod tests {
     #[test]
     fn function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_none());
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
             }
-            assert!(annotation.is_none());
             assert!(matches!(*expr, Ast::Lambda { .. }));
             if let Ast::Lambda { param, body, .. } = *expr {
                 assert!(param.ty.is_none());
@@ -952,14 +896,7 @@ mod tests {
     #[test]
     fn function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_none());
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -1008,17 +945,11 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -1071,21 +1002,15 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
             }
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(*expr, Ast::Lambda { .. }));
             if let Ast::Lambda { param, body, .. } = *expr {
                 assert!(param.ty.is_some());
@@ -1129,17 +1054,11 @@ mod tests {
     #[test]
     fn function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result.unwrap()
-        {
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -1190,17 +1109,11 @@ mod tests {
             Some(&stdlib()),
         );
         let result = result.unwrap();
-        if let Ast::Assignment {
-            target,
-            expr,
-            annotation,
-            ..
-        } = result
-        {
-            assert!(annotation.is_some());
-            if let Some(TypeAst::Identifier { name, .. }) = annotation {
-                assert_eq!(name, "int");
-            }
+        if let Ast::Assignment { target, expr, .. } = result {
+            // assert!(annotation.is_some());
+            // if let Some(TypeAst::Identifier { name, .. }) = annotation {
+            //     assert_eq!(name, "int");
+            // }
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");

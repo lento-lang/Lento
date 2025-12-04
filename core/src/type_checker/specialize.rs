@@ -33,19 +33,19 @@ pub fn top(expr: Ast, types: &HashSet<String>, variables: Option<&HashSet<String
         // Specialize assignments to binding patterns with optional type annotations
         Ast::Binary {
             lhs,
-            op_info,
+            op: op_info,
             rhs,
             info,
         } if op_info.symbol == ASSIGNMENT_SYM => assignment(*lhs, *rhs, info, types, variables),
         Ast::Binary {
             lhs,
-            op_info,
+            op: op_info,
             rhs,
             info,
         } if op_info.symbol == MEMBER_ACCESS_SYM => member_access(*lhs, *rhs, info),
         Ast::Binary {
             lhs,
-            op_info,
+            op: op_info,
             rhs,
             info,
             ..
@@ -110,7 +110,7 @@ pub fn block_def_comma_sequence(
             let res = assignment(
                 Ast::Binary {
                     lhs: Box::new(expr.clone()),
-                    op_info,
+                    op: op_info,
                     rhs: last_expr.clone(),
                     info: info.clone(),
                 },
@@ -291,7 +291,7 @@ pub fn assignment(
     match &target {
         // `x, y = ...`, `f x, y = ...`, `f int x, bool y = ...` or `int f int x, bool y = ...` etc.
         // Potentially a function definition.
-        Ast::Binary { op_info, .. } if op_info.symbol == COMMA_SYM => definition(
+        Ast::Binary { op: op_info, .. } if op_info.symbol == COMMA_SYM => definition(
             flatten_sequence(target)
                 .into_iter()
                 .flat_map(flatten_calls)
@@ -307,7 +307,6 @@ pub fn assignment(
         // Try parse other generic binding patterns (non-typed) for assignments like:
         // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
         _ => Ok(Ast::Assignment {
-            annotation: None,
             target: binding_pattern(target)?,
             expr: Box::new(body),
             info: assignment_info,
@@ -515,7 +514,10 @@ pub fn flatten_sequence(expr: Ast) -> Vec<Ast> {
         match current {
             // Flatten sequences of expressions
             Ast::Binary {
-                lhs, op_info, rhs, ..
+                lhs,
+                op: op_info,
+                rhs,
+                ..
             } if op_info.symbol == COMMA_SYM => {
                 queue.push(*rhs);
                 queue.push(*lhs);
