@@ -1,5 +1,6 @@
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
+    parser::pattern::BindPattern,
     type_checker::types::Type,
     util::error::LineInfo,
 };
@@ -13,19 +14,25 @@ pub struct CheckedOperator {
     pub handler: Function,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckedParam {
-    pub name: String,
     pub ty: Type,
+    pub pattern: BindPattern,
 }
 
 impl CheckedParam {
-    pub fn new(name: String, ty: Type) -> CheckedParam {
-        CheckedParam { name, ty }
+    pub fn new(pattern: BindPattern, ty: Type) -> CheckedParam {
+        CheckedParam { pattern, ty }
     }
 
     pub fn from_str<S: Into<String>>(name: S, ty: Type) -> CheckedParam {
-        CheckedParam::new(name.into(), ty)
+        CheckedParam::new(
+            BindPattern::Variable {
+                name: name.into(),
+                info: LineInfo::default(),
+            },
+            ty,
+        )
     }
 }
 
@@ -43,7 +50,7 @@ pub enum CheckedAst {
         exprs: Vec<CheckedAst>,
         /// The type of the tuple, made up of the types of the elements.
         /// Each element's type is listed in the same order as the elements.
-        expr_types: Type,
+        ty: Type,
         info: LineInfo,
     },
     /// A dynamic list of elements.
@@ -85,20 +92,24 @@ pub enum CheckedAst {
         /// The argument to the function call
         arg: Box<CheckedAst>,
         /// The return type of the function call
-        return_type: Type,
+        ret_ty: Type,
         info: LineInfo,
     },
-    /// A function definition is a named function with a list of parameters and a body expression
-    FunctionDef {
+    /// A lambda expression is an anonymous function that can be passed as a value.
+    Lambda {
+        /// The parameter of the lambda function
         param: CheckedParam,
+        /// The body of the lambda function
         body: Box<CheckedAst>,
+        /// The return type of the lambda function
         return_type: Type,
+        /// The type of the lambda function, which is a function type
         ty: Type,
         info: LineInfo,
     },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
     Assignment {
-        target: CheckedBindPattern,
+        target: BindPattern,
         expr: Box<CheckedAst>,
         info: LineInfo,
     },
@@ -117,13 +128,13 @@ impl GetType for CheckedAst {
         match self {
             CheckedAst::Literal { value: v, info: _ } => v.get_type(),
             CheckedAst::LiteralType { .. } => &std_types::TYPE,
-            CheckedAst::Tuple { expr_types: ty, .. } => ty,
+            CheckedAst::Tuple { ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
             CheckedAst::FieldAccess { ty, .. } => ty,
             CheckedAst::Identifier { ty, .. } => ty,
-            CheckedAst::FunctionCall { return_type, .. } => return_type,
-            CheckedAst::FunctionDef { ty, .. } => ty,
+            CheckedAst::FunctionCall { ret_ty, .. } => ret_ty,
+            CheckedAst::Lambda { ty, .. } => ty,
             CheckedAst::Assignment { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
         }
@@ -131,13 +142,21 @@ impl GetType for CheckedAst {
 }
 
 impl CheckedAst {
-    pub fn function_def(
+    pub fn unit(info: LineInfo) -> CheckedAst {
+        CheckedAst::Tuple {
+            exprs: vec![],
+            ty: std_types::UNIT,
+            info,
+        }
+    }
+
+    pub fn lambda(
         param: CheckedParam,
         body: CheckedAst,
         return_type: Type,
         info: LineInfo,
     ) -> CheckedAst {
-        CheckedAst::FunctionDef {
+        CheckedAst::Lambda {
             ty: Type::Function(Box::new(FunctionType::new(
                 param.clone(),
                 return_type.clone(),
@@ -159,7 +178,7 @@ impl CheckedAst {
             CheckedAst::FieldAccess { info, .. } => info,
             CheckedAst::Identifier { info, .. } => info,
             CheckedAst::FunctionCall { info, .. } => info,
-            CheckedAst::FunctionDef { info, .. } => info,
+            CheckedAst::Lambda { info, .. } => info,
             CheckedAst::Assignment { info, .. } => info,
             CheckedAst::Block { info, .. } => info,
         }
@@ -171,7 +190,7 @@ impl CheckedAst {
             CheckedAst::LiteralType { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
-                expr_types: ty,
+                ty,
                 ..
             } => {
                 for element in elements {
@@ -214,14 +233,14 @@ impl CheckedAst {
             CheckedAst::FunctionCall {
                 expr: function,
                 arg,
-                return_type,
+                ret_ty: return_type,
                 ..
             } => {
                 function.specialize(judgements, changed);
                 arg.specialize(judgements, changed);
                 *return_type = return_type.specialize(judgements, changed);
             }
-            CheckedAst::FunctionDef {
+            CheckedAst::Lambda {
                 param,
                 body,
                 return_type,
@@ -254,7 +273,7 @@ impl CheckedAst {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             CheckedAst::Literal { value, info: _ } => value.pretty_print(),
             CheckedAst::LiteralType { value, info: _ } => value.pretty_print(),
@@ -264,7 +283,7 @@ impl CheckedAst {
                 "({})",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -274,7 +293,7 @@ impl CheckedAst {
                 "[{}]",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -282,7 +301,7 @@ impl CheckedAst {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -290,7 +309,7 @@ impl CheckedAst {
                 expr: record,
                 field,
                 ..
-            } => format!("({}.{})", record.print_sexpr(), field),
+            } => format!("({}.{})", record.print_expr(), field),
             CheckedAst::Identifier { name, .. } => name.clone(),
             CheckedAst::FunctionCall {
                 expr: function,
@@ -312,22 +331,27 @@ impl CheckedAst {
                 }
                 format!(
                     "{}({})",
-                    function.print_sexpr(),
+                    function.print_expr(),
                     args.iter()
-                        .map(|a| a.print_sexpr())
+                        .map(|a| a.print_expr())
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
             }
-            CheckedAst::FunctionDef { param, body, .. } => {
-                format!("({} {} -> {})", param.ty, param.name, body.print_sexpr())
+            CheckedAst::Lambda { param, body, .. } => {
+                format!(
+                    "({} {} -> {})",
+                    param.ty,
+                    param.pattern.print_expr(),
+                    body.print_expr()
+                )
             }
             CheckedAst::Assignment {
                 target: lhs,
                 expr: rhs,
                 ..
             } => {
-                format!("({} = {})", lhs.print_sexpr(), rhs.print_sexpr())
+                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
             }
             CheckedAst::Block {
                 exprs: expressions, ..
@@ -335,7 +359,7 @@ impl CheckedAst {
                 "{{ {} }}",
                 expressions
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
@@ -392,8 +416,12 @@ impl CheckedAst {
             } => {
                 format!("{}({})", function.pretty_print(), arg.pretty_print())
             }
-            Self::FunctionDef { param, body, .. } => {
-                format!("{} -> {}", param.name, body.pretty_print())
+            Self::Lambda { param, body, .. } => {
+                format!(
+                    "{} -> {}",
+                    param.pattern.pretty_print(),
+                    body.pretty_print()
+                )
             }
             Self::Assignment {
                 target: lhs,
@@ -417,182 +445,6 @@ impl CheckedAst {
                 result.push('}');
                 result
             }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum CheckedBindPattern {
-    /// A variable binding pattern.
-    Variable {
-        /// The name of the variable.
-        name: String,
-        /// The type annotation for the variable.
-        info: LineInfo,
-    },
-    /// A tuple binding pattern.
-    Tuple {
-        /// The elements of the tuple.
-        elements: Vec<CheckedBindPattern>,
-        info: LineInfo,
-    },
-    /// A record binding pattern.
-    Record {
-        /// The fields of the record.
-        fields: Vec<(RecordKey, CheckedBindPattern)>,
-        info: LineInfo,
-    },
-    /// A list binding pattern.
-    List {
-        /// The elements of the list.
-        elements: Vec<CheckedBindPattern>,
-        info: LineInfo,
-    },
-    /// A wildcard pattern that matches any value.
-    Wildcard,
-    /// A literal pattern that matches a specific value.
-    Literal {
-        /// The value to match.
-        value: Value,
-        info: LineInfo,
-    },
-    /// A rest of a collection pattern that matches the rest of a list.
-    Rest {
-        /// The name of the variable to bind the rest of the list.
-        name: String,
-        /// The type annotation for the variable.
-        info: LineInfo,
-    },
-}
-
-impl CheckedBindPattern {
-    pub fn info(&self) -> &LineInfo {
-        match self {
-            CheckedBindPattern::Variable { info, .. } => info,
-            CheckedBindPattern::Tuple { info, .. } => info,
-            CheckedBindPattern::Record { info, .. } => info,
-            CheckedBindPattern::List { info, .. } => info,
-            CheckedBindPattern::Wildcard => panic!("Wildcard pattern has no line info"),
-            CheckedBindPattern::Literal { info, .. } => info,
-            CheckedBindPattern::Rest { info, .. } => info,
-        }
-    }
-
-    pub fn specialize(&mut self, _judgements: &TypeJudgements, _changed: &mut bool) {
-        match self {
-            CheckedBindPattern::Variable { name: _, info: _ } => (),
-            CheckedBindPattern::Tuple { elements, info: _ } => {
-                for element in elements {
-                    element.specialize(_judgements, _changed);
-                }
-            }
-            CheckedBindPattern::Record { fields, info: _ } => {
-                for (_, element) in fields {
-                    element.specialize(_judgements, _changed);
-                }
-            }
-            CheckedBindPattern::List { elements, info: _ } => {
-                for element in elements {
-                    element.specialize(_judgements, _changed);
-                }
-            }
-            CheckedBindPattern::Wildcard => (),
-            CheckedBindPattern::Literal { value: _, info: _ } => (),
-            CheckedBindPattern::Rest { name: _, info: _ } => (),
-        }
-    }
-
-    pub fn print_sexpr(&self) -> String {
-        match self {
-            CheckedBindPattern::Variable { name, .. } => name.clone(),
-            CheckedBindPattern::Tuple { elements, .. } => format!(
-                "({})",
-                elements
-                    .iter()
-                    .map(|e| e.print_sexpr())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            CheckedBindPattern::Record { fields, .. } => format!(
-                "{{ {} }}",
-                fields
-                    .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            CheckedBindPattern::List { elements, .. } => format!(
-                "[{}]",
-                elements
-                    .iter()
-                    .map(|e| e.print_sexpr())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            CheckedBindPattern::Wildcard => "_".to_string(),
-            CheckedBindPattern::Literal { value, .. } => value.pretty_print(),
-            CheckedBindPattern::Rest { name, .. } => format!("...{}", name),
-        }
-    }
-
-    pub fn pretty_print(&self) -> String {
-        match self {
-            CheckedBindPattern::Variable { name, .. } => name.clone(),
-            CheckedBindPattern::Tuple { elements, .. } => {
-                let mut result = "(".to_string();
-                for (i, v) in elements.iter().enumerate() {
-                    result.push_str(&v.pretty_print());
-                    if i < elements.len() - 1 {
-                        result.push_str(", ");
-                    }
-                }
-                result.push(')');
-                result
-            }
-            CheckedBindPattern::Record { fields, .. } => {
-                let mut result = "{ ".to_string();
-                for (i, (k, v)) in fields.iter().enumerate() {
-                    result.push_str(&format!("{}: {}", k, v.pretty_print()));
-                    if i < fields.len() - 1 {
-                        result.push_str(", ");
-                    }
-                }
-                result.push_str(" }");
-                result
-            }
-            CheckedBindPattern::List { elements, .. } => {
-                let mut result = "[".to_string();
-                for (i, v) in elements.iter().enumerate() {
-                    result.push_str(&v.pretty_print());
-                    if i < elements.len() - 1 {
-                        result.push_str(", ");
-                    }
-                }
-                result.push(']');
-                result
-            }
-            CheckedBindPattern::Wildcard => "_".to_string(),
-            CheckedBindPattern::Literal { value, .. } => value.pretty_print(),
-            CheckedBindPattern::Rest { name, .. } => format!("...{}", name),
-        }
-    }
-
-    pub fn is_wildcard(&self) -> bool {
-        matches!(self, CheckedBindPattern::Wildcard)
-    }
-}
-
-impl PartialEq for CheckedBindPattern {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Variable { name: l0, .. }, Self::Variable { name: r0, .. }) => l0 == r0,
-            (Self::Tuple { elements: l0, .. }, Self::Tuple { elements: r0, .. }) => l0 == r0,
-            (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
-            (Self::List { elements: l0, .. }, Self::List { elements: r0, .. }) => l0 == r0,
-            (Self::Wildcard, Self::Wildcard) => true,
-            (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
-            (Self::Rest { name: l0, .. }, Self::Rest { name: r0, .. }) => l0 == r0,
-            _ => false,
         }
     }
 }

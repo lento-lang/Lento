@@ -69,7 +69,7 @@ trait NumberMethods {
 }
 
 /// An unsigned integer number type that can be represented in 1, 8, 16, 32, 64, 128 bits or arbitrary precision.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnsignedInteger {
     UInt1(u8), // Bit
     UInt8(u8), // Byte
@@ -525,7 +525,7 @@ impl ArithmeticOperations<UnsignedInteger> for UnsignedInteger {
 }
 
 /// A signed integer number type that can be represented in 8, 16, 32, 64, 128 bits or arbitrary precision.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SignedInteger {
     Int8(i8),
     Int16(i16),

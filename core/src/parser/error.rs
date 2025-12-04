@@ -38,12 +38,8 @@ impl BaseErrorExt for ParseError {
 /// Errors for when an operator is inserted into the parser
 /// operator table.
 #[derive(Debug, PartialEq)]
-pub enum ParseOperatorError {
-    PositionForSymbolExists,
-    /// Any operator cannot override an existing static operator.
-    CannotOverrideStaticOperator,
-    /// When adding a static operator, no other operator with the same symbol can exist.
-    NonStaticOperatorExists,
+pub enum ParserOpError {
+    AlreadyExists,
 }
 
 /// Errors for when a type is inserted into the parser

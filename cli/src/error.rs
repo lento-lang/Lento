@@ -54,14 +54,6 @@ pub fn print_error_report(kind: &str, base: BaseError, content: &str, source: &I
         report = report.with_help(hint);
     }
 
-    if base.info.end.eof {
-        report = report.with_label(
-            Label::new((source.name(), base.info.end.index..base.info.end.index))
-                .with_message(format!("end of {}", source.human_readable()))
-                .with_color(ariadne::Color::Yellow),
-        );
-    }
-
     report
         .finish()
         .print((source.name(), Source::from(content)))

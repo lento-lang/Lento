@@ -1,52 +1,121 @@
+use std::fmt::Debug;
+
 use crate::{
     interpreter::value::{RecordKey, Value},
     util::error::LineInfo,
 };
 
-use super::op::OperatorInfo;
+use super::{op::OpInfo, pattern::BindPattern};
 
 #[derive(Debug, Clone)]
 pub struct ParamAst {
-    pub name: String,
     pub ty: Option<TypeAst>,
-    pub info: LineInfo,
+    pub pattern: BindPattern,
 }
 
 impl PartialEq for ParamAst {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.ty == other.ty
+        self.pattern == other.pattern && self.ty == other.ty
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TypeAst {
     Identifier {
-        /// The name of the type.
         name: String,
-        /// The line information for the type.
         info: LineInfo,
     },
     Constructor {
         expr: Box<TypeAst>,
-        arg: Box<TypeAst>,
+        params: Vec<TypeAst>,
+        info: LineInfo,
+    },
+    Record {
+        fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
     },
 }
 
-impl TypeAst {
-    pub fn print_sexpr(&self) -> String {
+impl Debug for TypeAst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor { expr, arg, .. } => {
-                format!("({} {})", expr.print_sexpr(), arg.print_sexpr())
+            Self::Identifier { name, .. } => {
+                f.debug_struct("Identifier").field("name", name).finish()
+            }
+            Self::Constructor { expr, params, .. } => f
+                .debug_struct("Constructor")
+                .field("expr", expr)
+                .field("params", params)
+                .finish(),
+            Self::Record { fields, .. } => {
+                f.debug_struct("Record").field("fields", fields).finish()
             }
         }
     }
+}
 
+impl TypeAst {
     pub fn info(&self) -> &LineInfo {
         match self {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Constructor { info, .. } => info,
+            TypeAst::Record { info, .. } => info,
+        }
+    }
+
+    pub fn print_expr(&self) -> String {
+        match self {
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
+                format!(
+                    "{}({})",
+                    expr.print_expr(),
+                    args.iter()
+                        .map(|a| a.print_expr())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        match self {
+            TypeAst::Identifier { name, .. } => name.clone(),
+            TypeAst::Constructor {
+                expr, params: args, ..
+            } => {
+                format!(
+                    "{}({})",
+                    expr.pretty_print(),
+                    args.iter()
+                        .map(|a| a.pretty_print())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            TypeAst::Record { fields, .. } => {
+                format!(
+                    "{{ {} }}",
+                    fields
+                        .iter()
+                        .map(|(k, v)| format!("{}: {}", k, v.pretty_print()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
         }
     }
 }
@@ -57,31 +126,26 @@ impl PartialEq for TypeAst {
             (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
             (
                 Self::Constructor {
-                    expr: l_expr,
-                    arg: l_arg,
+                    expr: l0,
+                    params: l1,
                     info: _,
                 },
                 Self::Constructor {
-                    expr: r_expr,
-                    arg: r_arg,
+                    expr: r0,
+                    params: r1,
                     info: _,
                 },
-            ) => l_expr == r_expr && l_arg == r_arg,
+            ) => l0 == r0 && l1 == r1,
             _ => false,
         }
     }
 }
 
 /// **Expressions** in the program source code.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Ast {
     /// A literal is a constant value that is directly represented in the source code.
     Literal { value: Value, info: LineInfo },
-    /// A literal type expression
-    LiteralType {
-        /// The literal type value.
-        expr: TypeAst,
-    },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple { exprs: Vec<Ast>, info: LineInfo },
     /// A dynamic list of elements.
@@ -91,8 +155,8 @@ pub enum Ast {
         fields: Vec<(RecordKey, Ast)>,
         info: LineInfo,
     },
-    /// A field access expression is a reference to a field in a record.
-    FieldAccess {
+    /// A member field access expression is a reference to a field in a record.
+    MemberAccess {
         /// The record expression to access the field from.
         expr: Box<Ast>,
         /// The field key to access.
@@ -103,16 +167,14 @@ pub enum Ast {
     Identifier { name: String, info: LineInfo },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
     Assignment {
-        /// Any type annotation for the target expression.
-        annotation: Option<TypeAst>,
         /// The target expression to assign to.
-        target: Box<Ast>,
+        target: BindPattern,
         /// The source expression to assign to the target.
         expr: Box<Ast>,
         info: LineInfo,
     },
-    /// A function definition is a named function with a list of parameters and a body expression.
-    FunctionDef {
+    /// A lambda expression is an anonymous function that can be passed as a value.
+    Lambda {
         param: ParamAst,
         body: Box<Ast>,
         return_type: Option<TypeAst>,
@@ -124,22 +186,16 @@ pub enum Ast {
         arg: Box<Ast>,
         info: LineInfo,
     },
-    /// An accumulate expression is an operation with multiple operands.
-    Accumulate {
-        op_info: OperatorInfo,
-        exprs: Vec<Ast>,
-        info: LineInfo,
-    },
     /// A binary expression is an operation with two operands.
     Binary {
         lhs: Box<Ast>,
-        op_info: OperatorInfo,
+        op: OpInfo,
         rhs: Box<Ast>,
         info: LineInfo,
     },
     /// A unary expression is an operation with one operand.
     Unary {
-        op_info: OperatorInfo,
+        op: OpInfo,
         expr: Box<Ast>,
         info: LineInfo,
     },
@@ -147,19 +203,85 @@ pub enum Ast {
     Block { exprs: Vec<Ast>, info: LineInfo },
 }
 
+impl Debug for Ast {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
+            Self::Tuple { exprs, .. } => f.debug_struct("Tuple").field("exprs", exprs).finish(),
+            Self::List { exprs, .. } => f.debug_struct("List").field("exprs", exprs).finish(),
+            Self::Record { fields, .. } => {
+                f.debug_struct("Record").field("fields", fields).finish()
+            }
+            Self::MemberAccess { expr, field, .. } => f
+                .debug_struct("MemberAccess")
+                .field("expr", expr)
+                .field("field", field)
+                .finish(),
+            Self::Identifier { name, .. } => {
+                f.debug_struct("Identifier").field("name", name).finish()
+            }
+            Self::Assignment { target, expr, .. } => f
+                .debug_struct("Assignment")
+                .field("target", target)
+                .field("expr", expr)
+                .finish(),
+            Self::Lambda {
+                param,
+                body,
+                return_type,
+                ..
+            } => f
+                .debug_struct("Lambda")
+                .field("param", param)
+                .field("body", body)
+                .field("return_type", return_type)
+                .finish(),
+            Self::FunctionCall { expr, arg, .. } => f
+                .debug_struct("FunctionCall")
+                .field("expr", expr)
+                .field("arg", arg)
+                .finish(),
+            Self::Binary {
+                lhs,
+                op: op_info,
+                rhs,
+                ..
+            } => f
+                .debug_struct("Binary")
+                .field("lhs", lhs)
+                .field("op_info", op_info)
+                .field("rhs", rhs)
+                .finish(),
+            Self::Unary {
+                op: op_info, expr, ..
+            } => f
+                .debug_struct("Unary")
+                .field("op_info", op_info)
+                .field("expr", expr)
+                .finish(),
+            Self::Block { exprs, .. } => f.debug_struct("Block").field("exprs", exprs).finish(),
+        }
+    }
+}
+
 impl Ast {
+    pub fn unit(info: LineInfo) -> Self {
+        Ast::Tuple {
+            exprs: vec![],
+            info,
+        }
+    }
+
     pub fn info(&self) -> &LineInfo {
         match self {
             Ast::Literal { info, .. } => info,
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
             Ast::Record { info, .. } => info,
-            Ast::FieldAccess { info, .. } => info,
-            Ast::LiteralType { expr, .. } => expr.info(),
+            Ast::MemberAccess { info, .. } => info,
             Ast::Identifier { info, .. } => info,
             Ast::FunctionCall { info, .. } => info,
-            Ast::FunctionDef { info, .. } => info,
-            Ast::Accumulate { info, .. } => info,
+            Ast::Lambda { info, .. } => info,
             Ast::Binary { info, .. } => info,
             Ast::Unary { info, .. } => info,
             Ast::Assignment { info, .. } => info,
@@ -174,17 +296,16 @@ impl Ast {
         }
     }
 
-    pub fn print_sexpr(&self) -> String {
+    pub fn print_expr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
-            Ast::LiteralType { expr, .. } => expr.print_sexpr(),
             Ast::Tuple {
                 exprs: elements, ..
             } => format!(
                 "({})",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -194,7 +315,7 @@ impl Ast {
                 "[{}]",
                 elements
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
@@ -202,85 +323,62 @@ impl Ast {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.print_sexpr()))
+                    .map(|(k, v)| format!("{}: {}", k, v.print_expr()))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Ast::FieldAccess { expr, field, .. } => format!("({}.{})", expr.print_sexpr(), field),
+            Ast::MemberAccess { expr, field, .. } => format!("({}.{})", expr.print_expr(), field),
             Ast::Identifier { name, .. } => name.clone(),
             Ast::FunctionCall { expr, arg, info: _ } => {
-                format!("{}({})", expr.print_sexpr(), arg.print_sexpr())
+                format!("({} {})", expr.print_expr(), arg.print_expr())
             }
-            Ast::FunctionDef {
+            Ast::Lambda {
                 param: params,
                 body,
                 ..
             } => {
                 if let Some(ty) = &params.ty {
                     format!(
-                        "({} {} -> {})",
-                        params.name,
-                        ty.print_sexpr(),
-                        body.print_sexpr()
+                        "({} {} => {})",
+                        ty.print_expr(),
+                        params.pattern.print_expr(),
+                        body.print_expr()
                     )
                 } else {
-                    format!("(unknown {} -> {})", params.name, body.print_sexpr())
+                    format!("({} => {})", params.pattern.print_expr(), body.print_expr())
                 }
             }
-            Ast::Accumulate {
-                op_info: op,
-                exprs: operands,
-                ..
-            } => {
-                format!(
-                    "({} {})",
-                    op.symbol.clone(),
-                    operands
-                        .iter()
-                        .map(|e| e.print_sexpr())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
+
             Ast::Binary {
-                lhs, op_info, rhs, ..
+                lhs,
+                op: op_info,
+                rhs,
+                ..
             } => format!(
                 "({} {} {})",
+                lhs.print_expr(),
                 op_info.symbol.clone(),
-                lhs.print_sexpr(),
-                rhs.print_sexpr()
+                rhs.print_expr()
             ),
             Ast::Unary {
-                op_info: op,
-                expr: operand,
-                ..
+                op, expr: operand, ..
             } => {
-                format!("({} {})", op.symbol.clone(), operand.print_sexpr())
+                format!("({} {})", op.symbol.clone(), operand.print_expr())
             }
             Ast::Assignment {
-                annotation: ty,
                 target: lhs,
                 expr: rhs,
                 ..
             } => {
-                if let Some(ty) = ty {
-                    format!(
-                        "(= {} {} {})",
-                        ty.print_sexpr(),
-                        lhs.print_sexpr(),
-                        rhs.print_sexpr()
-                    )
-                } else {
-                    format!("(= {} {})", lhs.print_sexpr(), rhs.print_sexpr())
-                }
+                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
             }
             Ast::Block { exprs, .. } => format!(
-                "({})",
+                "{{ {} }}",
                 exprs
                     .iter()
-                    .map(|e| e.print_sexpr())
+                    .map(|e| e.print_expr())
                     .collect::<Vec<String>>()
-                    .join(" ")
+                    .join("; ")
             ),
         }
     }
@@ -305,13 +403,13 @@ impl PartialEq for Ast {
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::FunctionDef {
+                Self::Lambda {
                     param: l_param,
                     body: l_body,
                     return_type: l_return_type,
                     ..
                 },
-                Self::FunctionDef {
+                Self::Lambda {
                     param: r_param,
                     body: r_body,
                     return_type: r_return_type,
@@ -319,57 +417,39 @@ impl PartialEq for Ast {
                 },
             ) => l_param == r_param && l_body == r_body && l_return_type == r_return_type,
             (
-                Self::Accumulate {
-                    op_info: l0,
-                    exprs: l1,
-                    ..
-                },
-                Self::Accumulate {
-                    op_info: r0,
-                    exprs: r1,
-                    ..
-                },
-            ) => l0 == r0 && l1 == r1,
-            (
                 Self::Binary {
                     rhs: rhs1,
-                    op_info: op1,
+                    op: op1,
                     lhs: lhs2,
                     ..
                 },
                 Self::Binary {
                     rhs: rhs2,
-                    op_info: op2,
+                    op: op2,
                     lhs: lhs1,
                     ..
                 },
             ) => rhs1 == rhs2 && op1 == op2 && lhs2 == lhs1,
             (
                 Self::Unary {
-                    op_info: l0,
-                    expr: l1,
-                    ..
+                    op: l0, expr: l1, ..
                 },
                 Self::Unary {
-                    op_info: r0,
-                    expr: r1,
-                    ..
+                    op: r0, expr: r1, ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
                 Self::Assignment {
-                    annotation: l0,
                     target: l1,
                     expr: l2,
                     ..
                 },
                 Self::Assignment {
-                    annotation: r0,
                     target: r1,
                     expr: r2,
                     ..
                 },
-            ) => l0 == r0 && l1 == r1 && l2 == r2,
+            ) => l1 == r1 && l2 == r2,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
             _ => false,
         }

@@ -4,14 +4,27 @@ mod tests {
 
     use crate::{
         interpreter::value::Value,
-        parser::parser::from_string,
-        stdlib::init::stdlib,
+        parser::{parser::from_string, pattern::BindPattern},
+        stdlib::init::{stdlib, Initializer},
         type_checker::{
             checked_ast::CheckedAst,
-            checker::TypeChecker,
+            checker::{TypeChecker, TypeCheckerResult, TypeErrorVariant},
             types::{std_types, Type, TypeTrait},
         },
     };
+
+    fn check_str_one(input: &str, init: Option<&Initializer>) -> TypeCheckerResult<CheckedAst> {
+        let mut parser = from_string(input.to_string());
+        let mut checker = TypeChecker::default();
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+            init.init_type_checker(&mut checker);
+        }
+        match parser.parse_one() {
+            Ok(ast) => checker.check_expr(&ast),
+            Err(err) => Err(TypeErrorVariant::ParseError(err)),
+        }
+    }
 
     #[test]
     fn types() {
@@ -52,5 +65,64 @@ mod tests {
         assert!(!outer.subtype(&inner).success);
         assert!(std_types::CHAR.subtype(&outer).success);
         assert!(std_types::BOOL.subtype(&outer).success);
+    }
+
+    #[test]
+    fn invalid_function() {
+        let result = check_str_one("() 1", Some(&stdlib()));
+        dbg!("{:?}", &result);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn function_def_with_return_type_single_no_parens_block() {
+        let result = check_str_one("int f int x { x + 5 }", Some(&stdlib())).unwrap();
+        if let CheckedAst::Assignment { target, expr, .. } = result {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "f");
+            }
+            assert!(matches!(*expr, CheckedAst::Lambda { .. }));
+            if let CheckedAst::Lambda { param, body, .. } = *expr {
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "x");
+                }
+                assert!(matches!(*body, CheckedAst::Block { .. }));
+            }
+        } else {
+            panic!(
+                "Expected function definition with return type and no parens: {:?}",
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn function_def_with_return_type_many_no_parens_block() {
+        let result = check_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
+        if let CheckedAst::Assignment { target, expr, .. } = result {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = target {
+                assert_eq!(name, "add");
+            }
+            assert!(matches!(*expr, CheckedAst::Lambda { .. }));
+            if let CheckedAst::Lambda { param, body, .. } = *expr {
+                if let BindPattern::Variable { name, .. } = &param.pattern {
+                    assert_eq!(name, "y");
+                }
+                assert!(matches!(*body, CheckedAst::Lambda { .. }));
+                if let CheckedAst::Lambda { param, body, .. } = *body {
+                    if let BindPattern::Variable { name, .. } = &param.pattern {
+                        assert_eq!(name, "x");
+                    }
+                    assert!(matches!(*body, CheckedAst::Block { .. }));
+                }
+            }
+        } else {
+            panic!(
+                "Expected function definition with return type and no parens: {:?}",
+                result
+            );
+        }
     }
 }

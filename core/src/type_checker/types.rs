@@ -21,14 +21,14 @@ pub trait GetType {
 
 pub type TypeJudgements = HashMap<Str, Type>;
 
-pub struct TypeResult {
+pub struct TypeJudgeResult {
     pub success: bool,
     pub judgements: TypeJudgements,
 }
 
-impl TypeResult {
+impl TypeJudgeResult {
     pub fn success() -> Self {
-        TypeResult {
+        TypeJudgeResult {
             success: true,
             judgements: HashMap::new(),
         }
@@ -37,14 +37,14 @@ impl TypeResult {
     pub fn judge(self, name: Str, ty: Type) -> Self {
         let mut judgements = self.judgements;
         judgements.insert(name, ty);
-        TypeResult {
+        TypeJudgeResult {
             success: self.success,
             judgements,
         }
     }
 
     pub fn fail() -> Self {
-        TypeResult {
+        TypeJudgeResult {
             success: false,
             judgements: HashMap::new(),
         }
@@ -52,7 +52,7 @@ impl TypeResult {
 
     pub fn and(self, other: Self) -> Self {
         if self.success && other.success {
-            TypeResult {
+            TypeJudgeResult {
                 success: true,
                 judgements: self
                     .judgements
@@ -61,7 +61,7 @@ impl TypeResult {
                     .collect(),
             }
         } else {
-            TypeResult::fail()
+            TypeJudgeResult::fail()
         }
     }
 
@@ -91,12 +91,12 @@ impl TypeResult {
     }
 }
 
-impl From<bool> for TypeResult {
+impl From<bool> for TypeJudgeResult {
     fn from(success: bool) -> Self {
         if success {
-            TypeResult::success()
+            TypeJudgeResult::success()
         } else {
-            TypeResult::fail()
+            TypeJudgeResult::fail()
         }
     }
 }
@@ -106,7 +106,7 @@ pub trait TypeTrait {
     /// Check if the type is equal to the other type.
     /// Two types are equal if they are the same type.
     /// The equality relation is reflexive, symmetric, and transitive.
-    fn equals(&self, other: &Self) -> TypeResult {
+    fn equals(&self, other: &Self) -> TypeJudgeResult {
         self.subtype(other).and(other.subtype(self))
     }
 
@@ -130,12 +130,12 @@ pub trait TypeTrait {
     ///
     /// **Covariant return type**: The return type of the subtype function (int) is a subtype of the return type of the supertype function (number). \
     /// **Contravariant parameter type** : The parameter type of the supertype function (number) is a supertype of the parameter type of the subtype function (int).
-    fn subtype(&self, other: &Self) -> TypeResult;
+    fn subtype(&self, other: &Self) -> TypeJudgeResult;
     fn simplify(self) -> Self;
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FunctionType {
     pub param: CheckedParam,
     pub return_type: Type,
@@ -165,7 +165,7 @@ impl FunctionType {
 }
 
 impl TypeTrait for FunctionType {
-    fn subtype(&self, other: &Self) -> TypeResult {
+    fn subtype(&self, other: &Self) -> TypeJudgeResult {
         self.param
             .ty
             .subtype(&other.param.ty)
@@ -175,7 +175,7 @@ impl TypeTrait for FunctionType {
     fn simplify(self) -> Self {
         FunctionType {
             param: CheckedParam {
-                name: self.param.name,
+                pattern: self.param.pattern,
                 ty: self.param.ty.simplify(),
             },
             return_type: self.return_type.simplify(),
@@ -185,7 +185,7 @@ impl TypeTrait for FunctionType {
     fn specialize(&self, judgements: &TypeJudgements, changed: &mut bool) -> Self {
         FunctionType {
             param: CheckedParam {
-                name: self.param.name.clone(),
+                pattern: self.param.pattern.clone(),
                 ty: self.param.ty.specialize(judgements, changed),
             },
             return_type: self.return_type.specialize(judgements, changed),
@@ -193,7 +193,7 @@ impl TypeTrait for FunctionType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Type {
     /// A literal type (name).
     /// Examples such as `int`, `float`, `string`, `char`, `bool`, `unit`, `any`.
@@ -229,6 +229,12 @@ pub enum Type {
     /// The first argument is the type of the elements in the list.
     /// A list type is a product type.
     List(Box<Type>),
+
+    /// A map type.
+    /// The first argument is the type of the keys in the map.
+    /// The second argument is the type of the values in the map.
+    /// A map type is a product type.
+    Map(Box<Type>, Box<Type>),
 
     /// A record type.
     /// The first argument is the list of fields in the record.
@@ -277,7 +283,7 @@ pub enum Type {
 }
 
 impl TypeTrait for Type {
-    fn subtype(&self, other: &Type) -> TypeResult {
+    fn subtype(&self, other: &Type) -> TypeJudgeResult {
         let subtype = match (self, other) {
             (Type::Literal(Str::Str("any")), _) => true.into(), // TODO: Find a way to use `std_types::ANY` here.
             (_, Type::Literal(Str::Str("any"))) => true.into(),
@@ -285,18 +291,18 @@ impl TypeTrait for Type {
             (Type::Alias(_, ty1), _) => ty1.subtype(other),
             (_, Type::Alias(_, ty)) => self.subtype(ty),
             (Type::Variable(s1), Type::Variable(s2)) => (s1 == s2).into(),
-            (Type::Variable(v), t) => TypeResult::success().judge(v.clone(), t.clone()),
-            (t, Type::Variable(v)) => TypeResult::success().judge(v.clone(), t.clone()),
+            (Type::Variable(v), t) => TypeJudgeResult::success().judge(v.clone(), t.clone()),
+            (t, Type::Variable(v)) => TypeJudgeResult::success().judge(v.clone(), t.clone()),
             (Type::Constructor(s1, params1, _), Type::Constructor(s2, params2, _)) => {
                 if s1 == s2 && params1.len() == params2.len() {
                     params1
                         .iter()
                         .zip(params2)
-                        .fold(TypeResult::success(), |acc, (p1, p2)| {
+                        .fold(TypeJudgeResult::success(), |acc, (p1, p2)| {
                             acc.and(p1.subtype(p2))
                         })
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::Function(ty1), Type::Function(ty2)) => {
@@ -308,42 +314,42 @@ impl TypeTrait for Type {
                     types1
                         .iter()
                         .zip(types2)
-                        .fold(TypeResult::success(), |acc, (t1, t2)| {
+                        .fold(TypeJudgeResult::success(), |acc, (t1, t2)| {
                             acc.and(t1.subtype(t2))
                         })
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::List(t1), Type::List(t2)) => t1.subtype(t2),
             (Type::Record(fields1), Type::Record(fields2)) => {
                 if fields1.len() == fields2.len() {
                     fields1.iter().zip(fields2).fold(
-                        TypeResult::success(),
+                        TypeJudgeResult::success(),
                         |acc, ((n1, t1), (n2, t2))| {
                             if n1 == n2 {
                                 acc.and(t1.subtype(t2))
                             } else {
-                                TypeResult::fail()
+                                TypeJudgeResult::fail()
                             }
                         },
                     )
                 } else {
-                    TypeResult::fail()
+                    TypeJudgeResult::fail()
                 }
             }
             (Type::Sum(types1), Type::Sum(types2)) => {
-                types1.iter().fold(TypeResult::success(), |acc, t1| {
+                types1.iter().fold(TypeJudgeResult::success(), |acc, t1| {
                     acc.and(
                         types2
                             .iter()
-                            .fold(TypeResult::fail(), |acc, t2| acc.or(t1.subtype(t2))),
+                            .fold(TypeJudgeResult::fail(), |acc, t2| acc.or(t1.subtype(t2))),
                     )
                 })
             }
             (_, Type::Sum(types)) => types
                 .iter()
-                .fold(TypeResult::fail(), |acc, t| acc.or(self.subtype(t))),
+                .fold(TypeJudgeResult::fail(), |acc, t| acc.or(self.subtype(t))),
             (Type::Variant(parent1, name1, fields1), Type::Variant(parent2, name2, fields2)) => {
                 parent1
                     .equals(parent2)
@@ -353,7 +359,7 @@ impl TypeTrait for Type {
                         fields1
                             .iter()
                             .zip(fields2)
-                            .fold(TypeResult::success(), |acc, (t1, t2)| {
+                            .fold(TypeJudgeResult::success(), |acc, (t1, t2)| {
                                 acc.and(t1.subtype(t2))
                             }),
                     )
@@ -379,6 +385,9 @@ impl TypeTrait for Type {
             }
             Type::Tuple(types) => Type::Tuple(types.into_iter().map(Type::simplify).collect()),
             Type::List(t) => Type::List(Box::new(t.simplify())),
+            Type::Map(key, value) => {
+                Type::Map(Box::new(key.simplify()), Box::new(value.simplify()))
+            }
             Type::Record(fields) => {
                 Type::Record(fields.into_iter().map(|(n, t)| (n, t.simplify())).collect())
             }
@@ -429,6 +438,10 @@ impl TypeTrait for Type {
                     .collect(),
             ),
             Type::List(t) => Type::List(Box::new(t.specialize(judgements, changed))),
+            Type::Map(key, value) => Type::Map(
+                Box::new(key.specialize(judgements, changed)),
+                Box::new(value.specialize(judgements, changed)),
+            ),
             Type::Record(fields) => Type::Record(
                 fields
                     .iter()
@@ -474,6 +487,7 @@ impl Display for Type {
                 write!(f, ")")
             }
             Type::List(t) => write!(f, "[{}]", t),
+            Type::Map(key, value) => write!(f, "Map({}, {})", key, value),
             Type::Record(fields) => {
                 write!(f, "{{")?;
                 for (i, (name, t)) in fields.iter().enumerate() {
@@ -544,6 +558,9 @@ impl Type {
                 }
             }
             Type::List(t) => format!("[{}]", t.pretty_print()),
+            Type::Map(key, value) => {
+                format!("Map({}, {})", key.pretty_print(), value.pretty_print())
+            }
             Type::Record(fields) => {
                 let mut result = String::new();
                 result.push('{');
@@ -626,6 +643,13 @@ impl Type {
                 }
             }
             Type::List(t) => format!("[{}]", t.pretty_print_color()),
+            Type::Map(key, value) => {
+                format!(
+                    "Map({}, {})",
+                    key.pretty_print_color(),
+                    value.pretty_print_color()
+                )
+            }
             Type::Record(fields) => {
                 let mut result = String::new();
                 result.push_str(&"{".dark_gray().to_string());
@@ -809,5 +833,34 @@ pub mod std_types {
     #[allow(non_snake_case)]
     pub fn NUM() -> Type {
         Type::Alias(Str::Str("num"), Box::new(Type::Sum(vec![INT(), FLOAT()])))
+    }
+
+    //---------------------------------------------------------------------------------------//
+    //                                  Container types                                      //
+    //---------------------------------------------------------------------------------------//
+
+    /// A list type.
+    /// The type of a list of elements of type `T`.
+    #[allow(non_snake_case)]
+    pub fn LIST() -> Type {
+        Type::Constructor(
+            Str::Str("List"),
+            vec![Type::Variable(Str::Str("T"))],
+            Box::new(Type::List(Box::new(Type::Variable(Str::Str("T"))))),
+        )
+    }
+
+    /// A map type.
+    /// The type of a map with keys of type `K` and values of type `V`.
+    #[allow(non_snake_case)]
+    pub fn MAP() -> Type {
+        Type::Constructor(
+            Str::Str("Map"),
+            vec![Type::Variable(Str::Str("K")), Type::Variable(Str::Str("V"))],
+            Box::new(Type::Map(
+                Box::new(Type::Variable(Str::Str("K"))),
+                Box::new(Type::Variable(Str::Str("V"))),
+            )),
+        )
     }
 }

@@ -49,14 +49,8 @@ pub fn add() -> Function {
             }
         },
         vec![
-            CheckedParam {
-                name: "lhs".to_string(),
-                ty: std_types::NUM(),
-            },
-            CheckedParam {
-                name: "rhs".to_string(),
-                ty: std_types::NUM(),
-            },
+            CheckedParam::from_str("lhs", std_types::NUM()),
+            CheckedParam::from_str("rhs", std_types::NUM()),
         ],
         std_types::NUM(),
     )
@@ -96,14 +90,8 @@ pub fn sub() -> Function {
             }
         },
         vec![
-            CheckedParam {
-                name: "lhs".to_string(),
-                ty: std_types::NUM(),
-            },
-            CheckedParam {
-                name: "rhs".to_string(),
-                ty: std_types::NUM(),
-            },
+            CheckedParam::from_str("lhs", std_types::NUM()),
+            CheckedParam::from_str("rhs", std_types::NUM()),
         ],
         std_types::NUM(),
     )
@@ -143,14 +131,8 @@ pub fn mul() -> Function {
             }
         },
         vec![
-            CheckedParam {
-                name: "lhs".to_string(),
-                ty: std_types::NUM(),
-            },
-            CheckedParam {
-                name: "rhs".to_string(),
-                ty: std_types::NUM(),
-            },
+            CheckedParam::from_str("lhs", std_types::NUM()),
+            CheckedParam::from_str("rhs", std_types::NUM()),
         ],
         std_types::NUM(),
     )
@@ -192,14 +174,8 @@ pub fn div() -> Function {
             }
         },
         vec![
-            CheckedParam {
-                name: "lhs".to_string(),
-                ty: std_types::NUM(),
-            },
-            CheckedParam {
-                name: "rhs".to_string(),
-                ty: std_types::NUM(),
-            },
+            CheckedParam::from_str("lhs", std_types::NUM()),
+            CheckedParam::from_str("rhs", std_types::NUM()),
         ],
         std_types::NUM(),
     )

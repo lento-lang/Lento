@@ -1,4 +1,7 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+};
 
 use colorful::Colorful;
 
@@ -7,16 +10,15 @@ use crate::{
     parser::{
         ast::{Ast, ParamAst, TypeAst},
         error::ParseError,
-        op::{
-            Operator, OperatorHandler, OperatorInfo, RuntimeOperatorHandler, StaticOperatorAst,
-            StaticOperatorHandler,
-        },
+        op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
+        pattern::BindPattern,
     },
+    type_checker,
     util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 
 use super::{
-    checked_ast::{CheckedAst, CheckedBindPattern, CheckedParam},
+    checked_ast::{CheckedAst, CheckedParam},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 
@@ -61,7 +63,7 @@ pub enum TypeErrorVariant {
     /// A type error occurred during type checking
     TypeError(TypeError),
     /// A parse error occurred during type checking,
-    /// this should only happen iff a static operator handler is used.
+    /// this should only happen if a static operator handler is used.
     ParseError(ParseError),
 }
 
@@ -78,7 +80,7 @@ impl From<ParseError> for TypeErrorVariant {
 }
 
 // The result of the type checker stage
-pub type TypeResult<T> = Result<T, TypeErrorVariant>;
+pub type TypeCheckerResult<T> = Result<T, TypeErrorVariant>;
 
 /// The type environment contains all the types and functions in the program.
 /// It is used to check the types of expressions and functions.
@@ -121,8 +123,8 @@ impl TypeEnv {
     }
 
     // Add a variable to the type environment
-    pub fn add_variable(&mut self, name: &str, ty: Type) {
-        self.variables.insert(name.to_string(), ty);
+    pub fn add_variable(&mut self, name: String, ty: Type) {
+        self.variables.insert(name, ty);
     }
 
     // Add an operator to the type environment
@@ -162,6 +164,10 @@ impl TypeChecker<'_> {
 
     pub fn add_function(&mut self, name: &str, variation: FunctionType) {
         self.env.add_function(name.to_string(), variation);
+    }
+
+    pub fn add_variable(&mut self, name: String, ty: Type) {
+        self.env.add_variable(name, ty);
     }
 
     fn new_scope(&self) -> TypeChecker {
@@ -224,10 +230,10 @@ impl TypeChecker<'_> {
         operators
     }
 
-    fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOperatorHandler> {
-        let operator: Option<&StaticOperatorHandler> = self.env.operators.iter().find_map(|o| {
+    fn lookup_static_operator(&self, symbol: &str) -> Option<&StaticOpHandler> {
+        let operator: Option<&StaticOpHandler> = self.env.operators.iter().find_map(|o| {
             if o.info.symbol == symbol {
-                if let OperatorHandler::Static(op) = &o.handler {
+                if let OpHandler::Static(op) = &o.handler {
                     return Some(op);
                 }
             }
@@ -240,14 +246,14 @@ impl TypeChecker<'_> {
 
     // ================== Scanning functions ==================
 
-    fn scan_forward(&mut self, expr: &[Ast]) -> TypeResult<()> {
+    fn scan_forward(&mut self, expr: &[Ast]) -> TypeCheckerResult<()> {
         for e in expr {
             if let Ast::Assignment { target, expr, .. } = e {
-                let Ast::Identifier { name, .. } = target.borrow() else {
+                let BindPattern::Variable { name, .. } = target else {
                     continue;
                 };
                 match expr.borrow() {
-                    Ast::FunctionDef {
+                    Ast::Lambda {
                         param,
                         body,
                         return_type,
@@ -255,7 +261,7 @@ impl TypeChecker<'_> {
                     } => {
                         let checked_param = self.check_param(param)?;
                         let checked =
-                            self.check_function(checked_param.clone(), body, return_type, info)?;
+                            self.check_lambda(checked_param.clone(), body, return_type, info)?;
                         let variation = FunctionType {
                             param: checked_param,
                             return_type: checked.get_type().clone(),
@@ -269,7 +275,8 @@ impl TypeChecker<'_> {
                     }
                     _ => {
                         let checked = self.check_expr(expr)?;
-                        self.env.add_variable(name, checked.get_type().clone());
+                        self.env
+                            .add_variable(name.clone(), checked.get_type().clone());
                     }
                 }
             }
@@ -279,7 +286,7 @@ impl TypeChecker<'_> {
 
     // ================== Type checking functions ==================
 
-    pub fn check_top_exprs(&mut self, exprs: &[Ast]) -> TypeResult<Vec<CheckedAst>> {
+    pub fn check_top_exprs(&mut self, exprs: &[Ast]) -> TypeCheckerResult<Vec<CheckedAst>> {
         self.scan_forward(exprs)?;
         let mut res = vec![];
         for e in exprs {
@@ -289,60 +296,61 @@ impl TypeChecker<'_> {
     }
 
     /// Check the type of an expression
-    pub fn check_expr(&mut self, expr: &Ast) -> TypeResult<CheckedAst> {
+    pub fn check_expr(&mut self, expr: &Ast) -> TypeCheckerResult<CheckedAst> {
         Ok(match expr {
-            Ast::FunctionDef {
+            Ast::Lambda {
                 param,
                 body,
                 return_type,
                 info,
-            } => self.check_function(self.check_param(param)?, body, return_type, info)?,
+            } => self.check_lambda(self.check_param(param)?, body, return_type, info)?,
             Ast::Literal { value, info } => CheckedAst::Literal {
                 value: value.clone(),
                 info: info.clone(),
             },
-            Ast::LiteralType { expr } => self.check_literal_type(expr)?,
+            // Ast::LiteralType { expr } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
-            Ast::FieldAccess {
+            Ast::MemberAccess {
                 expr: record,
                 field,
                 info,
             } => self.check_field_access(record, field, info)?,
             Ast::Identifier { name, info } => self.check_identifier(name, info)?,
-            Ast::FunctionCall {
-                expr,
-                arg: args,
-                info,
-            } => self.check_call(expr, args, info)?,
-            Ast::Accumulate {
-                op_info: op,
-                exprs: operands,
-                info,
-            } => self.check_accumulate(op, operands, info)?,
+            Ast::FunctionCall { expr, arg, info } => {
+                // Try to specialize it
+                let types = self.env.types.keys().cloned().collect::<HashSet<_>>();
+                let variables = self.env.variables.keys().cloned().collect::<HashSet<_>>();
+                if let Some(res) = type_checker::specialize::block_def_call(
+                    expr,
+                    arg,
+                    info,
+                    &types,
+                    Some(&variables),
+                ) {
+                    self.check_expr(&res?)?
+                } else {
+                    self.check_call(expr, arg, info)?
+                }
+            }
             Ast::Binary {
                 lhs,
-                op_info,
+                op: op_info,
                 rhs,
                 info,
             } => self.check_binary(lhs, op_info, rhs, info)?,
             Ast::Unary {
-                op_info: op,
+                op,
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,
-            Ast::Assignment {
-                annotation,
-                target,
-                expr,
-                info,
-            } => self.check_assignment(annotation, target, expr, info)?,
+            Ast::Assignment { target, expr, info } => self.check_assignment(target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
         })
     }
 
-    fn check_type_expr(&self, expr: &TypeAst) -> TypeResult<Type> {
+    fn check_type_expr(&self, expr: &TypeAst) -> TypeCheckerResult<Type> {
         Ok(match expr {
             TypeAst::Identifier { name, info } => {
                 self.lookup_type(name).cloned().ok_or_else(|| {
@@ -350,29 +358,39 @@ impl TypeChecker<'_> {
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?
             }
-            TypeAst::Constructor { expr, arg, info } => {
+            TypeAst::Constructor { expr, params, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
                     return Err(TypeError::new(
                         format!(
                             "Cannot use constructor on non-constructor type {}",
-                            expr.print_sexpr()
+                            expr.print_expr()
                         ),
                         info.clone(),
                     )
                     .with_label(
-                        format!("This is not a constructable type {}", expr.print_sexpr()),
+                        format!("This is not a constructable type {}", expr.print_expr()),
                         expr_info.clone(),
                     )
                     .into());
                 };
-                let arg = self.check_type_expr(arg)?;
-                Type::Constructor(base_name, vec![arg], base_type)
+                let args = params
+                    .iter()
+                    .map(|a| self.check_type_expr(a))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Constructor(base_name, args, base_type)
+            }
+            TypeAst::Record { fields, .. } => {
+                let fields = fields
+                    .iter()
+                    .map(|(k, v)| Ok((k.clone(), self.check_type_expr(v)?)))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Record(fields)
             }
         })
     }
 
-    fn check_literal_type(&self, expr: &TypeAst) -> TypeResult<CheckedAst> {
+    fn check_literal_type(&self, expr: &TypeAst) -> TypeCheckerResult<CheckedAst> {
         let info = expr.info();
         let ty = self.check_type_expr(expr)?;
         Ok(CheckedAst::LiteralType {
@@ -381,35 +399,32 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_param(&self, param: &ParamAst) -> TypeResult<CheckedParam> {
+    fn check_param(&self, param: &ParamAst) -> TypeCheckerResult<CheckedParam> {
         let param_ty = if let Some(ty) = &param.ty {
             self.check_type_expr(ty)?
         } else {
-            return Err(TypeError::new(
-                format!("Missing parameter type for {}", param.name.clone().yellow()),
-                param.info.clone(),
-            )
-            .with_label(
-                "Add a type to this parameter".to_string(),
-                param.info.clone(),
-            )
-            .into());
+            std_types::ANY // TODO: Infer a more specific type
         };
         let param = CheckedParam {
-            name: param.name.clone(),
+            pattern: param.pattern.clone(),
             ty: param_ty,
         };
         Ok(param)
     }
 
-    fn check_function(
+    fn check_lambda(
         &mut self,
         param: CheckedParam,
         body: &Ast,
         return_type: &Option<TypeAst>,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
-        let checked_body = self.new_scope().check_expr(body)?;
+    ) -> TypeCheckerResult<CheckedAst> {
+        let mut body_scope = self.new_scope();
+        let pattern_names = binding_typed_names(&param.pattern, &param.ty);
+        for (name, ty) in pattern_names.into_iter() {
+            body_scope.add_variable(name, ty);
+        }
+        let checked_body = body_scope.check_expr(body)?;
         let body_type = checked_body.get_type().clone();
         let return_type = if let Some(ty) = &return_type {
             let ty = self.check_type_expr(ty)?;
@@ -434,7 +449,7 @@ impl TypeChecker<'_> {
             body_type
         };
 
-        Ok(CheckedAst::function_def(
+        Ok(CheckedAst::lambda(
             param,
             checked_body,
             return_type,
@@ -442,13 +457,9 @@ impl TypeChecker<'_> {
         ))
     }
 
-    fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         if elems.is_empty() {
-            return Ok(CheckedAst::Tuple {
-                exprs: vec![],
-                expr_types: std_types::UNIT,
-                info: info.clone(),
-            });
+            return Ok(CheckedAst::unit(info.clone()));
         }
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
@@ -458,12 +469,12 @@ impl TypeChecker<'_> {
             .collect::<Vec<_>>();
         Ok(CheckedAst::Tuple {
             exprs: checked_elems,
-            expr_types: Type::Tuple(elem_types),
+            ty: Type::Tuple(elem_types),
             info: info.clone(),
         })
     }
 
-    fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_list(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         let checked_elems = self.check_top_exprs(elems)?;
         let elem_types = checked_elems
             .iter()
@@ -494,11 +505,11 @@ impl TypeChecker<'_> {
         &mut self,
         pairs: &[(RecordKey, Ast)],
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let pairs = pairs
             .iter()
             .map(|(k, v)| Ok((k.clone(), self.check_expr(v)?)))
-            .collect::<TypeResult<Vec<_>>>()?;
+            .collect::<TypeCheckerResult<Vec<_>>>()?;
         let record_type = Type::Record(
             pairs
                 .iter()
@@ -517,7 +528,7 @@ impl TypeChecker<'_> {
         record: &Ast,
         field: &RecordKey,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let record = self.check_expr(record)?;
         let record_ty = record.get_type();
         if let Type::Record(fields) = record_ty {
@@ -567,7 +578,7 @@ impl TypeChecker<'_> {
         }
     }
 
-    fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_identifier(&self, name: &str, info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         Ok(match self.lookup_identifier(name) {
             Some(IdentifierType::Variable(ty)) => CheckedAst::Identifier {
                 name: name.to_string(),
@@ -610,80 +621,65 @@ impl TypeChecker<'_> {
 
     fn check_assignment(
         &mut self,
-        annotation: &Option<TypeAst>,
-        target: &Ast,
+        target: &BindPattern,
         expr: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
-        let target_name = match target {
-            Ast::Identifier { name, .. } => name,
-            _ => {
-                return Err(TypeError::new(
-                    "Assignment expects an identifier".to_string(),
-                    info.clone(),
-                )
-                .with_label(
-                    "This is not an identifier".to_string(),
-                    target.info().clone(),
-                )
-                .with_hint("Did you mean to assign to an identifier?".to_string())
-                .into());
+    ) -> TypeCheckerResult<CheckedAst> {
+        match target {
+            BindPattern::Variable { name, .. } => {
+                if self.lookup_local_identifier(name).is_some() {
+                    return Err(TypeError::new(
+                        format!("{} is already defined", name.clone().yellow()),
+                        info.clone(),
+                    )
+                    .with_label(
+                        "This already exists in the current scope".to_string(),
+                        target.info().clone(),
+                    )
+                    .into());
+                }
+                let expr = self.check_expr(expr)?;
+                let ty = expr.get_type().clone();
+                // if let Some(ty_ast) = annotation {
+                //     let expected_ty = self.check_type_expr(ty_ast)?;
+                //     if !ty.subtype(&expected_ty).success {
+                //         return Err(TypeError::new(
+                //             format!(
+                //                 "Cannot assign {} to {}",
+                //                 ty.pretty_print_color(),
+                //                 expected_ty.pretty_print_color()
+                //             ),
+                //             info.clone(),
+                //         )
+                //         .with_label(
+                //             format!("This is of type {}", ty.pretty_print_color()),
+                //             expr.info().clone(),
+                //         )
+                //         .with_label(
+                //             format!("This expected type {}", expected_ty.pretty_print_color()),
+                //             info.clone(),
+                //         )
+                //         .into());
+                //     }
+                // }
+                self.add_variable(name.clone(), ty.clone());
+                Ok(CheckedAst::Assignment {
+                    target: BindPattern::Variable {
+                        name: name.clone(),
+                        info: info.clone(),
+                    },
+                    expr: Box::new(expr),
+                    info: info.clone(),
+                })
             }
-        };
-        if let Some(existing) = self.lookup_local_identifier(target_name) {
-            let ty_name = match existing {
-                IdentifierType::Variable(_) => "Variable",
-                IdentifierType::Type(_) => "Type",
-                IdentifierType::Function(_) => "Function",
-            };
-            return Err(TypeError::new(
-                format!(
-                    "{} {} already exists",
-                    ty_name,
-                    target_name.clone().yellow()
-                ),
-                info.clone(),
-            )
-            .with_hint("Use a different name for the variable".to_string())
-            .into());
+            _ => Err(TypeErrorVariant::ParseError(ParseError::new(
+                format!("Invalid assignment target: {}", target.print_expr()),
+                target.info().clone(),
+            ))),
         }
-        let expr = self.check_expr(expr)?;
-        let body_ty = expr.get_type().clone();
-        if let Some(ann) = annotation {
-            let ann_ty = self.check_type_expr(ann)?;
-            if !body_ty.subtype(&ann_ty).success {
-                return Err(TypeError::new(
-                    format!(
-                        "{} is not a valid subtype of {}",
-                        expr.pretty_print(),
-                        ann_ty.pretty_print_color(),
-                    ),
-                    info.clone(),
-                )
-                .with_label(
-                    format!(
-                        "This should be of type {} but is {}",
-                        ann_ty.pretty_print_color(),
-                        body_ty.pretty_print_color()
-                    ),
-                    expr.info().clone(),
-                )
-                .into());
-            }
-        }
-        let assign_info = info.join(expr.info());
-        self.env.add_variable(target_name, body_ty.clone());
-        Ok(CheckedAst::Assignment {
-            target: CheckedBindPattern::Variable {
-                name: target_name.to_string(),
-                info: target.info().clone(),
-            },
-            expr: Box::new(expr),
-            info: assign_info,
-        })
     }
 
-    fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_block(&mut self, exprs: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
         let mut scope = self.new_scope();
         let exprs = scope.check_top_exprs(exprs)?;
         let ty = if let Some(expr) = exprs.last() {
@@ -698,7 +694,12 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_call(&mut self, expr: &Ast, arg: &Ast, info: &LineInfo) -> TypeResult<CheckedAst> {
+    fn check_call(
+        &mut self,
+        expr: &Ast,
+        arg: &Ast,
+        info: &LineInfo,
+    ) -> TypeCheckerResult<CheckedAst> {
         // TODO: Add support for multiple function variants
         // TODO: This job should be done in the type checker
         // TODO: so that the interpreter can just call the function
@@ -716,7 +717,7 @@ impl TypeChecker<'_> {
             if tr.success {
                 log::info!(
                     "Function call: {} : {} -> {} with argument {} : {}",
-                    expr.print_sexpr(),
+                    expr.print_expr(),
                     param.ty.pretty_print_color(),
                     ret.pretty_print_color(),
                     arg.pretty_print(),
@@ -730,7 +731,7 @@ impl TypeChecker<'_> {
                     if changed {
                         log::trace!(
                             "Specialized call: {} : {} -> {}",
-                            expr.print_sexpr(),
+                            expr.print_expr(),
                             param_ty.pretty_print_color(),
                             ret_ty.pretty_print_color()
                         );
@@ -738,7 +739,7 @@ impl TypeChecker<'_> {
                 }
 
                 Ok(CheckedAst::FunctionCall {
-                    return_type: ret.clone(),
+                    ret_ty: ret.clone(),
                     expr: Box::new(expr),
                     arg: Box::new(arg),
                     info: info.clone(),
@@ -772,84 +773,6 @@ impl TypeChecker<'_> {
         }
     }
 
-    /// Check the type of an accumulate expression.
-    /// An accumulate expression results in a function variation-specific call.
-    fn check_accumulate(
-        &mut self,
-        op_info: &OperatorInfo,
-        operands: &[Ast],
-        info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
-        let checked_operands = operands
-            .iter()
-            .map(|a| self.check_expr(a))
-            .collect::<TypeResult<Vec<_>>>()?;
-        let alternatives = self.lookup_operator(&op_info.symbol);
-        if let Some(op) = alternatives.iter().find(|op| {
-            checked_operands
-                .iter()
-                .zip(op.signature().params.iter())
-                .all(|(operand, param)| operand.get_type().subtype(&param.ty).success)
-        }) {
-            match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
-                    // Construct a function call expression
-                    let mut operands = operands.iter();
-                    let mut call = Ast::FunctionCall {
-                        expr: Box::new(Ast::Identifier {
-                            name: function_name.clone(),
-                            info: info.clone(),
-                        }),
-                        arg: Box::new(operands.next().unwrap().clone()),
-                        info: info.clone(),
-                    };
-                    for arg in operands {
-                        call = Ast::FunctionCall {
-                            expr: Box::new(call),
-                            arg: Box::new(arg.clone()),
-                            info: info.clone(),
-                        };
-                    }
-                    self.check_expr(&call)
-                }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in accumulate expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
-                    // Evaluate the handler at compile-time
-                    self.check_expr(&handler(StaticOperatorAst::Accumulate(operands.to_vec()))?)
-                }
-            }
-        } else {
-            let mut err = TypeError::new(
-                format!(
-                    "Unknown accumulate operator {}",
-                    op_info.symbol.clone().yellow()
-                ),
-                info.clone(),
-            );
-
-            if let Some(op) = alternatives.first() {
-                let params = op
-                    .signature()
-                    .params
-                    .iter()
-                    .map(|p| p.ty.pretty_print_color())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let ret = op.signature().ret.pretty_print_color();
-                err = err.with_hint(format!(
-                    "Did you mean {} {} {}?",
-                    params,
-                    op_info.symbol.clone().yellow(),
-                    ret
-                ));
-            }
-
-            Err(err.into())
-        }
-    }
-
     /// Check the type of a binary expression.
     /// A binary expression results in a function variation-specific call on the form:
     ///
@@ -866,16 +789,13 @@ impl TypeChecker<'_> {
     fn check_binary(
         &mut self,
         lhs: &Ast,
-        op_info: &OperatorInfo,
+        op_info: &OpInfo,
         rhs: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         if let Some(op) = self.lookup_static_operator(&op_info.symbol) {
             log::trace!("Found static operator: {}", op_info.symbol);
-            return self.check_expr(&(op.handler)(StaticOperatorAst::Infix(
-                lhs.clone(),
-                rhs.clone(),
-            ))?);
+            return self.check_expr(&(op.handler)(StaticOpAst::Infix(lhs.clone(), rhs.clone()))?);
         }
         let checked_lhs = self.check_expr(lhs)?;
         let checked_rhs = self.check_expr(rhs)?;
@@ -915,7 +835,7 @@ impl TypeChecker<'_> {
                 op.signature().ret.pretty_print_color()
             );
             match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
+                OpHandler::Runtime(RuntimeOpHandler { function_name, .. }) => {
                     let function_ty = self
                         .lookup_function(function_name)
                         .ok_or_else(|| {
@@ -969,32 +889,27 @@ impl TypeChecker<'_> {
                                 info: info.clone(),
                             }),
                             arg: Box::new(checked_lhs),
-                            return_type: inner_ret.clone(),
+                            ret_ty: inner_ret.clone(),
                             info: info.clone(),
                         }),
                         arg: Box::new(checked_rhs),
-                        return_type: outer_ret.clone(),
+                        ret_ty: outer_ret.clone(),
                         info: info.clone(),
                     };
 
                     log::trace!(
                         "Binary: {} : {}",
-                        result.print_sexpr(),
+                        result.print_expr(),
                         result.get_type().pretty_print_color()
                     );
 
                     return Ok(result);
                 }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in binary expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
+                OpHandler::Static(StaticOpHandler { handler, .. }) => {
                     log::trace!("Static operator: {}", op_info.symbol);
                     // Evaluate the handler at compile-time
-                    return self.check_expr(&handler(StaticOperatorAst::Infix(
-                        lhs.clone(),
-                        rhs.clone(),
-                    ))?);
+                    return self
+                        .check_expr(&handler(StaticOpAst::Infix(lhs.clone(), rhs.clone()))?);
                 }
             }
         }
@@ -1035,10 +950,10 @@ impl TypeChecker<'_> {
 
     fn check_unary(
         &mut self,
-        op_info: &OperatorInfo,
+        op_info: &OpInfo,
         operand: &Ast,
         info: &LineInfo,
-    ) -> TypeResult<CheckedAst> {
+    ) -> TypeCheckerResult<CheckedAst> {
         let checked_operand = self.check_expr(operand)?;
         let operand_type = checked_operand.get_type();
         let mut closest_match = None;
@@ -1048,7 +963,7 @@ impl TypeChecker<'_> {
                 continue;
             }
             match &op.handler {
-                OperatorHandler::Runtime(RuntimeOperatorHandler { function_name, .. }) => {
+                OpHandler::Runtime(RuntimeOpHandler { function_name, .. }) => {
                     let call = Ast::FunctionCall {
                         expr: Box::new(Ast::Identifier {
                             name: function_name.clone(),
@@ -1059,12 +974,9 @@ impl TypeChecker<'_> {
                     };
                     return self.check_expr(&call);
                 }
-                OperatorHandler::Parse(_) => {
-                    unreachable!("Parse operators are not supported in unary expressions");
-                }
-                OperatorHandler::Static(StaticOperatorHandler { handler, .. }) => {
+                OpHandler::Static(StaticOpHandler { handler, .. }) => {
                     // Evaluate the handler at compile-time
-                    return self.check_expr(&handler(StaticOperatorAst::Prefix(operand.clone()))?);
+                    return self.check_expr(&handler(StaticOpAst::Prefix(operand.clone()))?);
                 }
             }
         }
@@ -1083,5 +995,173 @@ impl TypeChecker<'_> {
         Err(err.into())
     }
 
+    /// TODO: Check the binding pattern against the expression type.
+    /// TODO: Create a new CheckedBindPattern that contains the type information for each variable in the pattern.
+    fn _check_binding_pattern(
+        &mut self,
+        pattern: &BindPattern,
+        expr_ty: &Type,
+        info: &LineInfo,
+    ) -> TypeCheckerResult<()> {
+        match pattern {
+            BindPattern::Variable { name, .. } => {
+                self.add_variable(name.clone(), expr_ty.clone());
+                Ok(())
+            }
+            BindPattern::Tuple { elements, .. } => {
+                if let Type::Tuple(types) = expr_ty {
+                    if elements.len() != types.len() {
+                        return Err(TypeError::new(
+                            format!(
+                                "Tuple pattern has {} elements, but the type has {} elements",
+                                elements.len(),
+                                types.len()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!("This pattern has {} elements", elements.len()),
+                            pattern.info().clone(),
+                        )
+                        .with_label(
+                            format!("This type has {} elements", types.len()),
+                            info.clone(),
+                        )
+                        .into());
+                    }
+                    for (element, ty) in elements.iter().zip(types) {
+                        self._check_binding_pattern(element, ty, info)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match tuple pattern with non-tuple type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a tuple type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::Record { fields, .. } => {
+                if let Type::Record(types) = expr_ty {
+                    for (key, pattern) in fields {
+                        if let Some((_, ty)) = types.iter().find(|(k, _)| k == key) {
+                            self._check_binding_pattern(pattern, ty, info)?;
+                        } else {
+                            return Err(TypeError::new(
+                                format!(
+                                    "Field {} not found in record type {}",
+                                    key.to_string().yellow(),
+                                    expr_ty.pretty_print_color()
+                                ),
+                                info.clone(),
+                            )
+                            .with_label(
+                                format!(
+                                    "This record does not have the field {}",
+                                    key.to_string().yellow()
+                                ),
+                                pattern.info().clone(),
+                            )
+                            .into());
+                        }
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match record pattern with non-record type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a record type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::List { elements, .. } => {
+                if let Type::List(element_type) = expr_ty {
+                    for element in elements {
+                        self._check_binding_pattern(element, element_type, info)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::new(
+                        format!(
+                            "Cannot match list pattern with non-list type {}",
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label("This is not a list type".to_string(), info.clone())
+                    .into())
+                }
+            }
+            BindPattern::Wildcard => Ok(()),
+            BindPattern::Literal { value, .. } => {
+                let value = value.as_value();
+                let value_type = value.get_type();
+                if !value_type.subtype(expr_ty).success {
+                    return Err(TypeError::new(
+                        format!(
+                            "Literal pattern of type {} does not match type {}",
+                            value_type.pretty_print_color(),
+                            expr_ty.pretty_print_color()
+                        ),
+                        info.clone(),
+                    )
+                    .with_label(
+                        format!("This is of type {}", value_type.pretty_print_color()),
+                        pattern.info().clone(),
+                    )
+                    .into());
+                }
+                Ok(())
+            }
+            BindPattern::Rest { .. } => Ok(()),
+        }
+    }
+
     // ================== Type inference functions ==================
+}
+
+/// Extract all names and their types from a binding pattern
+fn binding_typed_names(pattern: &BindPattern, ty: &Type) -> HashSet<(String, Type)> {
+    fn visit(pattern: &BindPattern, ty: &Type, names: &mut HashSet<(String, Type)>) {
+        match pattern {
+            BindPattern::Variable { name, .. } => {
+                names.insert((name.clone(), ty.clone()));
+            }
+            BindPattern::Tuple { elements, .. } => {
+                if let Type::Tuple(types) = ty {
+                    for (element, t) in elements.iter().zip(types) {
+                        visit(element, t, names);
+                    }
+                }
+            }
+            BindPattern::Record { fields, .. } => {
+                if let Type::Record(types) = ty {
+                    for (key, pattern) in fields {
+                        if let Some((_, t)) = types.iter().find(|(k, _)| k == key) {
+                            visit(pattern, t, names);
+                        }
+                    }
+                }
+            }
+            BindPattern::List { elements, .. } => {
+                if let Type::List(element_type) = ty {
+                    for element in elements {
+                        visit(element, &element_type, names);
+                    }
+                }
+            }
+            BindPattern::Wildcard | BindPattern::Rest { .. } | BindPattern::Literal { .. } => {}
+        }
+    }
+    let mut names = HashSet::new();
+    visit(pattern, ty, &mut names);
+    names
 }

@@ -1,46 +1,80 @@
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Seek};
+
+    use std::io::Read;
 
     use crate::{
         interpreter::number::{FloatingPoint, Number, UnsignedInteger},
         lexer::{
             lexer::{from_str, Lexer},
-            token::TokenKind,
+            token::Token,
         },
+        parser::parser::intrinsic_operators,
         stdlib::init::stdlib,
     };
 
-    fn assert_next_token_eq<R: Read + Seek>(lexer: &mut Lexer<R>, token: TokenKind) {
-        assert_eq!(lexer.next_token().unwrap().token, token);
+    fn init<R: Read>(lexer: &mut Lexer<R>) {
+        intrinsic_operators()
+            .iter()
+            .for_each(|op| lexer.add_operator(op.symbol.clone()));
+        stdlib().init_lexer(lexer);
     }
 
     #[test]
     fn function() {
         let mut lexer = from_str("add a b = a + b");
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("add".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Op("=".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Op("+".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::Identifier("add".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator("=".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator("+".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn assign() {
-        let mut lexer = from_str("x = 1;");
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("x".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Op("=".to_string()));
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::Number(Number::UnsignedInteger(UnsignedInteger::UInt1(1))),
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::SemiColon);
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        let mut lexer = from_str("x = 1 + 2;");
+        init(&mut lexer);
+
+        let token = Token::Identifier("x".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator("=".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Number(Number::UnsignedInteger(UnsignedInteger::UInt1(1)));
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator("+".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(2)));
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::SemiColon;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
@@ -49,173 +83,267 @@ mod tests {
         let equals = "==".to_string();
         let assignment = "=".to_string();
         let strict_equals = "===".to_string();
-        lexer.operators.insert(equals.clone());
-        lexer.operators.insert(strict_equals.clone());
-        lexer.operators.insert(assignment.clone());
+        lexer.add_operator(equals.clone());
+        lexer.add_operator(strict_equals.clone());
+        lexer.add_operator(assignment.clone());
         // ==
-        assert_next_token_eq(&mut lexer, TokenKind::Op(equals));
-        // =
-        assert_next_token_eq(&mut lexer, TokenKind::Op(assignment.clone()));
-        // ===
-        assert_next_token_eq(&mut lexer, TokenKind::Op(strict_equals.clone()));
-        // ====
-        assert_next_token_eq(&mut lexer, TokenKind::Op(strict_equals));
-        assert_next_token_eq(&mut lexer, TokenKind::Op(assignment));
 
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        let token = Token::Operator(equals);
+        assert_eq!(lexer.next_token().unwrap().token, token);
+        // =
+
+        let token = Token::Operator(assignment.clone());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+        // ===
+
+        let token = Token::Operator(strict_equals.clone());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+        // ====
+
+        let token = Token::Operator(strict_equals);
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator(assignment);
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn string() {
         let mut lexer = from_str(r#""Hello, World!""#);
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::String("Hello, World!".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::String("Hello, World!".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn string_escape() {
         let mut lexer = from_str(r#""Hello, \"World\"!""#);
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::String("Hello, \\\"World\\\"!".to_string()),
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::String("Hello, \\\"World\\\"!".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn char() {
         let mut lexer = from_str(r#"'a'"#);
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Char('a'));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::Char('a');
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn char_escape() {
         let mut lexer = from_str(r#"'\\'"#);
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Char('\\'));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::Char('\\');
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn float() {
         let mut lexer = from_str("123.456");
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::Number(Number::FloatingPoint(FloatingPoint::Float32(123.456))),
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Number(Number::FloatingPoint(FloatingPoint::Float32(123.456)));
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn integer() {
         let mut lexer = from_str("123");
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(123))),
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(123)));
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn identifier() {
         let mut lexer = from_str("abc_123");
         stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("abc_123".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Identifier("abc_123".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn keywords() {
         let mut lexer = from_str("true false");
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(&mut lexer, TokenKind::Boolean(true));
-        assert_next_token_eq(&mut lexer, TokenKind::Boolean(false));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::Boolean(true);
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Boolean(false);
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn comment() {
         let mut lexer = from_str("// This is a comment");
-        stdlib().init_lexer(&mut lexer);
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::Comment(" This is a comment".to_string()),
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Comment(" This is a comment".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn commas() {
         let mut lexer = from_str("a, b, c");
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Comma);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Comma);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("c".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        init(&mut lexer);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator(",".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator(",".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("c".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn colon() {
         let mut lexer = from_str("a: b");
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Colon);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Colon;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn parens() {
         let mut lexer = from_str("(a)");
-        assert_next_token_eq(
-            &mut lexer,
-            TokenKind::LeftParen {
-                is_function_call: false,
-            },
-        );
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::RightParen);
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::LeftParen {
+            is_function_call: false,
+        };
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::RightParen;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn braces() {
         let mut lexer = from_str("{a}");
-        assert_next_token_eq(&mut lexer, TokenKind::LeftBrace);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::RightBrace);
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::LeftBrace;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::RightBrace;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn brackets() {
         let mut lexer = from_str("[a]");
-        assert_next_token_eq(&mut lexer, TokenKind::LeftBracket);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::RightBracket);
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::LeftBracket;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::RightBracket;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn operators() {
         let mut lexer = from_str("a + b");
-        lexer.operators.insert("+".to_string());
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Op("+".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+        lexer.add_operator("+".to_string());
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Operator("+".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 
     #[test]
     fn semicolon() {
         let mut lexer = from_str("a; b");
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("a".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::SemiColon);
-        assert_next_token_eq(&mut lexer, TokenKind::Identifier("b".to_string()));
-        assert_next_token_eq(&mut lexer, TokenKind::EndOfFile);
+
+        let token = Token::Identifier("a".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::SemiColon;
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::Identifier("b".to_string());
+        assert_eq!(lexer.next_token().unwrap().token, token);
+
+        let token = Token::EndOfFile;
+        assert_eq!(lexer.next_token().unwrap().token, token);
     }
 }

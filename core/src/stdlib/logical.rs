@@ -20,14 +20,8 @@ pub fn eq() -> Function {
             Ok(Value::Boolean(values[0] == values[1]))
         },
         vec![
-            CheckedParam {
-                name: "lhs".to_string(),
-                ty: std_types::ANY,
-            },
-            CheckedParam {
-                name: "rhs".to_string(),
-                ty: std_types::ANY,
-            },
+            CheckedParam::from_str("lhs", std_types::ANY),
+            CheckedParam::from_str("rhs", std_types::ANY),
         ],
         std_types::BOOL,
     )

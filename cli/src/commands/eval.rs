@@ -57,6 +57,14 @@ pub fn eval_all<R: Read>(
             if asts.is_empty() {
                 return false;
             }
+            log::debug!(
+                "Expressions ({}):\n\t{}",
+                asts.len(),
+                asts.iter()
+                    .map(|ast| ast.print_expr())
+                    .collect::<Vec<_>>()
+                    .join("\n\t")
+            );
             'exprs: for (i, ast) in asts.iter().enumerate() {
                 let checked_ast = match checker.check_expr(ast) {
                     Ok(ast) => ast,
