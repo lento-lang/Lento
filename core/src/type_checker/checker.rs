@@ -1,25 +1,22 @@
-use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
+use super::{
+    checked_ast::{CheckedAst, CheckedParam, ParamAst, TypeAst},
+    types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
-
-use colorful::Colorful;
-
 use crate::{
     interpreter::value::{RecordKey, Value},
     parser::{
-        ast::{Ast, ParamAst, TypeAst},
+        ast::Ast,
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
         pattern::BindPattern,
     },
-    type_checker,
+    type_checker::{self, specialize},
     util::error::{BaseError, BaseErrorExt, LineInfo},
 };
-
-use super::{
-    checked_ast::{CheckedAst, CheckedParam},
-    types::{std_types, FunctionType, GetType, Type, TypeTrait},
+use colorful::Colorful;
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
 };
 
 /// A type error is an error that occurs during type checking.
@@ -253,12 +250,7 @@ impl TypeChecker<'_> {
                     continue;
                 };
                 match expr.borrow() {
-                    Ast::Lambda {
-                        param,
-                        body,
-                        return_type,
-                        info,
-                    } => {
+                    Ast::Lambda { param, body, info } => {
                         let checked_param = self.check_param(param)?;
                         let checked =
                             self.check_lambda(checked_param.clone(), body, return_type, info)?;
@@ -298,13 +290,10 @@ impl TypeChecker<'_> {
     /// Check the type of an expression
     pub fn check_expr(&mut self, expr: &Ast) -> TypeCheckerResult<CheckedAst> {
         Ok(match expr {
-            Ast::Lambda {
-                param,
-                body,
-                return_type,
-                info,
-            } => self.check_lambda(self.check_param(param)?, body, return_type, info)?,
-            Ast::Literal { value, info } => CheckedAst::Literal {
+            Ast::Lambda { param, body, info } => {
+                self.check_lambda(self.check_param(param)?, body, info)?
+            }
+            Ast::Literal { value, info } => CheckedAst::LiteralValue {
                 value: value.clone(),
                 info: info.clone(),
             },
@@ -322,13 +311,9 @@ impl TypeChecker<'_> {
                 // Try to specialize it
                 let types = self.env.types.keys().cloned().collect::<HashSet<_>>();
                 let variables = self.env.variables.keys().cloned().collect::<HashSet<_>>();
-                if let Some(res) = type_checker::specialize::block_def_call(
-                    expr,
-                    arg,
-                    info,
-                    &types,
-                    Some(&variables),
-                ) {
+                if let Some(res) =
+                    specialize::block_def_call(expr, arg, info, &types, Some(&variables))
+                {
                     self.check_expr(&res?)?
                 } else {
                     self.check_call(expr, arg, info)?
@@ -394,7 +379,7 @@ impl TypeChecker<'_> {
         let info = expr.info();
         let ty = self.check_type_expr(expr)?;
         Ok(CheckedAst::LiteralType {
-            value: ty,
+            ty,
             info: info.clone(),
         })
     }
@@ -412,11 +397,50 @@ impl TypeChecker<'_> {
         Ok(param)
     }
 
+    /// Check an explicitly typed expression, e.g., `int x`, `List int y` or `(int, string) z`.
+    /// Returns an optional type expression and the remaining expression to be checked.
+    fn check_explicitly_typed_expr(
+        &mut self,
+        expr: &Ast,
+    ) -> TypeCheckerResult<(Option<Type>, Ast)> {
+        match expr {
+            Ast::Identifier { name, info } => {
+                if let Some(ty) = self.lookup_type(name) {
+                    // This is a type annotation
+                    Ok((
+                        Some(ty.clone()),
+                        Ast::Identifier {
+                            name: name.clone(),
+                            info: info.clone(),
+                        },
+                    ))
+                } else {
+                    // This is a normal identifier
+                    Ok((None, expr.clone()))
+                }
+            }
+            Ast::Constructor {
+                expr: type_expr,
+                params,
+                info,
+            } => {
+                let ty = self.check_type_expr(expr)?;
+                Ok((
+                    Some(ty),
+                    Ast::Identifier {
+                        name: type_expr.print_expr(),
+                        info: info.clone(),
+                    },
+                ))
+            }
+            _ => Ok((None, expr.clone())),
+        }
+    }
+
     fn check_lambda(
         &mut self,
         param: CheckedParam,
         body: &Ast,
-        return_type: &Option<TypeAst>,
         info: &LineInfo,
     ) -> TypeCheckerResult<CheckedAst> {
         let mut body_scope = self.new_scope();
@@ -426,28 +450,29 @@ impl TypeChecker<'_> {
         }
         let checked_body = body_scope.check_expr(body)?;
         let body_type = checked_body.get_type().clone();
-        let return_type = if let Some(ty) = &return_type {
-            let ty = self.check_type_expr(ty)?;
-            if !ty.subtype(&body_type).success {
-                return Err(TypeError::new(
-                    format!(
-                        "Function body type does not match the return type. Expected {}, found {}",
-                        ty.pretty_print_color(),
-                        body_type.pretty_print_color()
-                    ),
-                    info.clone(),
-                )
-                .with_label(
-                    format!("This is not of type {}", ty.pretty_print_color()),
-                    body.last_info().clone(),
-                )
-                .into());
-            }
-            ty
-        } else {
-            // Infer the return type from the body
-            body_type
-        };
+        // let return_type = if let Some(ty) = &return_type {
+        //     let ty = self.check_type_expr(ty)?;
+        //     if !ty.subtype(&body_type).success {
+        //         return Err(TypeError::new(
+        //             format!(
+        //                 "Function body type does not match the return type. Expected {}, found {}",
+        //                 ty.pretty_print_color(),
+        //                 body_type.pretty_print_color()
+        //             ),
+        //             info.clone(),
+        //         )
+        //         .with_label(
+        //             format!("This is not of type {}", ty.pretty_print_color()),
+        //             body.last_info().clone(),
+        //         )
+        //         .into());
+        //     }
+        //     ty
+        // } else {
+        //     // Infer the return type from the body
+        //     body_type
+        // };
+        let return_type = body_type;
 
         Ok(CheckedAst::lambda(
             param,
@@ -585,7 +610,7 @@ impl TypeChecker<'_> {
                 ty: ty.clone(),
                 info: info.clone(),
             },
-            Some(IdentifierType::Type(ty)) => CheckedAst::Literal {
+            Some(IdentifierType::Type(ty)) => CheckedAst::LiteralValue {
                 value: Value::Type(ty.clone()),
                 info: info.clone(),
             },
