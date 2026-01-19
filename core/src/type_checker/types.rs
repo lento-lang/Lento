@@ -824,10 +824,7 @@ pub mod std_types {
     pub fn INT() -> Type {
         Type::Alias(
             Str::Str("int"),
-            Box::new(Type::Sum(vec![
-                UINT1, UINT8, INT8, UINT16, INT16, UINT32, INT32, UINT64, INT64, UINT128, INT128,
-                UINTBIG, INTBIG,
-            ])),
+            Box::new(Type::Sum(vec![INT8, INT16, INT32, INT64, INT128, INTBIG])),
         )
     }
 
@@ -840,10 +837,13 @@ pub mod std_types {
     }
 
     /// A number type.
-    /// The type of all numbers, both integers and floating-point numbers.
+    /// The type of all numbers, both integers, and floating-point numbers.
     #[allow(non_snake_case)]
     pub fn NUM() -> Type {
-        Type::Alias(Str::Str("num"), Box::new(Type::Sum(vec![INT(), FLOAT()])))
+        Type::Alias(
+            Str::Str("num"),
+            Box::new(Type::Sum(vec![UINT(), INT(), FLOAT()])),
+        )
     }
 
     //---------------------------------------------------------------------------------------//
