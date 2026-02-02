@@ -6,7 +6,7 @@
 		<!-- portable to different platforms, interoperable languages, environments, etc. -->
 		This is the standard base library of the Lento programming language.
 		The library provides useful core functionality for most applications.
-		It is built-in the <a href="https://github.com/lento-lang/Lento-Core" target="_blank">Lento <code>Core</code></a> per default.
+		It is built-in to <code>core</code></a> per default.
 	</p>
 </div>
 

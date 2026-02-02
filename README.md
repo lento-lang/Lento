@@ -54,8 +54,9 @@ Alternatively, you can download the latest version of the Lento `CLI` toolchain 
 
 Learn more about the Lento programming language by visiting the links below. A good tip is to download the CLI toolchain and start playing around with the examples yourself!
 
-* #### [Code examples](https://github.com/lento-lang/Lento-Core/tree/main/examples)
-* #### [Language Specification](docs/language_specification_v1.pdf)
+- [Get Started](https://lento-lang.org/docs/#get-started)
+- [Code examples](https://github.com/lento-lang/Lento/tree/main/examples)
+- [Language Specification](https://lento-lang.org/docs/language_specification_v1.pdf)
 
 <!--* #### [Project euler solutions](doc/PROJECT_EULER.md)-->
 
@@ -79,8 +80,7 @@ Any maybe your code will be used by thousands of developers around the world! �
 ## Development 🛠️
 
 The Lento project is divided into several repositories, each with its own purpose.
-The main repository is the [Lento-Core](https://github.com/Lento-lang/Lento-Core) repository, which contains the core language implementation.
-The [Lento-CLI](httpes://github.com/Lento-lang/Lento) repository contains the command line interface toolchain for the Lento programming language.
+The main repository is the [Lento](https://github.com/Lento-lang/Lento) repository, which contains the `core` language implementation and a `cli` command line interface toolchain for the Lento programming language.
 
 I suggest running the following command to start the REPL in test mode, which will provide you with a full backtrace in case of an error:
 
