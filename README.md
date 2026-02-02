@@ -53,7 +53,7 @@ $ curl -sSL "https://raw.githubusercontent.com/Lento-lang/Lento/main/install.sh"
 Learn more about the Lento programming language by visiting the links below.
 A good tip is to start playing around with the examples!
 
-- [Get Started!](https://lento-lang.org/docs/#get-started)
+- [Get Started!](https://lento-lang.org/docs/#getting-started)
 - [Code examples](https://github.com/lento-lang/Lento/tree/main/examples)
 - [Language Specification](https://lento-lang.org/docs/language_specification_v1.pdf)
 
