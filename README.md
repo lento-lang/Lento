@@ -14,6 +14,10 @@
     <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
 </div>
 
+> [!WARNING] Work in Progress
+> We appreciate your interest in Lento!
+> However, please be aware that Lento is currently in the early stages of development and **nowhere near production-ready**.
+
 <br/>
 <br/>
 
@@ -44,7 +48,6 @@ Alternatively, download and install the latest version from the [releases page](
 ```bash
 $ curl -sSL "https://raw.githubusercontent.com/Lento-lang/Lento/main/install.sh" | bash
 ```
-
 
 <br>
 
