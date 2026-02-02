@@ -29,8 +29,9 @@ This project provides a helpful command line interface tool for the Lento progra
 
 ## Installation 📦
 
-The Lento `CLI` toolchain is available for Windows, Linux and macOS.
-You can install the latest version using the following commands:
+The Lento toolchain is available for x86/64 Windows, Linux and macOS.
+You can install the latest version using the commands below.
+Alternatively, download and install the latest version from the [releases page](https://github.com/lento-lang/Lento/releases).
 
 ### Windows
 
@@ -44,17 +45,15 @@ You can install the latest version using the following commands:
 $ curl -sSL "https://raw.githubusercontent.com/Lento-lang/Lento/main/install.sh" | bash
 ```
 
-### Manual installation
-
-Alternatively, you can download the latest version of the Lento `CLI` toolchain from the [releases page](https://github.com/lento-lang/Lento/releases) and install it manually on your system.
 
 <br>
 
 ## Documentation 📗
 
-Learn more about the Lento programming language by visiting the links below. A good tip is to download the CLI toolchain and start playing around with the examples yourself!
+Learn more about the Lento programming language by visiting the links below.
+A good tip is to start playing around with the examples!
 
-- [Get Started](https://lento-lang.org/docs/#get-started)
+- [Get Started!](https://lento-lang.org/docs/#get-started)
 - [Code examples](https://github.com/lento-lang/Lento/tree/main/examples)
 - [Language Specification](https://lento-lang.org/docs/language_specification_v1.pdf)
 
@@ -62,39 +61,37 @@ Learn more about the Lento programming language by visiting the links below. A g
 
 ## The Team 👨‍💼
 
-Lento is being developed by a driven team that works hard to create a user environment as good as possible for all of you developers.
+Lento is developed by a driven team working hard to create as good as possible experience for all of you developers. [Meet us here! 🙋‍](https://lento-lang.org/team)
 
-> [Meet the team 🙋‍](https://lento-lang.org/team)
-
-Do you want to join the project team? Maybe even get your own testimonial on the official language website?<br/>
-Then consider contributing to the project and become a member with magical powers 🧙‍♂️! Read more in the section below.
+Do you want to help the project? Maybe even get your own testimonial on the official language website?
+Then consider contributing and become a member with magical powers 🧙‍♂️!
 
 ## Contribute 🌟
 
 Lento is truly a community effort, and we welcome contribution from hobbyists and production users, from newcomers and seasoned professionals. Come help us make the Lento experience even better!
+Start by reading the (1) **[contributing guidelines](CONTRIBUTING.md)**.
 
 **Get started** by pulling the main branch and start fiddling around.<br/>
-When you feel confident enough, take a look at the **[good first issues](https://github.com/Lento-lang/Lento/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)**.
+When you feel confident enough, take a look at the (2) **[good first issues](https://github.com/Lento-lang/Lento/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)**.
 Any maybe your code will be used by thousands of developers around the world! 💪🎉🎊
 
-## Development 🛠️
+### Development 🛠️
 
-The Lento project is divided into several repositories, each with its own purpose.
-The main repository is the [Lento](https://github.com/Lento-lang/Lento) repository, which contains the `core` language implementation and a `cli` command line interface toolchain for the Lento programming language.
+This repository contains the `core` language implementation and a `cli` command line interface toolchain for the Lento programming language.
 
-I suggest running the following command to start the REPL in test mode, which will provide you with a full backtrace in case of an error:
+Run the following command to start the REPL in debug mode, providing full error backtraces:
 
 ```powershell
 $env:RUST_BACKTRACE='full'; cargo run -q -- repl -t
 ```
 
-Also remember to always run the tests before pushing your code:
+Always verify all tests pass before pushing your code:
 
 ```bash
 cargo test
 ```
 
-Currently lots of tests are failing, so don't worry if you see a lot of red text. We are working on it! 🚧
+> Currently lots of tests are failing, so don't worry if you see a lot of red text. We are working on it! 🚧
 
 ## License 📜
 
