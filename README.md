@@ -1,9 +1,11 @@
 <h1><img src="assets/logo_white.png" height=50px/> The Lento Programming Language</h1>
 <em> A safe and efficient programming language designed for modern software development.</em>
 <br/><br/>
+<div>
 <img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square">
 <img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
 <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
+</div>
 <br/><br/>
 
 > [!WARNING]
