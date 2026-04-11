@@ -2,7 +2,7 @@ use chrono::Datelike;
 use clap::{arg, Command};
 use colorful::{Color, Colorful};
 
-use lento_core::LANG_VERSION;
+use lentoc_lib::LANG_VERSION;
 
 use crate::CLI_VERSION;
 
@@ -37,7 +37,7 @@ pub fn lento_args() -> Command {
         V = "v".yellow(),
         CLI_VERSION = CLI_VERSION.yellow(),
 		LANG_TITLE = "language".bold(),
-        LANG_VERSION = lento_core::LANG_VERSION.yellow());
+        LANG_VERSION = LANG_VERSION.yellow());
 
     let title_long = format!(
         "\n\
