@@ -3,14 +3,13 @@
     <img src="assets/logo_white.png" height=250px/>
     <h1>The Lento Programming Language</h1>
     <em>
-        A high-level functional programming language<br>
-        designed to purify the object-oriented paradigm
+        A safe and efficient programming language<br>
+        designed for modern software development.
     </em>
     <br/>
     <br/>
     <br/>
-    <img alt="No AI" src="https://img.shields.io/badge/No-AI-red?style=flat-square">
-    <img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen">
+    <img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square">
     <img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
     <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
 </div>
