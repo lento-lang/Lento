@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn hello_world_file() {
         let result = parse_str_all(
-            include_str!("../../../examples/basic/hello_world.lt"),
+            include_str!("../../../../examples/basic/hello_world.lt"),
             Some(&stdlib()),
         );
         let expected = Ast::FunctionCall {
