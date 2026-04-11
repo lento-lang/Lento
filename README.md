@@ -1,25 +1,16 @@
-<div align=center>
-    <br><br>
-    <img src="assets/logo_white.png" height=250px/>
-    <h1>The Lento Programming Language</h1>
-    <em>
-        A safe and efficient programming language<br>
-        designed for modern software development.
-    </em>
-    <br/>
-    <br/>
-    <br/>
-    <img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square">
-    <img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
-    <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
-</div>
+<h1><img src="assets/logo_white.png" height=50px/>The Lento Programming Language</h1>
+<em> A safe and efficient programming language designed for modern software development.</em>
+<br/><br/>
+<img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square">
+<img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
+<img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
+<br/><br/>
 
 > [!WARNING]
 > **Work in Progress**:
 > We appreciate your interest in Lento!
 > However, please be aware that Lento is currently in the early stages of development and **nowhere near production-ready**.
 
-<br/>
 <br/>
 
 # Welcome
