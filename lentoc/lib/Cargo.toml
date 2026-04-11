@@ -1,5 +1,5 @@
 [package]
-name = "lento_core"
+name = "lentoc_lib"
 version = "2.0.0"
 edition = "2021"
 
