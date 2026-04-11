@@ -1,7 +1,7 @@
 use ariadne::{Config, Label, Report, ReportKind, Source};
 use clap::Command;
 use colorful::Colorful;
-use lento_core::{
+use lentoc_lib::{
     interpreter::error::RuntimeError,
     lexer::lexer::InputSource,
     parser::error::ParseError,

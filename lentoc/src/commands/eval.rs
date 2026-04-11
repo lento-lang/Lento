@@ -3,7 +3,7 @@ use std::io::Read;
 
 use clap::{ArgMatches, Command};
 use colorful::Colorful;
-use lento_core::{
+use lentoc_lib::{
     interpreter::{
         env::{global_env, Environment},
         eval::eval_expr,

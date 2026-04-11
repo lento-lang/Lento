@@ -3,7 +3,7 @@ use std::{fs::File, path::Path, process::exit};
 
 use colorful::Colorful;
 
-use lento_core::{
+use lentoc_lib::{
     interpreter::{env::global_env, eval::eval_exprs, value::Value},
     lexer::lexer::InputSource,
     parser::parser::from_file,
