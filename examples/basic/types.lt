@@ -26,22 +26,22 @@ type path = Path
 // ----------------------------
 
 // Refined base types have the form `{ v: B | phi }`.
+// You can also define a bounded integer range as a refinement.
 // `v` names the value being described; `phi` is in an SMT-decidable fragment.
 type Nat = { v: int | 0 <= v }
 type NonZero = { v: int | v != 0 }
-type Percent = { v: int | 0 <= v <= 100 }
 type Age = { v: int | 0 <= v <= 200 }
+
 type Day = { v: int | 1 <= v <= 31 }
+type Month = { v: int | 1 <= v <= 12 }
+type YearR = { v: int | 0 <= v <= 9999 }
+type Date = { day: Day, month: Month, year: Year }
 
 // Value-parameterized refinements (dependent refinement aliases)
 type Bounded(n: int) = { v: int | 0 <= v < n }
 type Range(lo: int, hi: int) = { v: int | lo <= v <= hi }
 
-// Surface sugar often written using ranges
-// (e.g. `if x in 1..31 { ... }` in statements examples)
-type Month = int in 1..12
-type Year = int in 0..9999
-
+type Percent = Range(0, 100)
 
 // ----------------------------
 // Records (products)
@@ -49,10 +49,6 @@ type Year = int in 0..9999
 
 type Point2D = { x: int, y: int }
 type Person = { name: str, age: Age }
-type Date = { day: Day, month: Month, year: Year }
-
-// Tuple-style product (as used in `examples/types/ranges.lt`)
-type DateTuple = (day: Day, month: Month, year: Year)
 
 
 // ----------------------------
@@ -74,8 +70,8 @@ type Eq(A) = { eq: A -> A -> bool }
 type Ord(A) = { lt: A -> A -> bool, eq: A -> A -> bool }
 
 // Paper-style constraints (postfix quantification with class constraints)
-type Member = A -> List(A) -> bool all A: Eq
-type Show = { show: A -> str } all A: Type
+type Member(A: Eq) = A -> List(A) -> bool
+type Show(A: Type) = { show: A -> str }
 
 
 // ----------------------------
@@ -95,25 +91,16 @@ type Points = [Point2D]
 // Polymorphism (forall / all)
 // ----------------------------
 
-// Generic functions (forall in the paper)
-fn id<A>(x: A) -> A = x
+// Type signatures can quantify type variables at the end.
+fn id<a> :: a -> a
+fn id(x) = x
 
-fn compose<A, B, C>(f: B -> C, g: A -> B, x: A) -> C {
-    f(g(x))
-}
-
-fn map<A, B>(xs: [A], f: A -> B) -> [B] {
-    // Intended surface: this would desugar to a fold.
-    intrinsic.todo
-}
-
-// Postfix quantification style from the paper (as a type alias)
-type Id = A -> A all A: Type
+fn compose<a, b, c> :: (b -> c) -> (a -> b) -> a -> c
+fn compose(f, g, x) = f(g(x))
 
 // Union/sum types at the type level
 type IntOrStr = int | str
 type Json = null | bool | int | float | str | [Json] | Map(str, Json)
-
 
 // ----------------------------
 // Dependent(-ish) types
@@ -121,59 +108,29 @@ type Json = null | bool | int | float | str | [Json] | Map(str, Json)
 
 // Length-indexed vectors (dependent refinement + a measure/predicate)
 // `len` is treated as a logical measure in refinements.
-type Vec(n: int, A: Type) = { v: [A; n] | Vec.len(v) == n }
-
-// Finite set {0..n-1}
-type Fin(n: int) = { v: int | 0 <= v < n }
-
-// Matrix as a vector of rows
-type Matrix(rows: int, cols: int, A: Type) = Vec(rows, Vec(cols, A))
-
+type Length(T) = { len : T -> int }
+type Resize(T) = { resize : T -> int -> T }
+type Vec(n: int, A: Type): Length, Resize = { v: [A; n] | len(v) == n }
+type MatrixVec(rows: int, cols: int, A: Type) = Vec(rows, Vec(cols, A))
+type Matrix(rows: int, cols: int, A: Type) = { v: [[A; rows]; cols], r: int | len(v) == rows && len(v[r]) == cols && 0 <= r < rows }
 
 // ----------------------------
-// Effectful computation types
+// Type classes (dictionary passing)
 // ----------------------------
 
-// Effects are part of computation types.
-type PureInc = int -> int ! { }
-type ReadConfig = path -> bytes ! { File.read, throw IOError }
+type Eq = { eq : Self -> Self -> bool }
 
-// Effect-polymorphic function type alias
-type WithEff(A: Type, B: Type, e: Effect) = A -> B ! { e }
+// Instance selection via type application.
+// Dictionaries are values; methods are record projections.
+let (Eq int).eq = prim_int_eq
 
+// A derived instance can be a polymorphic function that requires a constraint.
+fn (Eq List T).eq<T: Eq>(xs, ys) = list_eq_by(T.eq, xs, ys)
 
-// ----------------------------
-// Modal types (Now/Later)
-// ----------------------------
+// Operator definition via infix declaration.
+// infix left 4 (==)<a> : a -> a -> bool = (Eq a).eq
 
-// Paper uses `square` / `diamond`; we keep constructor-like application.
-type Now(A: Type) = square(A)
-type Later(A: Type) = diamond(A)
-
-fn pure<A>(x: A) -> Now(A) = square(x)
-fn await<A>(x: Later(A)) -> A ! { Async.await } = intrinsic.todo
-
-
-// ----------------------------
-// Session types
-// ----------------------------
-
-// Paper-style session syntax (intended to be parsed as types)
-type Ping = !unit . ?unit . end
-type Branch = &{ Left: end, Right: end }
-type Select = xor{ A: end, B: end }
-
-// A channel carrying a protocol
-type Chan(S: Session) = Chan(S)
-
-fn send<T, S>(c: Chan(!T . S), x: T) -> Chan(S) ! { Net.send } = intrinsic.todo
-fn recv<T, S>(c: Chan(?T . S)) -> (T, Chan(S)) ! { Net.recv } = intrinsic.todo
-
-
-// ----------------------------
-// Singleton literal types
-// ----------------------------
-
-type Answer = 42 // literal(42)
-fn only_answer(x: Answer) -> int ensures { result == 42 } = 42
+// A function signature with a type class constraint.
+fn member<a: Eq> :: a -> List a -> bool
+fn member(x, xs) = intrinsic.todo
 
