@@ -245,6 +245,20 @@ mod tests {
     }
 
     #[test]
+    fn function_decl_untyped_signature_oneline() {
+        let module =
+            parse_str_all("fn add(x, y, z) = x;", Some(&stdlib())).expect("Failed to parse module");
+        let mut checker = TypeChecker::default();
+        let module = checker
+            .check_top_exprs(&module)
+            .expect("Failed to type check module");
+        let mut env = std_env();
+        let result = eval_exprs(&module, &mut env);
+        assert!(result.is_ok());
+        assert!(env.lookup_function("add").is_some());
+    }
+
+    #[test]
     #[ignore = "typed function parameter checking still in migration"]
     fn function_decl_typed_signature_oneline() {
         let module = parse_str_all(

@@ -34,6 +34,10 @@ pub enum TypeAst {
         fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
     },
+    Literal {
+        value: Value,
+        info: LineInfo,
+    },
 }
 
 impl Debug for TypeAst {
@@ -50,6 +54,7 @@ impl Debug for TypeAst {
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
+            Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
         }
     }
 }
@@ -60,6 +65,7 @@ impl TypeAst {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Constructor { info, .. } => info,
             TypeAst::Record { info, .. } => info,
+            TypeAst::Literal { info, .. } => info,
         }
     }
 
@@ -88,6 +94,7 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Literal { value, .. } => value.pretty_print(),
         }
     }
 
@@ -116,6 +123,7 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Literal { value, .. } => value.pretty_print(),
         }
     }
 }
@@ -136,6 +144,7 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
+            (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
             _ => false,
         }
     }

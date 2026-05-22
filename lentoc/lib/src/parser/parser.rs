@@ -1150,13 +1150,23 @@ impl<R: Read> Parser<R> {
         }
 
         // Parse the body type expression
-        let body = self.parse_expr(0)?;
-        let body_info = body.info().clone();
+        let body_expr = self.parse_expr(0)?;
+        let body_info = body_expr.info().clone();
+        let body =
+            crate::type_checker::specialize::into_type_ast(body_expr.clone()).map_err(|e| {
+                ParseError::new(
+                    format!(
+                        "Expected type expression in type declaration: {}",
+                        e.message()
+                    ),
+                    body_expr.info().clone(),
+                )
+            })?;
 
         Ok(Ast::TypeDecl {
             name,
             params,
-            body: Box::new(body),
+            body,
             info: name_info.join(&body_info),
         })
     }

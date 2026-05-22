@@ -135,113 +135,10 @@ pub fn call(
     if let Some(res) = block_def_call(&expr, &arg, &info, types, variables) {
         return res;
     }
-    Ok(match expr {
-        Ast::Identifier {
-            name: constructor_name,
-            info: constructor_info,
-        } if types.contains(&constructor_name) && is_type_expr(&arg, types) => {
-            // If the function is a type constructor, we can specialize it as a literal type.
-            log::trace!(
-                "Specializing new type constructor: {}({})",
-                constructor_name.clone().light_blue(),
-                arg.print_expr().light_blue()
-            );
-            let args = vec![into_type_ast(arg)?];
-            Ast::LiteralType {
-                expr: TypeAst::Constructor {
-                    expr: Box::new(TypeAst::Identifier {
-                        name: constructor_name,
-                        info: constructor_info,
-                    }),
-                    params: args,
-                    info: info.clone(),
-                },
-                info: info.clone(),
-            }
-        }
-        Ast::LiteralType {
-            expr:
-                TypeAst::Constructor {
-                    expr,
-                    mut params,
-                    info: type_info,
-                },
-            ..
-        } if is_type_expr(&arg, types) => {
-            // If the expression is a literal type constructor, we can add the argument as a type parameter.
-            log::trace!(
-                "Specializing existing type constructor: {}({}, {})",
-                expr.print_expr().light_blue(),
-                params
-                    .iter()
-                    .map(|p| p.pretty_print())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-                    .light_blue(),
-                arg.print_expr().light_blue()
-            );
-            params.push(into_type_ast(arg)?);
-            Ast::LiteralType {
-                expr: TypeAst::Constructor {
-                    expr,
-                    params,
-                    info: type_info.clone(),
-                },
-                info: type_info,
-            }
-        }
-        Ast::FunctionCall {
-            expr: inner,
-            arg: arg_inner,
-            info: inner_info,
-        } => {
-            match *arg_inner {
-                Ast::Identifier {
-                    name: constructor_name,
-                    info: constructor_info,
-                } if types.contains(&constructor_name) && is_type_expr(&arg, types) => {
-                    // Apply the new type argument to the type constructor
-                    log::trace!(
-                        "Specializing new type constructor call: {}({})",
-                        constructor_name.clone().light_blue(),
-                        arg.print_expr().light_blue()
-                    );
-                    let args = vec![into_type_ast(arg)?];
-                    let type_info = inner_info.join(&info);
-                    Ast::FunctionCall {
-                        expr: inner,
-                        arg: Box::new(Ast::LiteralType {
-                            expr: TypeAst::Constructor {
-                                expr: Box::new(TypeAst::Identifier {
-                                    name: constructor_name,
-                                    info: constructor_info,
-                                }),
-                                params: args,
-                                info: type_info.clone(),
-                            },
-                            info: type_info,
-                        }),
-                        info: inner_info,
-                    }
-                }
-                // If the expression is not a type constructor, create a function call as is.
-                _ => Ast::FunctionCall {
-                    expr: Box::new(Ast::FunctionCall {
-                        expr: inner,
-                        arg: arg_inner,
-                        info: inner_info,
-                    }),
-                    arg: Box::new(arg),
-                    info,
-                },
-            }
-        }
-        // If the expression is not a type constructor, create a function call as is.
-        _ => Ast::FunctionCall {
-            expr: Box::new(expr),
-            arg: Box::new(arg),
-            info,
-        },
+    Ok(Ast::FunctionCall {
+        expr: Box::new(expr),
+        arg: Box::new(arg),
+        info,
     })
 }
 
@@ -700,8 +597,10 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
         // Sum types like `int | str`
         Ast::Binary { lhs, rhs, .. } => is_type_expr(lhs, types) && is_type_expr(rhs, types),
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
-        // Ast::LiteralType { .. } => true,
         Ast::Literal { .. } => false,
+        Ast::FunctionCall { expr, arg, .. } => {
+            is_type_expr(expr, types) && is_type_expr(arg, types)
+        }
         // Product type like `(int, str)`
         Ast::Tuple { exprs, .. } => exprs.iter().all(|e| is_type_expr(e, types)),
         // Product type like `{ a: int, b: str }`
@@ -738,7 +637,21 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
                 .collect::<Result<Vec<_>, ParseError>>()?;
             Ok(TypeAst::Record { fields, info })
         }
-        // Ast::LiteralType { expr } => Ok(expr.clone()),
+        Ast::FunctionCall { expr, arg, info } => {
+            let mut params = vec![into_type_ast(*arg)?];
+            let mut head = *expr;
+            while let Ast::FunctionCall { expr, arg, .. } = head {
+                params.push(into_type_ast(*arg)?);
+                head = *expr;
+            }
+            params.reverse();
+            let head = into_type_ast(head)?;
+            Ok(TypeAst::Constructor {
+                expr: Box::new(head),
+                params,
+                info,
+            })
+        }
         _ => Err(ParseError::new(
             format!("Expected a type expression, found: {}", expr.print_expr()),
             expr.info().clone(),
@@ -805,62 +718,19 @@ pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) ->
         .map(|a| a.info().clone())
         .unwrap_or(expr.info().clone());
     let call_info = expr.info().join(&last_info);
-    match expr {
-        Ast::Identifier {
-            name: constructor_name,
-            info: constructor_info,
-        } if types.contains(&constructor_name) && args.iter().all(|a| is_type_expr(a, types)) => {
-            // If the expression is a type constructor, we can specialize it as a literal type.
-            log::trace!(
-                "Specializing new type constructor: {}({})",
-                constructor_name.clone().light_blue(),
-                args.iter()
-                    .map(|a| a.print_expr().light_blue().to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
-            let args = args
-                .into_iter()
-                .map(into_type_ast)
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
-            Ast::LiteralType {
-                expr: TypeAst::Constructor {
-                    expr: Box::new(TypeAst::Identifier {
-                        name: constructor_name,
-                        info: constructor_info,
-                    }),
-                    params: args,
-                    info: call_info.clone(),
-                },
-                info: call_info,
-            }
-        }
-        expr => {
-            // If the expression is not a type constructor, we can create a function call as is.
-            log::trace!(
-                "Creating function call: {}({})",
-                expr.print_expr().light_blue(),
-                args.iter()
-                    .map(|a| a.print_expr().light_blue().to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
-            let mut args = args.into_iter();
-            let mut call = Ast::FunctionCall {
-                expr: Box::new(expr),
-                arg: Box::new(args.next().unwrap()),
-                info: call_info.clone(),
-            };
-            for arg in args {
-                let arg_info = call_info.join(arg.info());
-                call = Ast::FunctionCall {
-                    expr: Box::new(call),
-                    arg: Box::new(arg),
-                    info: arg_info,
-                };
-            }
-            call
-        }
+    let mut args = args.into_iter();
+    let mut call = Ast::FunctionCall {
+        expr: Box::new(expr),
+        arg: Box::new(args.next().unwrap()),
+        info: call_info.clone(),
+    };
+    for arg in args {
+        let arg_info = call_info.join(arg.info());
+        call = Ast::FunctionCall {
+            expr: Box::new(call),
+            arg: Box::new(arg),
+            info: arg_info,
+        };
     }
+    call
 }

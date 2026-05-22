@@ -351,7 +351,6 @@ impl TypeChecker<'_> {
                 value: value.clone(),
                 info: info.clone(),
             },
-            Ast::LiteralType { expr, .. } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -438,10 +437,15 @@ impl TypeChecker<'_> {
                     }
                 }
             }
-            Ast::TypeDecl { name, info, .. } => CheckedAst::TypeDecl {
-                name: name.clone(),
-                info: info.clone(),
-            },
+            Ast::TypeDecl {
+                name, body, info, ..
+            } => {
+                let _ = self.check_type_expr(body)?;
+                CheckedAst::TypeDecl {
+                    name: name.clone(),
+                    info: info.clone(),
+                }
+            }
         })
     }
 
@@ -482,15 +486,16 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
             }
-        })
-    }
-
-    fn check_literal_type(&self, expr: &TypeAst) -> TypeCheckerResult<CheckedAst> {
-        let info = expr.info();
-        let ty = self.check_type_expr(expr)?;
-        Ok(CheckedAst::LiteralType {
-            ty,
-            info: info.clone(),
+            TypeAst::Literal { value, info } => match value {
+                Value::Type(ty) => ty.clone(),
+                _ => {
+                    return Err(TypeError::new(
+                        format!("Invalid literal in type position: {}", value.pretty_print()),
+                        info.clone(),
+                    )
+                    .into())
+                }
+            },
         })
     }
 

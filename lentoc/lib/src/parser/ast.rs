@@ -69,12 +69,6 @@ pub enum Ast {
     },
     /// A block expression evaluates all expressions in the block and returns the value of the last expression.
     Block { exprs: Vec<Ast>, info: LineInfo },
-    /// A literal type expression, e.g. `int`, `List int`, `int -> str ! { e }`.
-    /// This is produced during specialize to distinguish type-level from value-level expressions.
-    LiteralType {
-        expr: TypeAst,
-        info: LineInfo,
-    },
     /// A function declaration (signature only, no body).
     /// e.g. `fn id :: a -> a`
     FunctionDecl {
@@ -98,7 +92,7 @@ pub enum Ast {
     TypeDecl {
         name: String,
         params: Vec<Ast>,
-        body: Box<Ast>,
+        body: TypeAst,
         info: LineInfo,
     },
 }
@@ -121,7 +115,10 @@ impl Debug for Ast {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
             Self::Let {
-                target, expr, annotation, ..
+                target,
+                expr,
+                annotation,
+                ..
             } => f
                 .debug_struct("Let")
                 .field("target", target)
@@ -129,7 +126,10 @@ impl Debug for Ast {
                 .field("annotation", annotation)
                 .finish(),
             Self::Lambda {
-                param, body, return_type, ..
+                param,
+                body,
+                return_type,
+                ..
             } => f
                 .debug_struct("Lambda")
                 .field("param", param)
@@ -160,10 +160,9 @@ impl Debug for Ast {
                 .field("expr", expr)
                 .finish(),
             Self::Block { exprs, .. } => f.debug_struct("Block").field("exprs", exprs).finish(),
-            Self::LiteralType { expr, .. } => {
-                f.debug_struct("LiteralType").field("expr", expr).finish()
-            }
-            Self::FunctionDecl { name, signature, .. } => f
+            Self::FunctionDecl {
+                name, signature, ..
+            } => f
                 .debug_struct("FunctionDecl")
                 .field("name", name)
                 .field("signature", signature)
@@ -181,7 +180,9 @@ impl Debug for Ast {
                 .field("return_type", return_type)
                 .field("body", body)
                 .finish(),
-            Self::TypeDecl { name, params, body, .. } => f
+            Self::TypeDecl {
+                name, params, body, ..
+            } => f
                 .debug_struct("TypeDecl")
                 .field("name", name)
                 .field("params", params)
@@ -213,7 +214,6 @@ impl Ast {
             Ast::Unary { info, .. } => info,
             Ast::Let { info, .. } => info,
             Ast::Block { info, .. } => info,
-            Ast::LiteralType { info, .. } => info,
             Ast::FunctionDecl { info, .. } => info,
             Ast::FunctionDef { info, .. } => info,
             Ast::TypeDecl { info, .. } => info,
@@ -241,7 +241,6 @@ impl Ast {
             Ast::Unary { info, .. } => info,
             Ast::Let { info, .. } => info,
             Ast::Block { info, .. } => info,
-            Ast::LiteralType { info, .. } => info,
             Ast::FunctionDecl { info, .. } => info,
             Ast::FunctionDef { info, .. } => info,
             Ast::TypeDecl { info, .. } => info,
@@ -324,8 +323,9 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
-            Ast::LiteralType { expr, .. } => expr.pretty_print(),
-            Ast::FunctionDecl { name, signature, .. } => {
+            Ast::FunctionDecl {
+                name, signature, ..
+            } => {
                 format!("fn {} :: {}", name, signature.print_expr())
             }
             Ast::FunctionDef {
@@ -346,7 +346,9 @@ impl Ast {
                     .unwrap_or_default();
                 format!("fn {}({}){} = {}", name, params_str, ret, body.print_expr())
             }
-            Ast::TypeDecl { name, params, body, .. } => {
+            Ast::TypeDecl {
+                name, params, body, ..
+            } => {
                 let params_str = if params.is_empty() {
                     String::new()
                 } else {
@@ -435,15 +437,15 @@ impl PartialEq for Ast {
             ) => l_param == r_param && l_body == r_body && l_ret == r_ret,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
             (
-                Self::LiteralType { expr: l0, .. },
-                Self::LiteralType { expr: r0, .. },
-            ) => l0 == r0,
-            (
                 Self::FunctionDecl {
-                    name: l0, signature: l1, ..
+                    name: l0,
+                    signature: l1,
+                    ..
                 },
                 Self::FunctionDecl {
-                    name: r0, signature: r1, ..
+                    name: r0,
+                    signature: r1,
+                    ..
                 },
             ) => l0 == r0 && l1 == r1,
             (
