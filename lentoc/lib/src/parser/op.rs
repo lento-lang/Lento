@@ -56,8 +56,11 @@ pub mod prec {
     pub const ASSIGNMENT_PREC: OpPrec = 300;
     pub const COMMA_PREC: OpPrec = 400;
     pub const CONDITIONAL_PREC: OpPrec = 500;
+    pub const SUM_TYPE_PREC: OpPrec = 550;
     pub const LOGICAL_OR_PREC: OpPrec = 600;
+    pub const FUNCTION_ARROW_PREC: OpPrec = 650;
     pub const LOGICAL_AND_PREC: OpPrec = 700;
+    pub const EFFECT_ASCRIPTION_PREC: OpPrec = 750;
     pub const EQUALITY_PREC: OpPrec = 800;
     pub const TUPLE_PREC: OpPrec = 900;
     pub const ADDITIVE_PREC: OpPrec = 1000;
