@@ -35,10 +35,30 @@ pub enum Keyword {
 impl Keyword {
     pub fn all() -> &'static [&'static str] {
         &[
-            "fn", "let", "type", "class", "all", "effect", "handle", "with",
-            "infix", "left", "right", "ensures", "requires", "Self",
-            "in", "intrinsic", "literal", "exists",
-            "match", "if", "else", "for", "while", "is",
+            "fn",
+            "let",
+            "type",
+            "class",
+            "all",
+            "effect",
+            "handle",
+            "with",
+            "infix",
+            "left",
+            "right",
+            "ensures",
+            "requires",
+            "Self",
+            "in",
+            "intrinsic",
+            "literal",
+            "exists",
+            "match",
+            "if",
+            "else",
+            "for",
+            "while",
+            "is",
             "end",
         ]
     }
@@ -162,6 +182,7 @@ impl Token {
         matches!(
             self,
             Token::EndOfFile
+                | Token::Newline
                 | Token::SemiColon
                 | Token::RightParen
                 | Token::RightBrace

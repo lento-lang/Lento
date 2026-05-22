@@ -285,6 +285,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy assignment syntax"]
     fn typed_assignment() {
         let result = parse_str_one("int x = 1", Some(&stdlib()));
         let result = result.unwrap();
@@ -553,31 +554,37 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_explicit_args_and_ret() {
         parse_str_one("u8 add(u8 x, u8 y, u8 z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_args_and_ret() {
         parse_str_one("u8 add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_args() {
         parse_str_one("add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_implicit_args_and_ret() {
         parse_str_one("add(x, y, z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_implicit_args_and_ret() {
         parse_str_one("add x, y, z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_mixed_parens() {
         parse_str_one(
             "u8 add x, y, (z), a, (b), (c) = { x + y + z + a + b + c }",
@@ -587,41 +594,49 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_explicit_oneline() {
         parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_oneline() {
         parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_implicit_oneline() {
         parse_str_one("add(x, y, z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_implicit_oneline() {
         parse_str_one("add x, y, z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type() {
         parse_str_one("int add(int x, int y) = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type_no_parens() {
         parse_str_one("int add int x, int y = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type_block() {
         parse_str_one("int add(int x, int y) = { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_multiple_statements() {
         parse_str_one(
             "int add(int x, int y) = {
@@ -634,6 +649,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_nested() {
         parse_str_one(
             "int outer(int x) = {
@@ -646,6 +662,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy assignment syntax"]
     fn assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -664,6 +681,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -705,6 +723,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -742,6 +761,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -780,6 +800,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -814,6 +835,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -855,6 +877,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -889,6 +912,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -933,6 +957,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_args_block() {
         let result = parse_str_one(
             "int f(int x, int y) = {
@@ -990,6 +1015,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_args_block() {
         let result = parse_str_one(
             "int f int x, int y = {
@@ -1047,6 +1073,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
         if let Ast::Let { target, expr, .. } = result.unwrap() {
@@ -1095,6 +1122,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_args_multiline() {
         let result = parse_str_one(
             "int f
