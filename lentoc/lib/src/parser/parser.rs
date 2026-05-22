@@ -77,7 +77,7 @@ pub(crate) const MEMBER_ACCESS_SYM: &str = ".";
 
 /// Default operators used in the language grammar and required for parsing. \
 /// These operators are defined in the parser and are required to produce valid ASTs. \
-/// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top_expr` expression.
+/// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top` expression.
 /// - `semicolon`: `;` - Used to separate statements becomes an `Ast::Block` node.
 /// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
 /// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Let` node.
@@ -326,7 +326,7 @@ impl<R: Read> Parser<R> {
             }
         }
         log::trace!("Parsing elements...");
-        let tuple = self.parse_top_expr()?;
+        let tuple = self.parse_top()?;
         log::trace!("Parsed tuple elements: {:?}", tuple);
         self.parse_expected_eq(Token::RightParen, ")")?;
         Ok(tuple)
@@ -343,7 +343,7 @@ impl<R: Read> Parser<R> {
                 if end.token == Token::RightBrace {
                     break;
                 }
-                exprs.push(self.parse_top_expr()?);
+                exprs.push(self.parse_top()?);
             }
             let last = self.parse_expected_eq(Token::RightBrace, "}")?;
             Ok(Ast::Block {
@@ -785,25 +785,42 @@ impl<R: Read> Parser<R> {
         Ok(expr)
     }
 
-    /// Parse a top-level expression.
-    fn parse_top_expr(&mut self) -> ParseResult {
-        // Intercept fn keyword for function declarations/definitions
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-            if t.token.is_keyword(&crate::lexer::token::Keyword::Fn) {
-                self.lexer.next_token().unwrap(); // consume fn
-                let expr = self.parse_fn()?;
-                self.skip_terminal_and_ignored();
-                return Ok(expr);
-            }
+    fn parse_statement(&mut self) -> Result<Option<Ast>, ParseError> {
+        let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) else {
+            return Ok(None);
+        };
+        if t.token.is_keyword(&crate::lexer::token::Keyword::Let) {
+            self.lexer.next_token().unwrap(); // consume let
+            return self.parse_let_stmt().map(Some);
         }
-        // Intercept type keyword for type declarations
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-            if t.token.is_keyword(&crate::lexer::token::Keyword::Type) {
-                self.lexer.next_token().unwrap(); // consume type
-                let expr = self.parse_type_decl()?;
-                self.skip_terminal_and_ignored();
-                return Ok(expr);
-            }
+        if t.token.is_keyword(&crate::lexer::token::Keyword::Fn) {
+            self.lexer.next_token().unwrap(); // consume fn
+            return self.parse_fn().map(Some);
+        }
+        if t.token.is_keyword(&crate::lexer::token::Keyword::Type) {
+            self.lexer.next_token().unwrap(); // consume type
+            return self.parse_type_decl().map(Some);
+        }
+        Ok(None)
+    }
+
+    /// Parse a `let` statement after the `let` keyword has been consumed.
+    fn parse_let_stmt(&mut self) -> ParseResult {
+        let expr = self.parse_expr(0)?;
+        match expr {
+            Ast::Let { .. } => Ok(expr),
+            _ => Err(ParseError::new(
+                "Expected `let <pattern> = <expr>`".to_string(),
+                expr.info().clone(),
+            )),
+        }
+    }
+
+    /// Parse a top-level expression.
+    fn parse_top(&mut self) -> ParseResult {
+        if let Some(stmt) = self.parse_statement()? {
+            self.skip_terminal_and_ignored();
+            return Ok(stmt);
         }
         match self.parse_expr(0) {
             Ok(expr) => {
@@ -858,12 +875,15 @@ impl<R: Read> Parser<R> {
         use crate::lexer::token::Keyword;
 
         // Parse function name
-        let name_t = self.lexer.expect_next_token_not(pred::ignore).map_err(|err| {
-            ParseError::new(
-                "Expected function name after fn".to_string(),
-                err.info().clone(),
-            )
-        })?;
+        let name_t = self
+            .lexer
+            .expect_next_token_not(pred::ignore)
+            .map_err(|err| {
+                ParseError::new(
+                    "Expected function name after fn".to_string(),
+                    err.info().clone(),
+                )
+            })?;
         let name = match &name_t.token {
             Token::Identifier(id) => id.clone(),
             _ => {
@@ -880,21 +900,18 @@ impl<R: Read> Parser<R> {
         let name_info = name_t.info;
 
         // Peek to distinguish declaration (::) from definition ((...))
-        let next = self
-            .lexer
-            .peek_token_not(pred::ignore, 0)
-            .map_err(|err| {
-                ParseError::new(
-                    "Expected :: or ( after function name".to_string(),
-                    err.info().clone(),
-                )
-            })?;
+        let next = self.lexer.peek_token_not(pred::ignore, 0).map_err(|err| {
+            ParseError::new(
+                "Expected :: or ( after function name".to_string(),
+                err.info().clone(),
+            )
+        })?;
 
         match &next.token {
             // Declaration: fn name :: sig
             Token::DoubleColon => {
                 self.lexer.next_token().unwrap(); // consume ::
-                let sig = self.parse_top_expr()?;
+                let sig = self.parse_top()?;
                 let sig_info = sig.info().clone();
                 Ok(Ast::FunctionDecl {
                     name,
@@ -917,12 +934,22 @@ impl<R: Read> Parser<R> {
                     // Parse parameter as an expression (identifier, tuple, record, etc.)
                     // Use a min prec above comma to stop at parameter boundaries
                     let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
-                    let pattern = BindPattern::from_expr(param_expr).map_err(|e| {
-                        ParseError::new(
-                            format!("Invalid function parameter: {}", e.message()),
-                            e.info().clone(),
-                        )
-                    })?;
+                    let pattern = match param_expr {
+                        Ast::Binary {
+                            lhs, op, rhs: _, ..
+                        } if op.symbol == ":" => BindPattern::from_expr(*lhs).map_err(|e| {
+                            ParseError::new(
+                                format!("Invalid function parameter: {}", e.message()),
+                                e.info().clone(),
+                            )
+                        })?,
+                        other => BindPattern::from_expr(other).map_err(|e| {
+                            ParseError::new(
+                                format!("Invalid function parameter: {}", e.message()),
+                                e.info().clone(),
+                            )
+                        })?,
+                    };
                     params.push(pattern);
                     // Check for comma
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
@@ -939,8 +966,7 @@ impl<R: Read> Parser<R> {
                 if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                     if matches!(&t.token, Token::Operator(op) if op == "->") {
                         self.lexer.next_token().unwrap(); // consume ->
-                        return_type_expr =
-                            Some(self.parse_expr(prec::ASSIGNMENT_PREC + 1)?);
+                        return_type_expr = Some(self.parse_expr(prec::ASSIGNMENT_PREC + 1)?);
                     }
                 }
 
@@ -952,14 +978,14 @@ impl<R: Read> Parser<R> {
                         if t.token.is_keyword(&Keyword::Requires) {
                             self.lexer.next_token().unwrap();
                             self.parse_expected_eq(Token::LeftBrace, "{")?;
-                            _requires_expr = Some(self.parse_top_expr()?);
+                            _requires_expr = Some(self.parse_top()?);
                             self.parse_expected_eq(Token::RightBrace, "}")?;
                             continue;
                         }
                         if t.token.is_keyword(&Keyword::Ensures) {
                             self.lexer.next_token().unwrap();
                             self.parse_expected_eq(Token::LeftBrace, "{")?;
-                            _ensures_expr = Some(self.parse_top_expr()?);
+                            _ensures_expr = Some(self.parse_top()?);
                             self.parse_expected_eq(Token::RightBrace, "}")?;
                             continue;
                         }
@@ -973,7 +999,7 @@ impl<R: Read> Parser<R> {
                     if t.token == Token::Operator(ASSIGNMENT_SYM.to_string()) {
                         // Expression body: fn name(params) -> ... = expr
                         self.lexer.next_token().unwrap(); // consume =
-                        body = self.parse_top_expr()?;
+                        body = self.parse_top()?;
                     } else if t.token == Token::LeftBrace {
                         // Block body: fn name(params) -> ... { body }
                         self.lexer.next_token().unwrap(); // consume {
@@ -1024,10 +1050,12 @@ impl<R: Read> Parser<R> {
     /// type Name(Params) = <type-expr>
     /// ```
     fn parse_type_decl(&mut self) -> ParseResult {
-        let name_token = self
-            .lexer
-            .next_token()
-            .map_err(|_| ParseError::new("Expected type name after `type`".to_string(), LineInfo::default()))?;
+        let name_token = self.lexer.next_token().map_err(|_| {
+            ParseError::new(
+                "Expected type name after `type`".to_string(),
+                LineInfo::default(),
+            )
+        })?;
         let name = match &name_token.token {
             Token::Identifier(name) => name.clone(),
             _ => {
@@ -1045,10 +1073,9 @@ impl<R: Read> Parser<R> {
                 self.lexer.next_token().unwrap(); // consume (
                 let mut p = Vec::new();
                 loop {
-                    let param_name = self
-                        .lexer
-                        .next_token()
-                        .map_err(|_| ParseError::new("Expected parameter name".to_string(), LineInfo::default()))?;
+                    let param_name = self.lexer.next_token().map_err(|_| {
+                        ParseError::new("Expected parameter name".to_string(), LineInfo::default())
+                    })?;
                     match &param_name.token {
                         Token::Identifier(name) => {
                             p.push(Ast::Identifier {
@@ -1137,7 +1164,7 @@ impl<R: Read> Parser<R> {
                 });
             }
         }
-        self.parse_top_expr()
+        self.parse_top()
     }
 
     /// Parse a global AST from the stream of tokens.
@@ -1150,7 +1177,7 @@ impl<R: Read> Parser<R> {
                     break;
                 }
             }
-            match self.parse_top_expr() {
+            match self.parse_top() {
                 Ok(expr) => asts.push(expr),
                 Err(e) => return Err(e),
             }
