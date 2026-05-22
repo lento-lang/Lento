@@ -1,14 +1,17 @@
 // Types
 //
-// Invariants can be expressed at the type level using ranges.
+// This file collects type-system examples using Lento's intended surface syntax,
+// plus (commented) excerpts of the paper/core syntax for reference.
 
-type Day = int in 1..31
+// Invariants can be expressed directly as liquid refinement types.
+// Refined base types have the form `{ v: B | phi }`.
+type Day = { v: Int | 1 <= v and v <= 31 }
 
 
 // Numeric lattice (illustrative)
 // Lento has sized integers/floats (e.g. u1, u8, u64, i32, f64) plus a `num` top.
-type Age = int in 0..200
-type Percent = int in 0..100
+type Age = { v: Int | 0 <= v and v <= 200 }
+type Percent = { v: Int | 0 <= v and v <= 100 }
 type SmallIndex = u8
 
 
@@ -17,61 +20,94 @@ type Bytes = [u8]
 type Path = str
 
 
-// Liquid refinement types (illustrative surface form)
+// Liquid refinement types (paper/core syntax)
+// Refined base types have the form `{ v: B | phi }` where `phi` is in an
+// SMT-decidable fragment and `v` refers to the value being described.
 //
-//     type Nat = { nu: int | 0 <= nu }
-//     type NonZero = { nu: int | nu != 0 }
-//     type Bounded(n: int) = { nu: int | 0 <= nu && nu < n }
-//
-// `nu` refers to the value being described.
+// Examples:
+//     type Nat = { v: Int | 0 <= v }
+//     type NonZero = { v: Int | v != 0 }
+//     type Bounded(n: Int) = { v: Int | 0 <= v and v < n }
 
 
-// Dependent types (illustrative)
-// Types can be parameterized by values to express relationships.
+// Dependent types (paper/core syntax)
+// Types can be parameterized by values to encode relationships.
 //
-//     type Vec(n: int, a: Type) = { nu: [a] | len(nu) == n }
+//     type Vec(n: Int, a: Type) = { v: [a; n] | Vec.len(v) = n }
 //
 // This is the “length-indexed list” pattern.
 
 
-// Record and sum types (illustrative)
+// Record and sum types (surface)
+// Record types use `{ field: Type, ... }`.
+type Point2D = { x: int, y: int }
+
+// Sum types are written as enums.
+type Option(A) = Some(A) | None
+
+// Record and inductive/sum types (paper/core syntax)
 //
-//     type Point2D = record{ x: int, y: int }
-//     type Option<a> = sum{ Some: a, None: unit }
-//
-// (Exact surface syntax may differ; these show the core idea.)
+//     Point2D ::= record{ x: int, y: int }
+//     Option a ::= sum{ Some: a, None: unit }
+//     List a ::= inductive{ Nil: unit, Cons: Sigma head: a . List a }
 
 
-// Polymorphism and type classes (illustrative signature style)
+// Polymorphism and type classes (paper surface style)
+// Universal quantification is written postfix via `all`:
 //
 //     id :: a -> a all a: Type
+//
+// Constraints elaborate to implicit evidence parameters:
+//
 //     member :: a -> List a -> bool all a: Eq
 
 
-// Modal types (illustrative)
+// Modal types (paper/core syntax)
 //
-//     type Now<a> = square a
-//     type Later<a> = diamond a
+//     type Now(a: Type) = square a
+//     type Later(a: Type) = diamond a
 //
 // Often used to model async/await style temporal availability.
 
 
-// Session types (illustrative)
+// Session types (paper/core syntax)
 //
-//     type Ping = !unit . ?unit . end
-//     type Choice = &{ Left: end, Right: end }
-//     type Select = xor{ A: end, B: end }
+//     Ping = !unit . ?unit . end
+//     Branch = &{ Left: end, Right: end }
+//     Select = xor{ A: end, B: end }
 //
 // `Chan(S)` carries a channel following protocol `S`.
 
 
-// Singleton literal types (illustrative)
+// Singleton literal types (paper/core syntax)
 //
-//     type Answer = literal(42)
+//     Answer = literal(42)
 
 
-// Effect-annotated function types (illustrative)
+// Effect-annotated function types
 // Effects are part of the computation type, not the value type.
 //
+// Surface:
 //     type ReadConfig = Path -> Bytes ! { File.read, throw IOError }
 //     type PureInc = int -> int ! { }
+//
+// Paper/core category E includes forms like:
+//     x: tau_i -> epsilon -> tau_j
+//     tau_i ! epsilon -> tau_j
+//     tau_i ? epsilon -> tau_j
+
+
+// Type constructor application (surface)
+// The compiler's type AST represents constructor application; surface examples
+// commonly use space-separated application.
+type StringIntMap = Map(str, Int)
+
+// Paper/core syntax also admits application as juxtaposition:
+//     Map str Int
+// The internal printed form is typically constructor-like:
+//     Map(str, Int)
+
+
+// Universes (paper/core syntax)
+// The paper uses a cumulative hierarchy of universes to avoid paradoxes:
+//     Type_i
