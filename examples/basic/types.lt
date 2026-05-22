@@ -1,0 +1,77 @@
+// Types
+//
+// Invariants can be expressed at the type level using ranges.
+
+type Day = int in 1..31
+
+
+// Numeric lattice (illustrative)
+// Lento has sized integers/floats (e.g. u1, u8, u64, i32, f64) plus a `num` top.
+type Age = int in 0..200
+type Percent = int in 0..100
+type SmallIndex = u8
+
+
+// Type aliases (sugar)
+type Bytes = [u8]
+type Path = str
+
+
+// Liquid refinement types (illustrative surface form)
+//
+//     type Nat = { nu: int | 0 <= nu }
+//     type NonZero = { nu: int | nu != 0 }
+//     type Bounded(n: int) = { nu: int | 0 <= nu && nu < n }
+//
+// `nu` refers to the value being described.
+
+
+// Dependent types (illustrative)
+// Types can be parameterized by values to express relationships.
+//
+//     type Vec(n: int, a: Type) = { nu: [a] | len(nu) == n }
+//
+// This is the “length-indexed list” pattern.
+
+
+// Record and sum types (illustrative)
+//
+//     type Point2D = record{ x: int, y: int }
+//     type Option<a> = sum{ Some: a, None: unit }
+//
+// (Exact surface syntax may differ; these show the core idea.)
+
+
+// Polymorphism and type classes (illustrative signature style)
+//
+//     id :: a -> a all a: Type
+//     member :: a -> List a -> bool all a: Eq
+
+
+// Modal types (illustrative)
+//
+//     type Now<a> = square a
+//     type Later<a> = diamond a
+//
+// Often used to model async/await style temporal availability.
+
+
+// Session types (illustrative)
+//
+//     type Ping = !unit . ?unit . end
+//     type Choice = &{ Left: end, Right: end }
+//     type Select = xor{ A: end, B: end }
+//
+// `Chan(S)` carries a channel following protocol `S`.
+
+
+// Singleton literal types (illustrative)
+//
+//     type Answer = literal(42)
+
+
+// Effect-annotated function types (illustrative)
+// Effects are part of the computation type, not the value type.
+//
+//     type ReadConfig = Path -> Bytes ! { File.read, throw IOError }
+//     type PureInc = int -> int ! { }
