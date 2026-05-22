@@ -487,28 +487,8 @@ impl TypeChecker<'_> {
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeCheckerResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier { name, info } => self
-                .lookup_type(name)
-                .cloned()
-                .or_else(|| match name.as_str() {
-                    "u1" => Some(std_types::UINT1),
-                    "u8" => Some(std_types::UINT8),
-                    "u16" => Some(std_types::UINT16),
-                    "u32" => Some(std_types::UINT32),
-                    "u64" => Some(std_types::UINT64),
-                    "u128" => Some(std_types::UINT128),
-                    "ubig" => Some(std_types::UINTBIG),
-                    "i8" => Some(std_types::INT8),
-                    "i16" => Some(std_types::INT16),
-                    "i32" => Some(std_types::INT32),
-                    "i64" => Some(std_types::INT64),
-                    "i128" => Some(std_types::INT128),
-                    "ibig" => Some(std_types::INTBIG),
-                    "f32" => Some(std_types::FLOAT32),
-                    "f64" => Some(std_types::FLOAT64),
-                    "fbig" => Some(std_types::FLOATBIG),
-                    _ => None,
-                })
+            TypeAst::Identifier { name, info } => std_types::from_str(name)
+                .or_else(|| self.lookup_type(name).cloned())
                 .ok_or_else(|| {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
