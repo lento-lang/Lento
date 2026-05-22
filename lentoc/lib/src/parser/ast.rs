@@ -81,7 +81,7 @@ pub enum Ast {
     /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
     FunctionDef {
         name: String,
-        params: Vec<BindPattern>,
+        params: Vec<(BindPattern, Option<TypeAst>)>,
         /// Optional return type expression (after `->`, may include `! { effects }`).
         return_type: Option<Box<Ast>>,
         body: Box<Ast>,
@@ -337,7 +337,10 @@ impl Ast {
             } => {
                 let params_str = params
                     .iter()
-                    .map(|p| p.print_expr())
+                    .map(|(p, ty)| match ty {
+                        Some(ty) => format!("{}: {}", p.print_expr(), ty.pretty_print()),
+                        None => p.print_expr(),
+                    })
                     .collect::<Vec<String>>()
                     .join(", ");
                 let ret = return_type

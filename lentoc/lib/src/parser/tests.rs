@@ -1194,8 +1194,8 @@ mod tests {
         let result = parse_str_one("fn f((x, y), { a: a }) = x", None).unwrap();
         if let Ast::FunctionDef { params, .. } = result {
             assert_eq!(params.len(), 2);
-            assert!(matches!(params[0], BindPattern::Tuple { .. }));
-            assert!(matches!(params[1], BindPattern::Record { .. }));
+            assert!(matches!(params[0].0, BindPattern::Tuple { .. }));
+            assert!(matches!(params[1].0, BindPattern::Record { .. }));
         } else {
             panic!("Expected function definition");
         }
@@ -1212,7 +1212,8 @@ mod tests {
         let result = parse_str_one("fn id(x: u8) = x", Some(&stdlib())).unwrap();
         if let Ast::FunctionDef { params, .. } = result {
             assert_eq!(params.len(), 1);
-            assert!(matches!(params[0], BindPattern::Variable { .. }));
+            assert!(matches!(params[0].0, BindPattern::Variable { .. }));
+            assert!(params[0].1.is_some());
         } else {
             panic!("Expected function definition");
         }

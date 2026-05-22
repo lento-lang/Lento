@@ -84,11 +84,11 @@ mod tests {
     #[test]
     fn binary_add() {
         let ast = add(
-            CheckedAst::LiteralValue {
+            CheckedAst::Literal {
                 value: make_u8(1),
                 info: LineInfo::default(),
             },
-            CheckedAst::LiteralValue {
+            CheckedAst::Literal {
                 value: make_u8(2),
                 info: LineInfo::default(),
             },
@@ -104,15 +104,15 @@ mod tests {
     fn tuple() {
         let ast = CheckedAst::Tuple {
             exprs: vec![
-                CheckedAst::LiteralValue {
+                CheckedAst::Literal {
                     value: make_u8(1),
                     info: LineInfo::default(),
                 },
-                CheckedAst::LiteralValue {
+                CheckedAst::Literal {
                     value: make_u8(2),
                     info: LineInfo::default(),
                 },
-                CheckedAst::LiteralValue {
+                CheckedAst::Literal {
                     value: make_u8(3),
                     info: LineInfo::default(),
                 },
@@ -141,11 +141,11 @@ mod tests {
     #[test]
     fn function_call() {
         let ast = add(
-            CheckedAst::LiteralValue {
+            CheckedAst::Literal {
                 value: make_u8(1),
                 info: LineInfo::default(),
             },
-            CheckedAst::LiteralValue {
+            CheckedAst::Literal {
                 value: make_u8(2),
                 info: LineInfo::default(),
             },
@@ -161,7 +161,7 @@ mod tests {
     fn unit_function() {
         let ast = CheckedAst::FunctionCall {
             expr: Box::new(fn_unit()),
-            arg: Box::new(CheckedAst::LiteralValue {
+            arg: Box::new(CheckedAst::Literal {
                 value: Value::Unit,
                 info: LineInfo::default(),
             }),
@@ -182,7 +182,7 @@ mod tests {
                 name: "x".into(),
                 info: LineInfo::default(),
             },
-            expr: Box::new(CheckedAst::LiteralValue {
+            expr: Box::new(CheckedAst::Literal {
                 value: make_u8(1),
                 info: LineInfo::default(),
             }),
@@ -234,6 +234,7 @@ mod tests {
         )
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
+        stdlib().init_type_checker(&mut checker);
         let module = checker
             .check_top_exprs(&module)
             .expect("Failed to type check module");
@@ -246,9 +247,10 @@ mod tests {
 
     #[test]
     fn function_decl_untyped_signature_oneline() {
-        let module =
-            parse_str_all("fn add(x, y, z) = x;", Some(&stdlib())).expect("Failed to parse module");
+        let module = parse_str_all("fn add(x, y, z) = x + y + z;", Some(&stdlib()))
+            .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
+        stdlib().init_type_checker(&mut checker);
         let module = checker
             .check_top_exprs(&module)
             .expect("Failed to type check module");
@@ -259,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "typed function parameter checking still in migration"]
+    #[ignore = "typed u8 operator resolution still in migration"]
     fn function_decl_typed_signature_oneline() {
         let module = parse_str_all(
             "fn add(x: u8, y: u8, z: u8) -> u8 = x + y + z;",

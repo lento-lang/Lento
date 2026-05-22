@@ -39,7 +39,7 @@ mod tests {
         let ast = parser.parse_all().unwrap();
         let checked_ast = checker.check_top_exprs(&ast).unwrap();
         assert!(checked_ast.iter().zip(types).all(|(ast, ty)| {
-            if let CheckedAst::LiteralValue {
+            if let CheckedAst::Literal {
                 value: Value::Type(t),
                 info: _,
             } = ast
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_single_no_parens_block() {
-        let result = check_str_one("fn f(x: int) -> int { x + 5 }", Some(&stdlib())).unwrap();
+        let result = check_str_one("fn f(x: int) -> int = x + 5", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { name, params, .. } = result {
             assert_eq!(name, "f");
             assert_eq!(params.len(), 1);
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn function_def_with_return_type_many_no_parens_block() {
         let result =
-            check_str_one("fn add(x: int, y: int) -> int { x + y }", Some(&stdlib())).unwrap();
+            check_str_one("fn add(x: int, y: int) -> int = x + y", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { name, params, .. } = result {
             assert_eq!(name, "add");
             assert_eq!(params.len(), 2);

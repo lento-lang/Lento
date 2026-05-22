@@ -6,6 +6,7 @@ use super::{
         OpAssoc, OpInfo, OpPos, OpPrec,
     },
 };
+use crate::type_checker::checked_ast::TypeAst;
 use crate::{
     interpreter::value::{RecordKey, Value},
     lexer::{
@@ -923,7 +924,7 @@ impl<R: Read> Parser<R> {
             // Definition: fn name(params) -> ...
             Token::LeftParen { .. } => {
                 self.lexer.next_token().unwrap(); // consume (
-                let mut params: Vec<BindPattern> = Vec::new();
+                let mut params: Vec<(BindPattern, Option<TypeAst>)> = Vec::new();
                 loop {
                     // Check for immediate )
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
@@ -932,32 +933,43 @@ impl<R: Read> Parser<R> {
                             break;
                         }
                     }
-                    let pattern = if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+                    let (pattern, param_type) = if let Ok(next) =
+                        self.lexer.peek_token_not(pred::ignore, 0)
+                    {
                         if let Token::Identifier(name) = &next.token {
                             let name = name.clone();
                             let name_info = next.info.clone();
                             self.lexer.next_token().unwrap();
+                            let mut parsed_ty: Option<TypeAst> = None;
                             if let Ok(colon) = self.lexer.peek_token_not(pred::ignore, 0) {
                                 if matches!(colon.token, Token::Colon) {
                                     self.lexer.next_token().unwrap(); // consume ':'
-                                                                      // Parse and discard annotation for now; this keeps old `x: T` syntax accepted.
-                                    let _annotation = self.parse_expr(prec::COMMA_PREC + 1)?;
+                                    let annotation = self.parse_expr(prec::COMMA_PREC + 1)?;
+                                    parsed_ty = Some(
+                                        crate::type_checker::specialize::into_type_ast(annotation)?,
+                                    );
                                 }
                             }
-                            BindPattern::Variable {
-                                name,
-                                info: name_info,
-                            }
+                            (
+                                BindPattern::Variable {
+                                    name,
+                                    info: name_info,
+                                },
+                                parsed_ty,
+                            )
                         } else {
                             // Parse parameter as an expression (tuple, record, list, etc.)
                             // Use a min prec above comma to stop at parameter boundaries
                             let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
-                            BindPattern::from_expr(param_expr).map_err(|e| {
-                                ParseError::new(
-                                    format!("Invalid function parameter: {}", e.message()),
-                                    e.info().clone(),
-                                )
-                            })?
+                            (
+                                BindPattern::from_expr(param_expr).map_err(|e| {
+                                    ParseError::new(
+                                        format!("Invalid function parameter: {}", e.message()),
+                                        e.info().clone(),
+                                    )
+                                })?,
+                                None,
+                            )
                         }
                     } else {
                         return Err(ParseError::new(
@@ -965,7 +977,7 @@ impl<R: Read> Parser<R> {
                             name_info.clone(),
                         ));
                     };
-                    params.push(pattern);
+                    params.push((pattern, param_type));
                     // Check for comma
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                         if t.token == Token::Operator(COMMA_SYM.to_string()) {
@@ -981,7 +993,7 @@ impl<R: Read> Parser<R> {
                 if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                     if matches!(&t.token, Token::Operator(op) if op == "->") {
                         self.lexer.next_token().unwrap(); // consume ->
-                        return_type_expr = Some(self.parse_expr(prec::ASSIGNMENT_PREC + 1)?);
+                        return_type_expr = Some(self.parse_expr(prec::FUNCTION_APP_PREC + 1)?);
                     }
                 }
 

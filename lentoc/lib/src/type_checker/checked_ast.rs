@@ -185,9 +185,7 @@ impl CheckedParam {
 #[derive(Debug, Clone)]
 pub enum CheckedAst {
     /// A literal is a constant value that is directly represented in the source code.
-    LiteralValue { value: Value, info: LineInfo },
-    /// A literal type is a type that is directly represented in the source code.
-    LiteralType { ty: Type, info: LineInfo },
+    Literal { value: Value, info: LineInfo },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple {
         exprs: Vec<CheckedAst>,
@@ -288,8 +286,7 @@ pub enum CheckedAst {
 impl GetType for CheckedAst {
     fn get_type(&self) -> &Type {
         match self {
-            CheckedAst::LiteralValue { value: v, info: _ } => v.get_type(),
-            CheckedAst::LiteralType { .. } => &std_types::TYPE,
+            CheckedAst::Literal { value: v, info: _ } => v.get_type(),
             CheckedAst::Tuple { ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
@@ -335,8 +332,7 @@ impl CheckedAst {
 
     pub fn info(&self) -> &LineInfo {
         match self {
-            CheckedAst::LiteralValue { info, .. } => info,
-            CheckedAst::LiteralType { info, .. } => info,
+            CheckedAst::Literal { info, .. } => info,
             CheckedAst::Tuple { info, .. } => info,
             CheckedAst::List { info, .. } => info,
             CheckedAst::Record { info, .. } => info,
@@ -354,8 +350,7 @@ impl CheckedAst {
 
     pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
         match self {
-            CheckedAst::LiteralValue { .. } => (),
-            CheckedAst::LiteralType { .. } => (),
+            CheckedAst::Literal { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
                 ty,
@@ -461,8 +456,7 @@ impl CheckedAst {
 
     pub fn print_expr(&self) -> String {
         match self {
-            CheckedAst::LiteralValue { value, info: _ } => value.pretty_print(),
-            CheckedAst::LiteralType { ty: value, info: _ } => value.pretty_print(),
+            CheckedAst::Literal { value, info: _ } => value.pretty_print(),
             CheckedAst::Tuple {
                 exprs: elements, ..
             } => format!(
@@ -578,8 +572,7 @@ impl CheckedAst {
 
     pub fn pretty_print(&self) -> String {
         match self {
-            Self::LiteralValue { value: l, .. } => l.pretty_print(),
-            Self::LiteralType { ty: l, .. } => l.pretty_print(),
+            Self::Literal { value: l, .. } => l.pretty_print(),
             Self::Tuple { exprs: t, .. } => {
                 let mut result = "(".to_string();
                 for (i, v) in t.iter().enumerate() {
