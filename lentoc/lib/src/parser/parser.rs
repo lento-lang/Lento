@@ -874,8 +874,6 @@ impl<R: Read> Parser<R> {
     /// fn name(param1, param2, ...) -> return_type ! { effects } { body }
     /// ```
     fn parse_fn(&mut self) -> ParseResult {
-        use crate::lexer::token::Keyword;
-
         // Parse function name
         let name_t = self
             .lexer
@@ -910,151 +908,8 @@ impl<R: Read> Parser<R> {
         })?;
 
         match &next.token {
-            // Declaration: fn name :: sig
-            Token::DoubleColon => {
-                self.lexer.next_token().unwrap(); // consume ::
-                let sig = self.parse_top()?;
-                let sig_info = sig.info().clone();
-                Ok(Ast::FunctionDecl {
-                    name,
-                    signature: Box::new(sig),
-                    info: name_info.join(&sig_info),
-                })
-            }
-            // Definition: fn name(params) -> ...
-            Token::LeftParen { .. } => {
-                self.lexer.next_token().unwrap(); // consume (
-                let mut params: Vec<(BindPattern, Option<TypeAst>)> = Vec::new();
-                loop {
-                    // Check for immediate )
-                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                        if t.token == Token::RightParen {
-                            self.lexer.next_token().unwrap();
-                            break;
-                        }
-                    }
-                    let (pattern, param_type) = if let Ok(next) =
-                        self.lexer.peek_token_not(pred::ignore, 0)
-                    {
-                        if let Token::Identifier(name) = &next.token {
-                            let name = name.clone();
-                            let name_info = next.info.clone();
-                            self.lexer.next_token().unwrap();
-                            let mut parsed_ty: Option<TypeAst> = None;
-                            if let Ok(colon) = self.lexer.peek_token_not(pred::ignore, 0) {
-                                if matches!(colon.token, Token::Colon) {
-                                    self.lexer.next_token().unwrap(); // consume ':'
-                                    let annotation = self.parse_expr(prec::COMMA_PREC + 1)?;
-                                    parsed_ty = Some(
-                                        crate::type_checker::specialize::into_type_ast(annotation)?,
-                                    );
-                                }
-                            }
-                            (
-                                BindPattern::Variable {
-                                    name,
-                                    info: name_info,
-                                },
-                                parsed_ty,
-                            )
-                        } else {
-                            // Parse parameter as an expression (tuple, record, list, etc.)
-                            // Use a min prec above comma to stop at parameter boundaries
-                            let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
-                            (
-                                BindPattern::from_expr(param_expr).map_err(|e| {
-                                    ParseError::new(
-                                        format!("Invalid function parameter: {}", e.message()),
-                                        e.info().clone(),
-                                    )
-                                })?,
-                                None,
-                            )
-                        }
-                    } else {
-                        return Err(ParseError::new(
-                            "Expected function parameter".to_string(),
-                            name_info.clone(),
-                        ));
-                    };
-                    params.push((pattern, param_type));
-                    // Check for comma
-                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                        if t.token == Token::Operator(COMMA_SYM.to_string()) {
-                            self.lexer.next_token().unwrap();
-                            continue;
-                        }
-                    }
-                }
-
-                // Parse optional -> return type expression (may include ! effects)
-                // Use a min prec just above assignment so `= body` isn't consumed.
-                let mut return_type_expr: Option<Ast> = None;
-                if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                    if matches!(&t.token, Token::Operator(op) if op == "->") {
-                        self.lexer.next_token().unwrap(); // consume ->
-                        return_type_expr = Some(self.parse_expr(prec::FUNCTION_APP_PREC + 1)?);
-                    }
-                }
-
-                // Parse optional requires { ... } / ensures { ... }
-                let mut _requires_expr: Option<Ast> = None;
-                let mut _ensures_expr: Option<Ast> = None;
-                loop {
-                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                        if t.token.is_keyword(&Keyword::Requires) {
-                            self.lexer.next_token().unwrap();
-                            self.parse_expected_eq(Token::LeftBrace, "{")?;
-                            _requires_expr = Some(self.parse_top()?);
-                            self.parse_expected_eq(Token::RightBrace, "}")?;
-                            continue;
-                        }
-                        if t.token.is_keyword(&Keyword::Ensures) {
-                            self.lexer.next_token().unwrap();
-                            self.parse_expected_eq(Token::LeftBrace, "{")?;
-                            _ensures_expr = Some(self.parse_top()?);
-                            self.parse_expected_eq(Token::RightBrace, "}")?;
-                            continue;
-                        }
-                    }
-                    break;
-                }
-
-                // Parse body
-                let body: Ast;
-                if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                    if t.token == Token::Operator(ASSIGNMENT_SYM.to_string()) {
-                        // Expression body: fn name(params) -> ... = expr
-                        self.lexer.next_token().unwrap(); // consume =
-                        body = self.parse_top()?;
-                    } else if t.token == Token::LeftBrace {
-                        // Block body: fn name(params) -> ... { body }
-                        self.lexer.next_token().unwrap(); // consume {
-                        body = self.parse_record_or_block(t.info)?;
-                    } else {
-                        // No body — declaration-style within definition parsing
-                        // e.g. fn foo(x) -> int (just a signature with params)
-                        body = Ast::Literal {
-                            value: Value::Unit,
-                            info: t.info.clone(),
-                        };
-                    }
-                } else {
-                    body = Ast::Literal {
-                        value: Value::Unit,
-                        info: LineInfo::default(),
-                    };
-                }
-
-                let body_info = body.info().clone();
-                Ok(Ast::FunctionDef {
-                    name,
-                    params,
-                    return_type: return_type_expr.map(Box::new),
-                    body: Box::new(body),
-                    info: name_info.join(&body_info),
-                })
-            }
+            Token::DoubleColon => self.parse_fn_declaration(name, name_info),
+            Token::LeftParen { .. } => self.parse_fn_definition(name, name_info),
             _ => Err(ParseError::new(
                 format!(
                     "Expected :: or ( after function name, but found {}",
@@ -1067,6 +922,151 @@ impl<R: Read> Parser<R> {
                 next.info,
             )),
         }
+    }
+
+    fn parse_fn_declaration(&mut self, name: String, name_info: LineInfo) -> ParseResult {
+        self.lexer.next_token().unwrap(); // consume ::
+        let sig = self.parse_top()?;
+        let sig_info = sig.info().clone();
+        Ok(Ast::FunctionDecl {
+            name,
+            signature: Box::new(sig),
+            info: name_info.join(&sig_info),
+        })
+    }
+
+    fn parse_fn_definition(&mut self, name: String, name_info: LineInfo) -> ParseResult {
+        use crate::lexer::token::Keyword;
+
+        self.lexer.next_token().unwrap(); // consume (
+        let mut params: Vec<(BindPattern, Option<TypeAst>)> = Vec::new();
+        loop {
+            // Check for immediate )
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                if t.token == Token::RightParen {
+                    self.lexer.next_token().unwrap();
+                    break;
+                }
+            }
+            let (pattern, param_type) = if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0)
+            {
+                if let Token::Identifier(name) = &next.token {
+                    let name = name.clone();
+                    let name_info = next.info.clone();
+                    self.lexer.next_token().unwrap();
+                    let mut parsed_ty: Option<TypeAst> = None;
+                    if let Ok(colon) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if matches!(colon.token, Token::Colon) {
+                            self.lexer.next_token().unwrap(); // consume ':'
+                            let annotation = self.parse_expr(prec::COMMA_PREC + 1)?;
+                            parsed_ty =
+                                Some(crate::type_checker::specialize::into_type_ast(annotation)?);
+                        }
+                    }
+                    (
+                        BindPattern::Variable {
+                            name,
+                            info: name_info,
+                        },
+                        parsed_ty,
+                    )
+                } else {
+                    // Parse parameter as an expression (tuple, record, list, etc.)
+                    // Use a min prec above comma to stop at parameter boundaries
+                    let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
+                    (
+                        BindPattern::from_expr(param_expr).map_err(|e| {
+                            ParseError::new(
+                                format!("Invalid function parameter: {}", e.message()),
+                                e.info().clone(),
+                            )
+                        })?,
+                        None,
+                    )
+                }
+            } else {
+                return Err(ParseError::new(
+                    "Expected function parameter".to_string(),
+                    name_info.clone(),
+                ));
+            };
+            params.push((pattern, param_type));
+            // Check for comma
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                if t.token == Token::Operator(COMMA_SYM.to_string()) {
+                    self.lexer.next_token().unwrap();
+                    continue;
+                }
+            }
+        }
+
+        // Parse optional -> return type expression (may include ! effects)
+        // Use a min prec just above assignment so `= body` isn't consumed.
+        let mut return_type_expr: Option<Ast> = None;
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if matches!(&t.token, Token::Operator(op) if op == "->") {
+                self.lexer.next_token().unwrap(); // consume ->
+                return_type_expr = Some(self.parse_expr(prec::FUNCTION_APP_PREC + 1)?);
+            }
+        }
+
+        // Parse optional requires { ... } / ensures { ... }
+        let mut _requires_expr: Option<Ast> = None;
+        let mut _ensures_expr: Option<Ast> = None;
+        loop {
+            if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                if t.token.is_keyword(&Keyword::Requires) {
+                    self.lexer.next_token().unwrap();
+                    self.parse_expected_eq(Token::LeftBrace, "{")?;
+                    _requires_expr = Some(self.parse_top()?);
+                    self.parse_expected_eq(Token::RightBrace, "}")?;
+                    continue;
+                }
+                if t.token.is_keyword(&Keyword::Ensures) {
+                    self.lexer.next_token().unwrap();
+                    self.parse_expected_eq(Token::LeftBrace, "{")?;
+                    _ensures_expr = Some(self.parse_top()?);
+                    self.parse_expected_eq(Token::RightBrace, "}")?;
+                    continue;
+                }
+            }
+            break;
+        }
+
+        // Parse body
+        let body: Ast;
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if t.token == Token::Operator(ASSIGNMENT_SYM.to_string()) {
+                // Expression body: fn name(params) -> ... = expr
+                self.lexer.next_token().unwrap(); // consume =
+                body = self.parse_top()?;
+            } else if t.token == Token::LeftBrace {
+                // Block body: fn name(params) -> ... { body }
+                self.lexer.next_token().unwrap(); // consume {
+                body = self.parse_record_or_block(t.info)?;
+            } else {
+                // No body — declaration-style within definition parsing
+                // e.g. fn foo(x) -> int (just a signature with params)
+                body = Ast::Literal {
+                    value: Value::Unit,
+                    info: t.info.clone(),
+                };
+            }
+        } else {
+            body = Ast::Literal {
+                value: Value::Unit,
+                info: LineInfo::default(),
+            };
+        }
+
+        let body_info = body.info().clone();
+        Ok(Ast::FunctionDef {
+            name,
+            params,
+            return_type: return_type_expr.map(Box::new),
+            body: Box::new(body),
+            info: name_info.join(&body_info),
+        })
     }
 
     /// Parse a type declaration after the `type` keyword has been consumed.
