@@ -105,6 +105,46 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
             associativity: OpAssoc::Left,
             allow_trailing: false,
         },
+        // Effect annotation operator (e.g. `A -> B ! { e }`)
+        OpInfo {
+            symbol: "!".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EFFECT_ASCRIPTION_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        // Effect annotation as prefix (e.g. session types `!t . s`)
+        OpInfo {
+            symbol: "!".to_string(),
+            position: OpPos::Prefix,
+            precedence: prec::PREFIX_PREC,
+            associativity: OpAssoc::Right,
+            allow_trailing: false,
+        },
+        // Function arrow (e.g. `A -> B`)
+        OpInfo {
+            symbol: "->".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::FUNCTION_ARROW_PREC,
+            associativity: OpAssoc::Right,
+            allow_trailing: false,
+        },
+        // Sum types (e.g. `int | str`)
+        OpInfo {
+            symbol: "|".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::SUM_TYPE_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        // Intersection / constraint types
+        OpInfo {
+            symbol: "&".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::LOGICAL_AND_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
     ]
 }
 
@@ -527,6 +567,27 @@ impl<R: Read> Parser<R> {
                 name: id,
                 info: t.info,
             }),
+            Token::Keyword(ref kw) => match kw {
+                crate::lexer::token::Keyword::Self_ => Ok(Ast::Identifier {
+                    name: "Self".to_string(),
+                    info: t.info,
+                }),
+                crate::lexer::token::Keyword::Intrinsic => Ok(Ast::Identifier {
+                    name: "intrinsic".to_string(),
+                    info: t.info,
+                }),
+                _ => Err(ParseError::new(
+                    format!("Unexpected keyword: {}", t.token.to_string().light_red()),
+                    t.info.clone(),
+                )
+                .with_label(
+                    format!(
+                        "The keyword {} is not valid here",
+                        t.token.to_string().yellow()
+                    ),
+                    t.info,
+                )),
+            },
             Token::Operator(op) => {
                 if let Some(op) = self.find_operator_pos(&op, OpPos::Prefix) {
                     log::trace!("Parsing prefix operator: {:?}", op);
@@ -675,6 +736,7 @@ impl<R: Read> Parser<R> {
                             Ast::Assignment {
                                 target: BindPattern::from_expr(expr)?,
                                 expr: Box::new(rhs),
+                                annotation: None,
                                 info,
                             }
                         }
@@ -725,6 +787,15 @@ impl<R: Read> Parser<R> {
 
     /// Parse a top-level expression.
     fn parse_top_expr(&mut self) -> ParseResult {
+        // Intercept fn keyword for function declarations/definitions
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if t.token.is_keyword(&crate::lexer::token::Keyword::Fn) {
+                self.lexer.next_token().unwrap(); // consume fn
+                let expr = self.parse_fn()?;
+                self.skip_terminal_and_ignored();
+                return Ok(expr);
+            }
+        }
         match self.parse_expr(0) {
             Ok(expr) => {
                 self.skip_terminal_and_ignored();
@@ -757,6 +828,230 @@ impl<R: Read> Parser<R> {
             } else {
                 break;
             }
+        }
+    }
+
+    /// Parse a function declaration or definition.
+    ///
+    /// Expects the `fn` keyword to already be consumed.
+    ///
+    /// ## Declaration syntax
+    /// ```lento
+    /// fn name :: return_type ! { effects }
+    /// ```
+    ///
+    /// ## Definition syntax
+    /// ```lento
+    /// fn name(param1, param2, ...) -> return_type ! { effects } = body
+    /// fn name(param1, param2, ...) -> return_type ! { effects } { body }
+    /// ```
+    fn parse_fn(&mut self) -> ParseResult {
+        use crate::lexer::token::Keyword;
+
+        // Parse function name
+        let name_t = self.lexer.expect_next_token_not(pred::ignore).map_err(|err| {
+            ParseError::new(
+                "Expected function name after fn".to_string(),
+                err.info().clone(),
+            )
+        })?;
+        let name = match &name_t.token {
+            Token::Identifier(id) => id.clone(),
+            _ => {
+                return Err(ParseError::new(
+                    format!(
+                        "Expected function name, but found {}",
+                        name_t.token.to_string().light_red()
+                    ),
+                    name_t.info.clone(),
+                )
+                .with_label("This should be a function name".to_string(), name_t.info));
+            }
+        };
+        let name_info = name_t.info;
+
+        // Peek to distinguish declaration (::) from definition ((...))
+        let next = self
+            .lexer
+            .peek_token_not(pred::ignore, 0)
+            .map_err(|err| {
+                ParseError::new(
+                    "Expected :: or ( after function name".to_string(),
+                    err.info().clone(),
+                )
+            })?;
+
+        match &next.token {
+            // Declaration: fn name :: sig
+            Token::DoubleColon => {
+                self.lexer.next_token().unwrap(); // consume ::
+                let sig = self.parse_top_expr()?;
+                let sig_info = sig.info().clone();
+                Ok(Ast::Assignment {
+                    target: crate::parser::pattern::BindPattern::from_expr(Ast::Identifier {
+                        name: name.clone(),
+                        info: name_info.clone(),
+                    })
+                    .map_err(|_| {
+                        ParseError::new(
+                            "Invalid function name".to_string(),
+                            name_info.clone(),
+                        )
+                    })?,
+                    expr: Box::new(sig),
+                    annotation: None,
+                    info: name_info.join(&sig_info),
+                })
+            }
+            // Definition: fn name(params) -> ...
+            Token::LeftParen { .. } => {
+                self.lexer.next_token().unwrap(); // consume (
+                let mut param_names = Vec::new();
+                loop {
+                    // Check for immediate )
+                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if t.token == Token::RightParen {
+                            self.lexer.next_token().unwrap();
+                            break;
+                        }
+                    }
+                    let param_t = self.lexer.expect_next_token_not(pred::ignore).map_err(|err| {
+                        ParseError::new(
+                            "Expected parameter name".to_string(),
+                            err.info().clone(),
+                        )
+                    })?;
+                    match &param_t.token {
+                        Token::Identifier(id) => {
+                            param_names.push((id.clone(), param_t.info));
+                        }
+                        _ => {
+                            return Err(ParseError::new(
+                                format!(
+                                    "Expected parameter name, but found {}",
+                                    param_t.token.to_string().light_red()
+                                ),
+                                param_t.info.clone(),
+                            )
+                            .with_label(
+                                "This should be a parameter name".to_string(),
+                                param_t.info,
+                            ));
+                        }
+                    }
+                    // Check for comma
+                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if t.token == Token::Operator(COMMA_SYM.to_string()) {
+                            self.lexer.next_token().unwrap();
+                            continue;
+                        }
+                    }
+                }
+
+                // Parse optional -> return type expression (may include ! effects)
+                // Use a min prec just above assignment so `= body` isn't consumed.
+                let mut _return_type_expr: Option<Ast> = None;
+                if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                    if matches!(&t.token, Token::Operator(op) if op == "->") {
+                        self.lexer.next_token().unwrap(); // consume ->
+                        _return_type_expr =
+                            Some(self.parse_expr(prec::ASSIGNMENT_PREC + 1)?);
+                    }
+                }
+
+                // Parse optional requires { ... } / ensures { ... }
+                let mut _requires_expr: Option<Ast> = None;
+                let mut _ensures_expr: Option<Ast> = None;
+                loop {
+                    if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if t.token.is_keyword(&Keyword::Requires) {
+                            self.lexer.next_token().unwrap();
+                            self.parse_expected_eq(Token::LeftBrace, "{")?;
+                            _requires_expr = Some(self.parse_top_expr()?);
+                            self.parse_expected_eq(Token::RightBrace, "}")?;
+                            continue;
+                        }
+                        if t.token.is_keyword(&Keyword::Ensures) {
+                            self.lexer.next_token().unwrap();
+                            self.parse_expected_eq(Token::LeftBrace, "{")?;
+                            _ensures_expr = Some(self.parse_top_expr()?);
+                            self.parse_expected_eq(Token::RightBrace, "}")?;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                // Parse body
+                let body: Ast;
+                if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+                    if t.token == Token::Operator(ASSIGNMENT_SYM.to_string()) {
+                        // Expression body: fn name(params) -> ... = expr
+                        self.lexer.next_token().unwrap(); // consume =
+                        body = self.parse_top_expr()?;
+                    } else if t.token == Token::LeftBrace {
+                        // Block body: fn name(params) -> ... { body }
+                        self.lexer.next_token().unwrap(); // consume {
+                        body = self.parse_record_or_block(t.info)?;
+                    } else {
+                        // No body — declaration-style within definition parsing
+                        // e.g. fn foo(x) -> int (just a signature with params)
+                        body = Ast::Literal {
+                            value: Value::Unit,
+                            info: t.info.clone(),
+                        };
+                    }
+                } else {
+                    body = Ast::Literal {
+                        value: Value::Unit,
+                        info: LineInfo::default(),
+                    };
+                }
+
+                // Build nested lambdas from params
+                let mut lambda = body;
+                for (param_name, param_info) in param_names.into_iter().rev() {
+                    let param_info_clone = param_info.clone();
+                    let lambda_info = lambda.info().clone();
+                    lambda = Ast::Lambda {
+                        param: Box::new(Ast::Identifier {
+                            name: param_name,
+                            info: param_info,
+                        }),
+                        body: Box::new(lambda),
+                        return_type: None,
+                        info: param_info_clone.join(&lambda_info),
+                    };
+                }
+
+                let info = name_info.join(lambda.info());
+                Ok(Ast::Assignment {
+                    target: crate::parser::pattern::BindPattern::from_expr(Ast::Identifier {
+                        name: name.clone(),
+                        info: name_info.clone(),
+                    })
+                    .map_err(|_| {
+                        ParseError::new(
+                            "Invalid function name".to_string(),
+                            name_info.clone(),
+                        )
+                    })?,
+                    expr: Box::new(lambda),
+                    annotation: None,
+                    info,
+                })
+            }
+            _ => Err(ParseError::new(
+                format!(
+                    "Expected :: or ( after function name, but found {}",
+                    next.token.to_string().light_red()
+                ),
+                next.info.clone(),
+            )
+            .with_label(
+                "Function declarations use `::`; definitions use `(`".to_string(),
+                next.info,
+            )),
         }
     }
 
