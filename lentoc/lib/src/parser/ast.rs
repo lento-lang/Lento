@@ -30,8 +30,8 @@ pub enum Ast {
     },
     /// An identifier is a named reference to a value in the environment.
     Identifier { name: String, info: LineInfo },
-    /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
-    Assignment {
+    /// A let expression binds a pattern to a value.
+    Let {
         /// The target expression to assign to.
         target: BindPattern,
         /// The source expression to assign to the target.
@@ -87,7 +87,7 @@ pub enum Ast {
     /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
     FunctionDef {
         name: String,
-        params: Vec<Ast>,
+        params: Vec<BindPattern>,
         /// Optional return type expression (after `->`, may include `! { effects }`).
         return_type: Option<Box<Ast>>,
         body: Box<Ast>,
@@ -120,10 +120,10 @@ impl Debug for Ast {
             Self::Identifier { name, .. } => {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
-            Self::Assignment {
+            Self::Let {
                 target, expr, annotation, ..
             } => f
-                .debug_struct("Assignment")
+                .debug_struct("Let")
                 .field("target", target)
                 .field("expr", expr)
                 .field("annotation", annotation)
@@ -211,7 +211,7 @@ impl Ast {
             Ast::Lambda { info, .. } => info,
             Ast::Binary { info, .. } => info,
             Ast::Unary { info, .. } => info,
-            Ast::Assignment { info, .. } => info,
+            Ast::Let { info, .. } => info,
             Ast::Block { info, .. } => info,
             Ast::LiteralType { info, .. } => info,
             Ast::FunctionDecl { info, .. } => info,
@@ -239,7 +239,7 @@ impl Ast {
             Ast::Lambda { info, .. } => info,
             Ast::Binary { info, .. } => info,
             Ast::Unary { info, .. } => info,
-            Ast::Assignment { info, .. } => info,
+            Ast::Let { info, .. } => info,
             Ast::Block { info, .. } => info,
             Ast::LiteralType { info, .. } => info,
             Ast::FunctionDecl { info, .. } => info,
@@ -304,7 +304,7 @@ impl Ast {
             } => {
                 format!("({} {})", op.symbol.clone(), operand.print_expr())
             }
-            Ast::Assignment {
+            Ast::Let {
                 target: lhs,
                 expr: rhs,
                 annotation,
@@ -406,13 +406,13 @@ impl PartialEq for Ast {
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::Assignment {
+                Self::Let {
                     target: l1,
                     expr: l2,
                     annotation: l3,
                     ..
                 },
-                Self::Assignment {
+                Self::Let {
                     target: r1,
                     expr: r2,
                     annotation: r3,

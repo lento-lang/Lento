@@ -51,7 +51,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
             (_, _) => unreachable!("Undefined identifier: {}", name),
         },
-        CheckedAst::Assignment { target, expr, .. } => {
+        CheckedAst::Let { target, expr, .. } => {
             let value = eval_expr(expr, env)?;
             eval_assignment(target, &value, env)?;
             value

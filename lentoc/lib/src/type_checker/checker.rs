@@ -259,7 +259,7 @@ impl TypeChecker<'_> {
                 for p in param_asts {
                     let lambda_info = lambda.info().clone();
                     lambda = Ast::Lambda {
-                        param: Box::new(p),
+                        param: Box::new(p.to_ast()),
                         body: Box::new(lambda),
                         return_type: None,
                         info: lambda_info,
@@ -291,7 +291,7 @@ impl TypeChecker<'_> {
                     .add_variable(name.clone(), std_types::TYPE.clone());
                 continue;
             }
-            if let Ast::Assignment { target, expr, .. } = e {
+            if let Ast::Let { target, expr, .. } = e {
                 let BindPattern::Variable { name, .. } = target else {
                     continue;
                 };
@@ -371,7 +371,7 @@ impl TypeChecker<'_> {
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,
-            Ast::Assignment { target, expr, info, .. } => self.check_assignment(target, expr, info)?,
+            Ast::Let { target, expr, info, .. } => self.check_let(target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
             Ast::FunctionDecl { name, signature, info } => {
                 let sig_type = self.check_expr(signature)?.get_type().clone();
@@ -395,7 +395,7 @@ impl TypeChecker<'_> {
                 for p in param_asts {
                     let lambda_info = lambda.info().clone();
                     lambda = Ast::Lambda {
-                        param: Box::new(p),
+                        param: Box::new(p.to_ast()),
                         body: Box::new(lambda),
                         return_type: None,
                         info: lambda_info,
@@ -696,7 +696,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_assignment(
+    fn check_let(
         &mut self,
         target: &BindPattern,
         expr: &Ast,
@@ -740,7 +740,7 @@ impl TypeChecker<'_> {
                 //     }
                 // }
                 self.add_variable(name.clone(), ty.clone());
-                Ok(CheckedAst::Assignment {
+                Ok(CheckedAst::Let {
                     target: BindPattern::Variable {
                         name: name.clone(),
                         info: info.clone(),

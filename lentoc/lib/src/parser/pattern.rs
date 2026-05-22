@@ -214,6 +214,42 @@ impl BindPattern {
     pub fn is_wildcard(&self) -> bool {
         matches!(self, BindPattern::Wildcard)
     }
+
+    pub fn to_ast(&self) -> Ast {
+        match self {
+            BindPattern::Variable { name, info } => Ast::Identifier {
+                name: name.clone(),
+                info: info.clone(),
+            },
+            BindPattern::Tuple { elements, info } => Ast::Tuple {
+                exprs: elements.iter().map(|e| e.to_ast()).collect(),
+                info: info.clone(),
+            },
+            BindPattern::Record { fields, info } => Ast::Record {
+                fields: fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_ast()))
+                    .collect(),
+                info: info.clone(),
+            },
+            BindPattern::List { elements, info } => Ast::List {
+                exprs: elements.iter().map(|e| e.to_ast()).collect(),
+                info: info.clone(),
+            },
+            BindPattern::Wildcard => Ast::Identifier {
+                name: "_".to_string(),
+                info: LineInfo::default(),
+            },
+            BindPattern::Literal { value, info } => Ast::Literal {
+                value: value.as_value(),
+                info: info.clone(),
+            },
+            BindPattern::Rest { name, info } => Ast::Identifier {
+                name: format!("...{}", name),
+                info: info.clone(),
+            },
+        }
+    }
 }
 
 impl PartialEq for BindPattern {

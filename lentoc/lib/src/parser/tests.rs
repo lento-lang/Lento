@@ -289,8 +289,8 @@ mod tests {
         let result = parse_str_one("int x = 1", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
-        if let Ast::Assignment { target, expr, .. } = &result {
+        assert!(matches!(result, Ast::Let { .. }));
+        if let Ast::Let { target, expr, .. } = &result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
             // if let Some(annotation) = annotation {
@@ -308,7 +308,7 @@ mod tests {
         let result = parse_str_one("x = 1", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
+        assert!(matches!(result, Ast::Let { .. }));
     }
 
     #[test]
@@ -316,8 +316,8 @@ mod tests {
         let result = parse_str_one("x = 1 + 2", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
-        if let Ast::Assignment { target, expr, .. } = &result {
+        assert!(matches!(result, Ast::Let { .. }));
+        if let Ast::Let { target, expr, .. } = &result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Binary { .. }));
         }
@@ -648,7 +648,7 @@ mod tests {
     #[test]
     fn assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "x");
@@ -666,7 +666,7 @@ mod tests {
     #[test]
     fn function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -707,7 +707,7 @@ mod tests {
     #[test]
     fn function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -744,7 +744,7 @@ mod tests {
     #[test]
     fn function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -782,7 +782,7 @@ mod tests {
     #[test]
     fn function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -816,7 +816,7 @@ mod tests {
     #[test]
     fn function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -857,7 +857,7 @@ mod tests {
     #[test]
     fn function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -891,7 +891,7 @@ mod tests {
     #[test]
     fn function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -940,7 +940,7 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -997,7 +997,7 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -1049,7 +1049,7 @@ mod tests {
     #[test]
     fn function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -1104,7 +1104,7 @@ mod tests {
             Some(&stdlib()),
         );
         let result = result.unwrap();
-        if let Ast::Assignment { target, expr, .. } = result {
+        if let Ast::Let { target, expr, .. } = result {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");

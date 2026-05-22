@@ -309,7 +309,7 @@ pub fn assignment(
         Ast::FunctionCall { .. } => definition(flatten_calls(target), body, types, variables),
         // Try parse other generic binding patterns (non-typed) for assignments like:
         // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
-        _ => Ok(Ast::Assignment {
+        _ => Ok(Ast::Let {
             target: BindPattern::from_expr(target)?,
             expr: Box::new(body),
             annotation: None,
@@ -390,7 +390,7 @@ pub fn definition(
         // `int x = ...`
         // If no parameters are found, it's a typed variable binding
         log::trace!("Found a typed variable binding: {} = ...", name);
-        Ok(Ast::Assignment {
+        Ok(Ast::Let {
             info: name_info.clone(),
             annotation: func.ty,
             target: BindPattern::Variable {
@@ -486,7 +486,7 @@ pub fn create_function_assignment(
             return_type: None,
         };
     }
-    Ast::Assignment {
+    Ast::Let {
         info,
         annotation,
         target: BindPattern::Variable {

@@ -176,8 +176,8 @@ mod tests {
     }
 
     #[test]
-    fn assignment() {
-        let ast = CheckedAst::Assignment {
+    fn let_binding() {
+        let ast = CheckedAst::Let {
             target: BindPattern::Variable {
                 name: "x".into(),
                 info: LineInfo::default(),

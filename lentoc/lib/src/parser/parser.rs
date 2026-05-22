@@ -80,7 +80,7 @@ pub(crate) const MEMBER_ACCESS_SYM: &str = ".";
 /// The binary operators are replaced with `Ast` nodes by `syntax_sugar::specialize` after parsing a `parse_top_expr` expression.
 /// - `semicolon`: `;` - Used to separate statements becomes an `Ast::Block` node.
 /// - `comma`: `,` - Used to separate expressions in tuples and lists becomes an `Ast::Tuple` or `Ast::List` node.
-/// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Assignment` node.
+/// - `assignment`: `=` - Used to assign values to variables becomes an `Ast::Let` node.
 /// - `member access`: `.` - Used to access members of records becomes an `Ast::MemberAccess` node.
 pub fn intrinsic_operators() -> Vec<OpInfo> {
     vec![
@@ -733,7 +733,7 @@ impl<R: Read> Parser<R> {
 
                             // Try to parse other generic binding patterns (non-typed) for assignments like:
                             // `_ = ...`, `x = ...`, `[x, y] = ...`, `{ a: x, b: y } = ...`, etc.
-                            Ast::Assignment {
+                            Ast::Let {
                                 target: BindPattern::from_expr(expr)?,
                                 expr: Box::new(rhs),
                                 annotation: None,
@@ -905,7 +905,7 @@ impl<R: Read> Parser<R> {
             // Definition: fn name(params) -> ...
             Token::LeftParen { .. } => {
                 self.lexer.next_token().unwrap(); // consume (
-                let mut param_names = Vec::new();
+                let mut params: Vec<BindPattern> = Vec::new();
                 loop {
                     // Check for immediate )
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
@@ -914,30 +914,16 @@ impl<R: Read> Parser<R> {
                             break;
                         }
                     }
-                    let param_t = self.lexer.expect_next_token_not(pred::ignore).map_err(|err| {
+                    // Parse parameter as an expression (identifier, tuple, record, etc.)
+                    // Use a min prec above comma to stop at parameter boundaries
+                    let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
+                    let pattern = BindPattern::from_expr(param_expr).map_err(|e| {
                         ParseError::new(
-                            "Expected parameter name".to_string(),
-                            err.info().clone(),
+                            format!("Invalid function parameter: {}", e.message()),
+                            e.info().clone(),
                         )
                     })?;
-                    match &param_t.token {
-                        Token::Identifier(id) => {
-                            param_names.push((id.clone(), param_t.info));
-                        }
-                        _ => {
-                            return Err(ParseError::new(
-                                format!(
-                                    "Expected parameter name, but found {}",
-                                    param_t.token.to_string().light_red()
-                                ),
-                                param_t.info.clone(),
-                            )
-                            .with_label(
-                                "This should be a parameter name".to_string(),
-                                param_t.info,
-                            ));
-                        }
-                    }
+                    params.push(pattern);
                     // Check for comma
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                         if t.token == Token::Operator(COMMA_SYM.to_string()) {
@@ -1006,15 +992,6 @@ impl<R: Read> Parser<R> {
                         info: LineInfo::default(),
                     };
                 }
-
-                // Build param list as Ast::Identifier nodes
-                let params: Vec<Ast> = param_names
-                    .into_iter()
-                    .map(|(param_name, param_info)| Ast::Identifier {
-                        name: param_name,
-                        info: param_info,
-                    })
-                    .collect();
 
                 let body_info = body.info().clone();
                 Ok(Ast::FunctionDef {

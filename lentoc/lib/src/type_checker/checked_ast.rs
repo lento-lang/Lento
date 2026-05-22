@@ -242,7 +242,7 @@ pub enum CheckedAst {
         info: LineInfo,
     },
     /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
-    Assignment {
+    Let {
         target: BindPattern,
         expr: Box<CheckedAst>,
         info: LineInfo,
@@ -291,7 +291,7 @@ impl GetType for CheckedAst {
             CheckedAst::Identifier { ty, .. } => ty,
             CheckedAst::FunctionCall { ret_ty, .. } => ret_ty,
             CheckedAst::Lambda { ty, .. } => ty,
-            CheckedAst::Assignment { .. } => &std_types::UNIT,
+            CheckedAst::Let { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
             CheckedAst::FunctionDecl { sig_type, .. } => sig_type,
             CheckedAst::FunctionDef { .. } => &std_types::UNIT,
@@ -338,7 +338,7 @@ impl CheckedAst {
             CheckedAst::Identifier { info, .. } => info,
             CheckedAst::FunctionCall { info, .. } => info,
             CheckedAst::Lambda { info, .. } => info,
-            CheckedAst::Assignment { info, .. } => info,
+            CheckedAst::Let { info, .. } => info,
             CheckedAst::Block { info, .. } => info,
             CheckedAst::FunctionDecl { info, .. } => info,
             CheckedAst::FunctionDef { info, .. } => info,
@@ -414,7 +414,7 @@ impl CheckedAst {
                 *ty = ty.specialize(judgements, changed);
                 body.specialize(judgements, changed);
             }
-            CheckedAst::Assignment {
+            CheckedAst::Let {
                 target: lhs,
                 expr: rhs,
                 ..
@@ -526,7 +526,7 @@ impl CheckedAst {
                     body.print_expr()
                 )
             }
-            CheckedAst::Assignment {
+            CheckedAst::Let {
                 target: lhs,
                 expr: rhs,
                 ..
@@ -627,7 +627,7 @@ impl CheckedAst {
                     body.pretty_print()
                 )
             }
-            Self::Assignment {
+            Self::Let {
                 target: lhs,
                 expr: rhs,
                 ..

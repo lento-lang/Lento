@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn function_def_with_return_type_single_no_parens_block() {
         let result = check_str_one("int f int x { x + 5 }", Some(&stdlib())).unwrap();
-        if let CheckedAst::Assignment { target, expr, .. } = result {
+        if let CheckedAst::Let { target, expr, .. } = result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn function_def_with_return_type_many_no_parens_block() {
         let result = check_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
-        if let CheckedAst::Assignment { target, expr, .. } = result {
+        if let CheckedAst::Let { target, expr, .. } = result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "add");
