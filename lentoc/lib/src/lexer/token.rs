@@ -174,7 +174,6 @@ impl Token {
         matches!(
             self,
             Token::EndOfFile
-                | Token::Newline
                 | Token::SemiColon
                 | Token::RightParen
                 | Token::RightBrace

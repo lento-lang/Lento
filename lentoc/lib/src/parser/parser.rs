@@ -702,7 +702,8 @@ impl<R: Read> Parser<R> {
         let mut expr = self.parse_term()?;
         // println!("Parsed term: {:?}", expr);
         while let Ok(nt) = self.lexer.peek_token(0) {
-            if nt.token.is_terminator() {
+            let is_top_level_nl_term = min_prec == 0 && nt.token.is_top_level_terminal(true);
+            if nt.token.is_terminator() || is_top_level_nl_term {
                 break; // Stop parsing on expression terminators
             }
             if let Token::Operator(op) = &nt.token {
@@ -766,7 +767,7 @@ impl<R: Read> Parser<R> {
                 };
                 continue;
             }
-            if nt.token.is_terminator() {
+            if nt.token.is_terminator() || is_top_level_nl_term {
                 break; // Stop parsing on expression terminators
             } else {
                 return Err(ParseError::new(
