@@ -1,0 +1,59 @@
+// Functions
+//
+// Inspired by `lentoc/lib/src/parser/tests.rs`: calls with/without parens,
+// blocks, lets, and nested functions.
+//
+// Also includes minimal effect + invariant-style specs:
+// `! { ... }`, `requires { ... }`, `ensures { ... }`.
+
+
+// Calls: with and without parentheses
+print("Hello, World!")
+print "Hello, World!"
+println ("Hello, World!")
+
+
+// Function definitions (block bodies)
+fn add_u8(x: u8, y: u8, z: u8) -> u8 {
+    x + y + z
+}
+
+fn add_int(x: int, y: int) -> int {
+    x + y
+}
+
+
+// One-line bodies (expression bodies)
+fn inc(x: int) -> int = x + 1;
+
+
+// Blocks, local bindings, and nested function definitions
+fn outer(x: int) -> int {
+    fn inner(y: int) -> int {
+        x + y
+    }
+
+    let z = inner(5);
+    z
+}
+
+
+// Invariant specifications (types)
+// Range types encode simple invariants.
+type Day = int in 1..31
+
+
+// Invariant specifications (contracts)
+fn pure_add(x: int, y: int) -> int
+    ensures { result == x + y }
+
+fn abs(x: int) -> int
+    ensures { result >= 0 }
+
+fn mk_day(x: int) -> Day ! { throw RangeError }
+    requires { x in 1..31 }
+    ensures { result == x }
+
+
+// Happy path: model errors as effects
+fn parse_int(s: str) -> int ! { throw ParseError }
