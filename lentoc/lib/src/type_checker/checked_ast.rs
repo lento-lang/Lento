@@ -275,6 +275,8 @@ pub enum CheckedAst {
         name: String,
         params: Vec<CheckedParam>,
         return_type: Option<Type>,
+        requires: Option<Box<CheckedAst>>,
+        ensures: Option<Box<CheckedAst>>,
         body: Box<CheckedAst>,
         info: LineInfo,
     },
@@ -439,6 +441,8 @@ impl CheckedAst {
             CheckedAst::FunctionDef {
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 ..
             } => {
@@ -447,6 +451,12 @@ impl CheckedAst {
                 }
                 if let Some(ret) = return_type {
                     *ret = ret.specialize(judgements, changed);
+                }
+                if let Some(req) = requires {
+                    req.specialize(judgements, changed);
+                }
+                if let Some(ens) = ensures {
+                    ens.specialize(judgements, changed);
                 }
                 body.specialize(judgements, changed);
             }
@@ -550,6 +560,8 @@ impl CheckedAst {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 ..
             } => {
@@ -562,7 +574,23 @@ impl CheckedAst {
                     .as_ref()
                     .map(|r| format!(" -> {}", r))
                     .unwrap_or_default();
-                format!("fn {}({}){} = {}", name, params_str, ret, body.print_expr())
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|r| format!(" ensures {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                format!(
+                    "fn {}({}){}{}{} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    req,
+                    ens,
+                    body.print_expr()
+                )
             }
             CheckedAst::TypeDecl { name, .. } => {
                 format!("type {}", name)
@@ -655,6 +683,8 @@ impl CheckedAst {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 ..
             } => {
@@ -667,11 +697,21 @@ impl CheckedAst {
                     .as_ref()
                     .map(|r| format!(" -> {}", r))
                     .unwrap_or_default();
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.pretty_print()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|r| format!(" ensures {{ {} }}", r.pretty_print()))
+                    .unwrap_or_default();
                 format!(
-                    "fn {}({}){} = {}",
+                    "fn {}({}){}{}{} = {}",
                     name,
                     params_str,
                     ret,
+                    req,
+                    ens,
                     body.pretty_print()
                 )
             }

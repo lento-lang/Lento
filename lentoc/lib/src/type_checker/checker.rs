@@ -248,6 +248,8 @@ impl TypeChecker<'_> {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 info,
             } = e
@@ -256,6 +258,16 @@ impl TypeChecker<'_> {
                     let type_ast =
                         crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
                     Some(self.check_type_expr(&type_ast)?)
+                } else {
+                    None
+                };
+                let _declared_requires = if let Some(req_ast) = requires {
+                    Some(self.check_expr(req_ast)?)
+                } else {
+                    None
+                };
+                let _declared_ensures = if let Some(ens_ast) = ensures {
+                    Some(self.check_expr(ens_ast)?)
                 } else {
                     None
                 };
@@ -422,6 +434,8 @@ impl TypeChecker<'_> {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 info,
             } => {
@@ -429,6 +443,16 @@ impl TypeChecker<'_> {
                     let type_ast =
                         crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
                     Some(self.check_type_expr(&type_ast)?)
+                } else {
+                    None
+                };
+                let declared_requires = if let Some(req_ast) = requires {
+                    Some(Box::new(self.check_expr(req_ast)?))
+                } else {
+                    None
+                };
+                let declared_ensures = if let Some(ens_ast) = ensures {
+                    Some(Box::new(self.check_expr(ens_ast)?))
                 } else {
                     None
                 };
@@ -468,6 +492,8 @@ impl TypeChecker<'_> {
                     name: name.clone(),
                     params: checked_params,
                     return_type: Some(ret_type),
+                    requires: declared_requires,
+                    ensures: declared_ensures,
                     body: Box::new(checked_body),
                     info: info.clone(),
                 }

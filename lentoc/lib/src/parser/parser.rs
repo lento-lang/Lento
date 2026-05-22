@@ -1018,21 +1018,21 @@ impl<R: Read> Parser<R> {
         }
 
         // Parse optional requires { ... } / ensures { ... }
-        let mut _requires_expr: Option<Ast> = None;
-        let mut _ensures_expr: Option<Ast> = None;
+        let mut requires: Option<Ast> = None;
+        let mut ensures: Option<Ast> = None;
         loop {
             if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
                 if t.token.is_keyword(&Keyword::Requires) {
                     self.lexer.next_token().unwrap();
                     self.parse_expected_eq(Token::LeftBrace, "{")?;
-                    _requires_expr = Some(self.parse_top()?);
+                    requires = Some(self.parse_top()?);
                     self.parse_expected_eq(Token::RightBrace, "}")?;
                     continue;
                 }
                 if t.token.is_keyword(&Keyword::Ensures) {
                     self.lexer.next_token().unwrap();
                     self.parse_expected_eq(Token::LeftBrace, "{")?;
-                    _ensures_expr = Some(self.parse_top()?);
+                    ensures = Some(self.parse_top()?);
                     self.parse_expected_eq(Token::RightBrace, "}")?;
                     continue;
                 }
@@ -1071,6 +1071,8 @@ impl<R: Read> Parser<R> {
             name,
             params,
             return_type: return_type_expr.map(Box::new),
+            requires: requires.map(Box::new),
+            ensures: ensures.map(Box::new),
             body: Box::new(body),
             info: name_info.join(&body_info),
         })

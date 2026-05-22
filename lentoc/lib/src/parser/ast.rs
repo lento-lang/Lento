@@ -84,6 +84,10 @@ pub enum Ast {
         params: Vec<(BindPattern, Option<TypeAst>)>,
         /// Optional return type expression (after `->`, may include `! { effects }`).
         return_type: Option<Box<Ast>>,
+        /// Optional pre-condition specification (`requires { ... }`) as code.
+        requires: Option<Box<Ast>>,
+        /// Optional post-condition specification (`ensures { ... }`) as code.
+        ensures: Option<Box<Ast>>,
         body: Box<Ast>,
         info: LineInfo,
     },
@@ -171,6 +175,8 @@ impl Debug for Ast {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 ..
             } => f
@@ -178,6 +184,8 @@ impl Debug for Ast {
                 .field("name", name)
                 .field("params", params)
                 .field("return_type", return_type)
+                .field("requires", requires)
+                .field("ensures", ensures)
                 .field("body", body)
                 .finish(),
             Self::TypeDecl {
@@ -312,6 +320,8 @@ impl Ast {
                 name,
                 params,
                 return_type,
+                requires,
+                ensures,
                 body,
                 ..
             } => {
@@ -327,7 +337,23 @@ impl Ast {
                     .as_ref()
                     .map(|r| format!(" -> {}", r.print_expr()))
                     .unwrap_or_default();
-                format!("fn {}({}){} = {}", name, params_str, ret, body.print_expr())
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|e| format!(" ensures {{ {} }}", e.print_expr()))
+                    .unwrap_or_default();
+                format!(
+                    "fn {}({}){}{}{} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    req,
+                    ens,
+                    body.print_expr()
+                )
             }
             Ast::TypeDecl {
                 name, params, body, ..
@@ -436,17 +462,21 @@ impl PartialEq for Ast {
                     name: l0,
                     params: l1,
                     return_type: l2,
-                    body: l3,
+                    requires: l3,
+                    ensures: l4,
+                    body: l5,
                     ..
                 },
                 Self::FunctionDef {
                     name: r0,
                     params: r1,
                     return_type: r2,
-                    body: r3,
+                    requires: r3,
+                    ensures: r4,
+                    body: r5,
                     ..
                 },
-            ) => l0 == r0 && l1 == r1 && l2 == r2 && l3 == r3,
+            ) => l0 == r0 && l1 == r1 && l2 == r2 && l3 == r3 && l4 == r4 && l5 == r5,
             (
                 Self::TypeDecl {
                     name: l0,
