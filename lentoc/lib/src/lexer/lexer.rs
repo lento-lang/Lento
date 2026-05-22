@@ -12,6 +12,7 @@ use malachite::{num::conversion::traits::FromSciString, Integer, Natural, Ration
 
 use crate::{
     interpreter::number::{BitSize, FloatingPoint, Number, SignedInteger, UnsignedInteger},
+    lexer::token::Keyword,
     type_checker::types::std_types,
     util::error::{BaseErrorExt, LineInfo},
 };
@@ -1141,7 +1142,7 @@ impl<R: Read> Lexer<R> {
         match s.as_str() {
             "true" => Token::Boolean(true),
             "false" => Token::Boolean(false),
-            sym => match crate::lexer::token::Keyword::from_str(sym) {
+            sym => match Keyword::from_str(sym) {
                 Some(kw) => Token::Keyword(kw),
                 None => match self.operators.get(sym) {
                     Some(op) => Token::Operator(op.clone()),
