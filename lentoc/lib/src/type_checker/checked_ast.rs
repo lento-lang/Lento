@@ -255,6 +255,28 @@ pub enum CheckedAst {
         ty: Type,
         info: LineInfo,
     },
+    /// A function declaration (signature only, no body).
+    /// e.g. `fn id :: a -> a`
+    FunctionDecl {
+        name: String,
+        sig_type: Type,
+        info: LineInfo,
+    },
+    /// A function definition (with body and optional return type/effects).
+    /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
+    FunctionDef {
+        name: String,
+        params: Vec<CheckedParam>,
+        return_type: Option<Type>,
+        body: Box<CheckedAst>,
+        info: LineInfo,
+    },
+    /// A type declaration.
+    /// e.g. `type SmallIndex = u8`, `type Option(A) = Some(A) | None`
+    TypeDecl {
+        name: String,
+        info: LineInfo,
+    },
 }
 
 impl GetType for CheckedAst {
@@ -271,6 +293,9 @@ impl GetType for CheckedAst {
             CheckedAst::Lambda { ty, .. } => ty,
             CheckedAst::Assignment { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
+            CheckedAst::FunctionDecl { sig_type, .. } => sig_type,
+            CheckedAst::FunctionDef { .. } => &std_types::UNIT,
+            CheckedAst::TypeDecl { .. } => &std_types::UNIT,
         }
     }
 }
@@ -315,6 +340,9 @@ impl CheckedAst {
             CheckedAst::Lambda { info, .. } => info,
             CheckedAst::Assignment { info, .. } => info,
             CheckedAst::Block { info, .. } => info,
+            CheckedAst::FunctionDecl { info, .. } => info,
+            CheckedAst::FunctionDef { info, .. } => info,
+            CheckedAst::TypeDecl { info, .. } => info,
         }
     }
 
@@ -404,6 +432,24 @@ impl CheckedAst {
                 }
                 *ty = ty.specialize(judgements, changed);
             }
+            CheckedAst::FunctionDecl { sig_type, .. } => {
+                *sig_type = sig_type.specialize(judgements, changed);
+            }
+            CheckedAst::FunctionDef {
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                for param in params.iter_mut() {
+                    param.ty = param.ty.specialize(judgements, changed);
+                }
+                if let Some(ret) = return_type {
+                    *ret = ret.specialize(judgements, changed);
+                }
+                body.specialize(judgements, changed);
+            }
+            CheckedAst::TypeDecl { .. } => (),
         }
     }
 
@@ -497,6 +543,30 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
+            CheckedAst::FunctionDecl { name, sig_type, .. } => {
+                format!("fn {} :: {}", name, sig_type)
+            }
+            CheckedAst::FunctionDef {
+                name,
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| p.pattern.print_expr())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r))
+                    .unwrap_or_default();
+                format!("fn {}({}){} = {}", name, params_str, ret, body.print_expr())
+            }
+            CheckedAst::TypeDecl { name, .. } => {
+                format!("type {}", name)
+            }
         }
     }
 
@@ -578,6 +648,30 @@ impl CheckedAst {
                 }
                 result.push('}');
                 result
+            }
+            Self::FunctionDecl { name, sig_type, .. } => {
+                format!("fn {} :: {}", name, sig_type)
+            }
+            Self::FunctionDef {
+                name,
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| p.pattern.pretty_print())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r))
+                    .unwrap_or_default();
+                format!("fn {}({}){} = {}", name, params_str, ret, body.pretty_print())
+            }
+            Self::TypeDecl { name, .. } => {
+                format!("type {}", name)
             }
         }
     }

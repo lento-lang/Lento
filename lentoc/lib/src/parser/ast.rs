@@ -75,6 +75,32 @@ pub enum Ast {
         expr: TypeAst,
         info: LineInfo,
     },
+    /// A function declaration (signature only, no body).
+    /// e.g. `fn id :: a -> a`
+    FunctionDecl {
+        name: String,
+        /// The type signature expression after `::`.
+        signature: Box<Ast>,
+        info: LineInfo,
+    },
+    /// A function definition (with body and optional return type/effects).
+    /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
+    FunctionDef {
+        name: String,
+        params: Vec<Ast>,
+        /// Optional return type expression (after `->`, may include `! { effects }`).
+        return_type: Option<Box<Ast>>,
+        body: Box<Ast>,
+        info: LineInfo,
+    },
+    /// A type declaration.
+    /// e.g. `type SmallIndex = u8`, `type Option(A) = Some(A) | None`
+    TypeDecl {
+        name: String,
+        params: Vec<Ast>,
+        body: Box<Ast>,
+        info: LineInfo,
+    },
 }
 
 impl Debug for Ast {
@@ -137,6 +163,30 @@ impl Debug for Ast {
             Self::LiteralType { expr, .. } => {
                 f.debug_struct("LiteralType").field("expr", expr).finish()
             }
+            Self::FunctionDecl { name, signature, .. } => f
+                .debug_struct("FunctionDecl")
+                .field("name", name)
+                .field("signature", signature)
+                .finish(),
+            Self::FunctionDef {
+                name,
+                params,
+                return_type,
+                body,
+                ..
+            } => f
+                .debug_struct("FunctionDef")
+                .field("name", name)
+                .field("params", params)
+                .field("return_type", return_type)
+                .field("body", body)
+                .finish(),
+            Self::TypeDecl { name, params, body, .. } => f
+                .debug_struct("TypeDecl")
+                .field("name", name)
+                .field("params", params)
+                .field("body", body)
+                .finish(),
         }
     }
 }
@@ -164,6 +214,9 @@ impl Ast {
             Ast::Assignment { info, .. } => info,
             Ast::Block { info, .. } => info,
             Ast::LiteralType { info, .. } => info,
+            Ast::FunctionDecl { info, .. } => info,
+            Ast::FunctionDef { info, .. } => info,
+            Ast::TypeDecl { info, .. } => info,
         }
     }
 
@@ -189,6 +242,9 @@ impl Ast {
             Ast::Assignment { info, .. } => info,
             Ast::Block { info, .. } => info,
             Ast::LiteralType { info, .. } => info,
+            Ast::FunctionDecl { info, .. } => info,
+            Ast::FunctionDef { info, .. } => info,
+            Ast::TypeDecl { info, .. } => info,
         }
     }
 
@@ -269,6 +325,42 @@ impl Ast {
                     .join("; ")
             ),
             Ast::LiteralType { expr, .. } => expr.pretty_print(),
+            Ast::FunctionDecl { name, signature, .. } => {
+                format!("fn {} :: {}", name, signature.print_expr())
+            }
+            Ast::FunctionDef {
+                name,
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| p.print_expr())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r.print_expr()))
+                    .unwrap_or_default();
+                format!("fn {}({}){} = {}", name, params_str, ret, body.print_expr())
+            }
+            Ast::TypeDecl { name, params, body, .. } => {
+                let params_str = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "({})",
+                        params
+                            .iter()
+                            .map(|p| p.print_expr())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                };
+                format!("type {}{} = {}", name, params_str, body.print_expr())
+            }
         }
     }
 }
@@ -346,6 +438,44 @@ impl PartialEq for Ast {
                 Self::LiteralType { expr: l0, .. },
                 Self::LiteralType { expr: r0, .. },
             ) => l0 == r0,
+            (
+                Self::FunctionDecl {
+                    name: l0, signature: l1, ..
+                },
+                Self::FunctionDecl {
+                    name: r0, signature: r1, ..
+                },
+            ) => l0 == r0 && l1 == r1,
+            (
+                Self::FunctionDef {
+                    name: l0,
+                    params: l1,
+                    return_type: l2,
+                    body: l3,
+                    ..
+                },
+                Self::FunctionDef {
+                    name: r0,
+                    params: r1,
+                    return_type: r2,
+                    body: r3,
+                    ..
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2 && l3 == r3,
+            (
+                Self::TypeDecl {
+                    name: l0,
+                    params: l1,
+                    body: l2,
+                    ..
+                },
+                Self::TypeDecl {
+                    name: r0,
+                    params: r1,
+                    body: r2,
+                    ..
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             _ => false,
         }
     }
