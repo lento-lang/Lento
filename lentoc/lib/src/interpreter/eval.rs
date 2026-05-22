@@ -105,6 +105,7 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             }
             result
         }
+        CheckedAst::FunctionDecl { .. } | CheckedAst::FunctionDef { .. } | CheckedAst::TypeDecl { .. } => Value::Unit,
     };
     if !matches!(ast, CheckedAst::LiteralValue { .. }) {
         log::trace!(

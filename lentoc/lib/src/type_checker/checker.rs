@@ -244,6 +244,53 @@ impl TypeChecker<'_> {
 
     fn scan_forward(&mut self, expr: &[Ast]) -> TypeCheckerResult<()> {
         for e in expr {
+            if let Ast::FunctionDef {
+                name,
+                params,
+                return_type: _return_type,
+                body,
+                info,
+            } = e
+            {
+                // Register function name by type-checking a synthetic lambda
+                let mut param_asts = params.clone();
+                param_asts.reverse();
+                let mut lambda = *body.clone();
+                for p in param_asts {
+                    let lambda_info = lambda.info().clone();
+                    lambda = Ast::Lambda {
+                        param: Box::new(p),
+                        body: Box::new(lambda),
+                        return_type: None,
+                        info: lambda_info,
+                    };
+                }
+                let checked = self.check_expr(&lambda)?;
+                let variation = match checked.get_type() {
+                    Type::Function(ft) => *ft.clone(),
+                    _ => {
+                        return Err(TypeErrorVariant::TypeError(TypeError::new(
+                            "Expected function type from function definition".to_string(),
+                            info.clone(),
+                        )))
+                    }
+                };
+                self.env.add_function(name.clone(), variation);
+                continue;
+            }
+            if let Ast::FunctionDecl { name, signature, .. } = e {
+                // Register the declared name with the type derived from the signature expression.
+                let checked = self.check_expr(signature)?;
+                self.env
+                    .add_variable(name.clone(), checked.get_type().clone());
+                continue;
+            }
+            if let Ast::TypeDecl { name, .. } = e {
+                // Register type name as a variable (type-level binding)
+                self.env
+                    .add_variable(name.clone(), std_types::TYPE.clone());
+                continue;
+            }
             if let Ast::Assignment { target, expr, .. } = e {
                 let BindPattern::Variable { name, .. } = target else {
                     continue;
@@ -326,6 +373,61 @@ impl TypeChecker<'_> {
             } => self.check_unary(op, operand, info)?,
             Ast::Assignment { target, expr, info, .. } => self.check_assignment(target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
+            Ast::FunctionDecl { name, signature, info } => {
+                let sig_type = self.check_expr(signature)?.get_type().clone();
+                CheckedAst::FunctionDecl {
+                    name: name.clone(),
+                    sig_type,
+                    info: info.clone(),
+                }
+            }
+            Ast::FunctionDef {
+                name,
+                params,
+                return_type: _return_type,
+                body,
+                info,
+            } => {
+                // Build a synthetic lambda and type-check it
+                let mut param_asts = params.clone();
+                param_asts.reverse();
+                let mut lambda = *body.clone();
+                for p in param_asts {
+                    let lambda_info = lambda.info().clone();
+                    lambda = Ast::Lambda {
+                        param: Box::new(p),
+                        body: Box::new(lambda),
+                        return_type: None,
+                        info: lambda_info,
+                    };
+                }
+                let checked = self.check_expr(&lambda)?;
+                let (checked_params, checked_body, ret_type) =
+                    if let CheckedAst::Lambda {
+                        param,
+                        body,
+                        return_type,
+                        ..
+                    } = &checked
+                    {
+                        (vec![param.clone()], body.clone(), return_type.clone())
+                    } else {
+                        (vec![], Box::new(checked.clone()), std_types::ANY)
+                    };
+                CheckedAst::FunctionDef {
+                    name: name.clone(),
+                    params: checked_params,
+                    return_type: Some(ret_type),
+                    body: checked_body,
+                    info: info.clone(),
+                }
+            }
+            Ast::TypeDecl { name, info, .. } => {
+                CheckedAst::TypeDecl {
+                    name: name.clone(),
+                    info: info.clone(),
+                }
+            }
         })
     }
 
