@@ -474,11 +474,14 @@ impl<R: Read> Lexer<R> {
                     }
                 }
                 Ok(id)
+            } else if c == ':' && self.peek_char(0) == Some(':') {
+                self.next_char(); // consume second ':'
+                self.new_token_info(Token::DoubleColon)
             } else {
+                let is_function_call = self.is_function_call;
+                self.is_function_call = false; // Reset the function call flag
                 let token = self.new_token_info(match c {
-                    '(' => Token::LeftParen {
-                        is_function_call: self.is_function_call,
-                    },
+                    '(' => Token::LeftParen { is_function_call },
                     ')' => Token::RightParen,
                     '{' => Token::LeftBrace,
                     '}' => Token::RightBrace,
@@ -489,7 +492,6 @@ impl<R: Read> Lexer<R> {
                     '/' if self.peek_char(0) == Some('/') => return self.read_comment(),
                     _ => return self.read_operator(c),
                 });
-                self.is_function_call = false; // Reset the function call flag
                 token
             }
         } else {
@@ -1139,9 +1141,12 @@ impl<R: Read> Lexer<R> {
         match s.as_str() {
             "true" => Token::Boolean(true),
             "false" => Token::Boolean(false),
-            sym => match self.operators.get(sym) {
-                Some(op) => Token::Operator(op.clone()),
-                None => Token::Identifier(s),
+            sym => match crate::lexer::token::Keyword::from_str(sym) {
+                Some(kw) => Token::Keyword(kw),
+                None => match self.operators.get(sym) {
+                    Some(op) => Token::Operator(op.clone()),
+                    None => Token::Identifier(s),
+                },
             },
         }
     }
