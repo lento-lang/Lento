@@ -313,10 +313,9 @@ impl TypeChecker<'_> {
                 name, signature, ..
             } = e
             {
-                // Register the declared name with the type derived from the signature expression.
-                let checked = self.check_expr(signature)?;
-                self.env
-                    .add_variable(name.clone(), checked.get_type().clone());
+                // Register the declared name with the declared type signature.
+                let sig_type = self.check_type_expr(signature)?;
+                self.env.add_variable(name.clone(), sig_type);
                 continue;
             }
             if let Ast::TypeDecl { name, .. } = e {
@@ -412,7 +411,7 @@ impl TypeChecker<'_> {
                 signature,
                 info,
             } => {
-                let sig_type = self.check_expr(signature)?.get_type().clone();
+                let sig_type = self.check_type_expr(signature)?;
                 CheckedAst::FunctionDecl {
                     name: name.clone(),
                     sig_type,

@@ -74,7 +74,7 @@ pub enum Ast {
     FunctionDecl {
         name: String,
         /// The type signature expression after `::`.
-        signature: Box<Ast>,
+        signature: TypeAst,
         info: LineInfo,
     },
     /// A function definition (with body and optional return type/effects).
@@ -306,7 +306,7 @@ impl Ast {
             Ast::FunctionDecl {
                 name, signature, ..
             } => {
-                format!("fn {} :: {}", name, signature.print_expr())
+                format!("fn {} :: {}", name, signature.pretty_print())
             }
             Ast::FunctionDef {
                 name,

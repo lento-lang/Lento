@@ -926,11 +926,18 @@ impl<R: Read> Parser<R> {
 
     fn parse_fn_declaration(&mut self, name: String, name_info: LineInfo) -> ParseResult {
         self.lexer.next_token().unwrap(); // consume ::
-        let sig = self.parse_top()?;
-        let sig_info = sig.info().clone();
+        let sig_expr = self.parse_top()?;
+        let sig_info = sig_expr.info().clone();
+        let signature =
+            crate::type_checker::specialize::into_type_ast(sig_expr.clone()).map_err(|e| {
+                ParseError::new(
+                    format!("Expected type signature after `::`: {}", e.message()),
+                    sig_expr.info().clone(),
+                )
+            })?;
         Ok(Ast::FunctionDecl {
             name,
-            signature: Box::new(sig),
+            signature,
             info: name_info.join(&sig_info),
         })
     }
