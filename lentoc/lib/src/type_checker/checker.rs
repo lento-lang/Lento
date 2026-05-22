@@ -764,7 +764,7 @@ impl TypeChecker<'_> {
                 })
             }
             _ => Err(TypeErrorVariant::ParseError(ParseError::new(
-                format!("Invalid assignment target: {}", target.print_expr()),
+                format!("Invalid let binding target: {}", target.print_expr()),
                 target.info().clone(),
             ))),
         }

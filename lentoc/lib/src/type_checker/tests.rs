@@ -125,4 +125,26 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn checked_type_decl() {
+        let result = check_str_one("type Foo = u8", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_function_def_has_all_params() {
+        let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
+        if let CheckedAst::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 2);
+        } else {
+            panic!("Expected CheckedAst::FunctionDef");
+        }
+    }
+
+    #[test]
+    fn checked_let_keyword_decl() {
+        let result = check_str_one("let x = 1", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
 }

@@ -1149,4 +1149,44 @@ mod tests {
             panic!("Expected function definition");
         }
     }
+
+    #[test]
+    fn type_decl_simple() {
+        let result = parse_str_one("type Foo = u8", None).unwrap();
+        if let Ast::TypeDecl { name, params, .. } = result {
+            assert_eq!(name, "Foo");
+            assert!(params.is_empty());
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn function_def_bind_pattern_params() {
+        let result = parse_str_one("fn f((x, y), { a: a }) = x", None).unwrap();
+        if let Ast::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 2);
+            assert!(matches!(params[0], BindPattern::Tuple { .. }));
+            assert!(matches!(params[1], BindPattern::Record { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
+    }
+
+    #[test]
+    fn let_keyword_decl() {
+        let result = parse_str_one("let x = 1", None).unwrap();
+        assert!(matches!(result, Ast::Let { .. }));
+    }
+
+    #[test]
+    fn function_def_typed_params_parse() {
+        let result = parse_str_one("fn id(x: u8) = x", Some(&stdlib())).unwrap();
+        if let Ast::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(params[0], BindPattern::Variable { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
+    }
 }

@@ -241,7 +241,7 @@ pub enum CheckedAst {
         ty: Type,
         info: LineInfo,
     },
-    /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
+    /// A let expression binds a value to a matching pattern (identifier, tuple, record, etc.).
     Let {
         target: BindPattern,
         expr: Box<CheckedAst>,
@@ -273,10 +273,7 @@ pub enum CheckedAst {
     },
     /// A type declaration.
     /// e.g. `type SmallIndex = u8`, `type Option(A) = Some(A) | None`
-    TypeDecl {
-        name: String,
-        info: LineInfo,
-    },
+    TypeDecl { name: String, info: LineInfo },
 }
 
 impl GetType for CheckedAst {
@@ -668,7 +665,13 @@ impl CheckedAst {
                     .as_ref()
                     .map(|r| format!(" -> {}", r))
                     .unwrap_or_default();
-                format!("fn {}({}){} = {}", name, params_str, ret, body.pretty_print())
+                format!(
+                    "fn {}({}){} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    body.pretty_print()
+                )
             }
             Self::TypeDecl { name, .. } => {
                 format!("type {}", name)

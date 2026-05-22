@@ -11,7 +11,7 @@ use crate::{
     lexer::{
         lexer::{self, Lexer},
         readers::{bytes_reader::BytesReader, stdin::StdinReader},
-        token::{Token, TokenInfo},
+        token::{Keyword, Token, TokenInfo},
     },
     parser::{op::prec, pattern::BindPattern},
     util::{
@@ -568,11 +568,11 @@ impl<R: Read> Parser<R> {
                 info: t.info,
             }),
             Token::Keyword(ref kw) => match kw {
-                crate::lexer::token::Keyword::Self_ => Ok(Ast::Identifier {
+                Keyword::Self_ => Ok(Ast::Identifier {
                     name: "Self".to_string(),
                     info: t.info,
                 }),
-                crate::lexer::token::Keyword::Intrinsic => Ok(Ast::Identifier {
+                Keyword::Intrinsic => Ok(Ast::Identifier {
                     name: "intrinsic".to_string(),
                     info: t.info,
                 }),
@@ -789,15 +789,15 @@ impl<R: Read> Parser<R> {
         let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) else {
             return Ok(None);
         };
-        if t.token.is_keyword(&crate::lexer::token::Keyword::Let) {
+        if t.token.is_keyword(&Keyword::Let) {
             self.lexer.next_token().unwrap(); // consume let
             return self.parse_let_stmt().map(Some);
         }
-        if t.token.is_keyword(&crate::lexer::token::Keyword::Fn) {
+        if t.token.is_keyword(&Keyword::Fn) {
             self.lexer.next_token().unwrap(); // consume fn
             return self.parse_fn().map(Some);
         }
-        if t.token.is_keyword(&crate::lexer::token::Keyword::Type) {
+        if t.token.is_keyword(&Keyword::Type) {
             self.lexer.next_token().unwrap(); // consume type
             return self.parse_type_decl().map(Some);
         }
@@ -931,24 +931,38 @@ impl<R: Read> Parser<R> {
                             break;
                         }
                     }
-                    // Parse parameter as an expression (identifier, tuple, record, etc.)
-                    // Use a min prec above comma to stop at parameter boundaries
-                    let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
-                    let pattern = match param_expr {
-                        Ast::Binary {
-                            lhs, op, rhs: _, ..
-                        } if op.symbol == ":" => BindPattern::from_expr(*lhs).map_err(|e| {
-                            ParseError::new(
-                                format!("Invalid function parameter: {}", e.message()),
-                                e.info().clone(),
-                            )
-                        })?,
-                        other => BindPattern::from_expr(other).map_err(|e| {
-                            ParseError::new(
-                                format!("Invalid function parameter: {}", e.message()),
-                                e.info().clone(),
-                            )
-                        })?,
+                    let pattern = if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if let Token::Identifier(name) = &next.token {
+                            let name = name.clone();
+                            let name_info = next.info.clone();
+                            self.lexer.next_token().unwrap();
+                            if let Ok(colon) = self.lexer.peek_token_not(pred::ignore, 0) {
+                                if matches!(colon.token, Token::Colon) {
+                                    self.lexer.next_token().unwrap(); // consume ':'
+                                                                      // Parse and discard annotation for now; this keeps old `x: T` syntax accepted.
+                                    let _annotation = self.parse_expr(prec::COMMA_PREC + 1)?;
+                                }
+                            }
+                            BindPattern::Variable {
+                                name,
+                                info: name_info,
+                            }
+                        } else {
+                            // Parse parameter as an expression (tuple, record, list, etc.)
+                            // Use a min prec above comma to stop at parameter boundaries
+                            let param_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
+                            BindPattern::from_expr(param_expr).map_err(|e| {
+                                ParseError::new(
+                                    format!("Invalid function parameter: {}", e.message()),
+                                    e.info().clone(),
+                                )
+                            })?
+                        }
+                    } else {
+                        return Err(ParseError::new(
+                            "Expected function parameter".to_string(),
+                            name_info.clone(),
+                        ));
                     };
                     params.push(pattern);
                     // Check for comma
