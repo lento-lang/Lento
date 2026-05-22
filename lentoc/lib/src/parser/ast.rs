@@ -227,26 +227,6 @@ impl Ast {
         }
     }
 
-    pub fn into_info(self) -> LineInfo {
-        match self {
-            Ast::Literal { info, .. } => info,
-            Ast::Tuple { info, .. } => info,
-            Ast::List { info, .. } => info,
-            Ast::Record { info, .. } => info,
-            Ast::MemberAccess { info, .. } => info,
-            Ast::Identifier { info, .. } => info,
-            Ast::FunctionCall { info, .. } => info,
-            Ast::Lambda { info, .. } => info,
-            Ast::Binary { info, .. } => info,
-            Ast::Unary { info, .. } => info,
-            Ast::Let { info, .. } => info,
-            Ast::Block { info, .. } => info,
-            Ast::FunctionDecl { info, .. } => info,
-            Ast::FunctionDef { info, .. } => info,
-            Ast::TypeDecl { info, .. } => info,
-        }
-    }
-
     pub fn print_expr(&self) -> String {
         match self {
             Ast::Literal { value, .. } => value.pretty_print(),
