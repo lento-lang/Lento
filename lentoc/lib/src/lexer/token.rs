@@ -2,6 +2,111 @@ use std::fmt::{Debug, Display};
 
 use crate::{interpreter::number::Number, util::error::LineInfo};
 
+/// Language keywords
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Keyword {
+    Fn,
+    Let,
+    Type,
+    Class,
+    All,
+    Effect,
+    Handle,
+    With,
+    Infix,
+    Left,
+    Right,
+    Ensures,
+    Requires,
+    Self_,
+    In,
+    Intrinsic,
+    Literal,
+    Exists,
+    Match,
+    If,
+    Else,
+    For,
+    While,
+    Is,
+    End,
+}
+
+impl Keyword {
+    pub fn all() -> &'static [&'static str] {
+        &[
+            "fn", "let", "type", "class", "all", "effect", "handle", "with",
+            "infix", "left", "right", "ensures", "requires", "Self",
+            "in", "intrinsic", "literal", "exists",
+            "match", "if", "else", "for", "while", "is",
+            "end",
+        ]
+    }
+
+    pub fn from_str(s: &str) -> Option<Keyword> {
+        match s {
+            "fn" => Some(Keyword::Fn),
+            "let" => Some(Keyword::Let),
+            "type" => Some(Keyword::Type),
+            "class" => Some(Keyword::Class),
+            "all" => Some(Keyword::All),
+            "effect" => Some(Keyword::Effect),
+            "handle" => Some(Keyword::Handle),
+            "with" => Some(Keyword::With),
+            "infix" => Some(Keyword::Infix),
+            "left" => Some(Keyword::Left),
+            "right" => Some(Keyword::Right),
+            "ensures" => Some(Keyword::Ensures),
+            "requires" => Some(Keyword::Requires),
+            "Self" => Some(Keyword::Self_),
+            "in" => Some(Keyword::In),
+            "intrinsic" => Some(Keyword::Intrinsic),
+            "literal" => Some(Keyword::Literal),
+            "exists" => Some(Keyword::Exists),
+            "match" => Some(Keyword::Match),
+            "if" => Some(Keyword::If),
+            "else" => Some(Keyword::Else),
+            "for" => Some(Keyword::For),
+            "while" => Some(Keyword::While),
+            "is" => Some(Keyword::Is),
+            "end" => Some(Keyword::End),
+            _ => None,
+        }
+    }
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Keyword::Fn => write!(f, "fn"),
+            Keyword::Let => write!(f, "let"),
+            Keyword::Type => write!(f, "type"),
+            Keyword::Class => write!(f, "class"),
+            Keyword::All => write!(f, "all"),
+            Keyword::Effect => write!(f, "effect"),
+            Keyword::Handle => write!(f, "handle"),
+            Keyword::With => write!(f, "with"),
+            Keyword::Infix => write!(f, "infix"),
+            Keyword::Left => write!(f, "left"),
+            Keyword::Right => write!(f, "right"),
+            Keyword::Ensures => write!(f, "ensures"),
+            Keyword::Requires => write!(f, "requires"),
+            Keyword::Self_ => write!(f, "Self"),
+            Keyword::In => write!(f, "in"),
+            Keyword::Intrinsic => write!(f, "intrinsic"),
+            Keyword::Literal => write!(f, "literal"),
+            Keyword::Exists => write!(f, "exists"),
+            Keyword::Match => write!(f, "match"),
+            Keyword::If => write!(f, "if"),
+            Keyword::Else => write!(f, "else"),
+            Keyword::For => write!(f, "for"),
+            Keyword::While => write!(f, "while"),
+            Keyword::Is => write!(f, "is"),
+            Keyword::End => write!(f, "end"),
+        }
+    }
+}
+
 // Token structure for the Lento programming language
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -10,6 +115,9 @@ pub enum Token {
     Newline,
     SemiColon,
     Colon,
+    DoubleColon,
+    // A language keyword
+    Keyword(Keyword),
     // Literals
     Identifier(String),
     Number(Number),
@@ -44,6 +152,10 @@ impl Token {
 
     pub fn is_identifier(&self) -> bool {
         matches!(self, Token::Identifier(_))
+    }
+
+    pub fn is_keyword(&self, kw: &Keyword) -> bool {
+        matches!(self, Token::Keyword(k) if k == kw)
     }
 
     pub fn is_terminator(&self) -> bool {
@@ -96,6 +208,8 @@ impl Display for Token {
             Self::Newline => write!(f, "newline"),
             Self::SemiColon => write!(f, ";"),
             Self::Colon => write!(f, ":"),
+            Self::DoubleColon => write!(f, "::"),
+            Self::Keyword(kw) => write!(f, "{}", kw),
             Self::Identifier(s) => write!(f, "{}", s),
             Self::Number(s) => write!(f, "{}", s),
             Self::String(s) => write!(f, "\"{}\"", s),
