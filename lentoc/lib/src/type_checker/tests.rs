@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_single_no_parens_block() {
-        let result = check_str_one("fn f(x) -> int { x + 5 }", Some(&stdlib())).unwrap();
+        let result = check_str_one("fn f(x: int) -> int { x + 5 }", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { name, params, .. } = result {
             assert_eq!(name, "f");
             assert_eq!(params.len(), 1);
@@ -93,7 +93,8 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_many_no_parens_block() {
-        let result = check_str_one("fn add(x, y) -> int { x + y }", Some(&stdlib())).unwrap();
+        let result =
+            check_str_one("fn add(x: int, y: int) -> int { x + y }", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { name, params, .. } = result {
             assert_eq!(name, "add");
             assert_eq!(params.len(), 2);
