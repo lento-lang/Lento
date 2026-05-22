@@ -6,7 +6,7 @@ use crate::{
         parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM},
         pattern::BindPattern,
     },
-    type_checker::checked_ast::{CheckedAst, ParamAst, TypeAst},
+    type_checker::checked_ast::{ParamAst, TypeAst},
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -156,6 +156,7 @@ pub fn call(
                     params: args,
                     info: info.clone(),
                 },
+                info: info.clone(),
             }
         }
         Ast::LiteralType {
@@ -163,8 +164,9 @@ pub fn call(
                 TypeAst::Constructor {
                     expr,
                     mut params,
-                    info,
+                    info: type_info,
                 },
+            ..
         } if is_type_expr(&arg, types) => {
             // If the expression is a literal type constructor, we can add the argument as a type parameter.
             log::trace!(
@@ -180,7 +182,12 @@ pub fn call(
             );
             params.push(into_type_ast(arg)?);
             Ast::LiteralType {
-                expr: TypeAst::Constructor { expr, params, info },
+                expr: TypeAst::Constructor {
+                    expr,
+                    params,
+                    info: type_info.clone(),
+                },
+                info: type_info,
             }
         }
         Ast::FunctionCall {
@@ -200,6 +207,7 @@ pub fn call(
                         arg.print_expr().light_blue()
                     );
                     let args = vec![into_type_ast(arg)?];
+                    let type_info = inner_info.join(&info);
                     Ast::FunctionCall {
                         expr: inner,
                         arg: Box::new(Ast::LiteralType {
@@ -209,8 +217,9 @@ pub fn call(
                                     info: constructor_info,
                                 }),
                                 params: args,
-                                info: inner_info.join(&info),
+                                info: type_info.clone(),
                             },
+                            info: type_info,
                         }),
                         info: inner_info,
                     }
@@ -303,6 +312,7 @@ pub fn assignment(
         _ => Ok(Ast::Assignment {
             target: BindPattern::from_expr(target)?,
             expr: Box::new(body),
+            annotation: None,
             info: assignment_info,
         }),
     }
@@ -458,14 +468,20 @@ pub fn create_function_assignment(
     let first = params.next().unwrap();
     let mut lambda = Ast::Lambda {
         info: first.pattern.info().join(body.info()),
-        param: first,
+        param: Box::new(Ast::Identifier {
+            name: first.pattern.print_expr(),
+            info: first.pattern.info().clone(),
+        }),
         body: Box::new(body),
         return_type: None,
     };
     for param in params {
         lambda = Ast::Lambda {
             info: lambda.info().join(param.pattern.info()),
-            param,
+            param: Box::new(Ast::Identifier {
+                name: param.pattern.print_expr(),
+                info: param.pattern.info().clone(),
+            }),
             body: Box::new(lambda),
             return_type: None,
         };
@@ -747,20 +763,25 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
 /// - `body` The body of the function
 pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
     assert!(!params.is_empty(), "Expected at least one parameter");
-    let info = body
-        .info()
-        .join(params.last().map(|p| p.pattern.info()).unwrap());
-    let mut params = params.iter().rev();
+    let body_info = body.info().clone();
+    let mut params_iter = params.into_iter().rev();
+    let first = params_iter.next().unwrap();
     let mut function = Ast::Lambda {
-        param: params.next().unwrap().clone(),
+        param: Box::new(Ast::Identifier {
+            name: first.pattern.print_expr(),
+            info: first.pattern.info().clone(),
+        }),
         body: Box::new(body),
         return_type: None,
-        info,
+        info: first.pattern.info().join(&body_info),
     };
-    for param in params {
+    for param in params_iter {
         function = Ast::Lambda {
             info: function.info().join(param.pattern.info()),
-            param: param.clone(),
+            param: Box::new(Ast::Identifier {
+                name: param.pattern.print_expr(),
+                info: param.pattern.info().clone(),
+            }),
             body: Box::new(function),
             return_type: None,
         };
@@ -778,7 +799,7 @@ pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
 /// ```lento
 /// func(a)(b)(c)
 /// ```
-pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> CheckedAst {
+pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> Ast {
     let last_info = args
         .last()
         .map(|a| a.info().clone())
@@ -803,8 +824,8 @@ pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) ->
                 .map(into_type_ast)
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap();
-            CheckedAst::LiteralType {
-                ty: TypeAst::Constructor {
+            Ast::LiteralType {
+                expr: TypeAst::Constructor {
                     expr: Box::new(TypeAst::Identifier {
                         name: constructor_name,
                         info: constructor_info,
@@ -812,7 +833,7 @@ pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) ->
                     params: args,
                     info: call_info.clone(),
                 },
-                info: call_info.clone(),
+                info: call_info,
             }
         }
         expr => {

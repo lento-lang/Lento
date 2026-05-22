@@ -249,7 +249,9 @@ impl TypeChecker<'_> {
                     continue;
                 };
                 match expr.borrow() {
-                    Ast::Lambda { param, body, info } => {
+                    Ast::Lambda {
+                        param, body, info, ..
+                    } => {
                         let checked_param = self.check_param(param)?;
                         let checked = self.check_lambda(checked_param.clone(), body, info)?;
                         let return_type = if let CheckedAst::Lambda { return_type, .. } = &checked {
@@ -293,14 +295,14 @@ impl TypeChecker<'_> {
     /// Check the type of an expression
     pub fn check_expr(&mut self, expr: &Ast) -> TypeCheckerResult<CheckedAst> {
         Ok(match expr {
-            Ast::Lambda { param, body, info } => {
-                self.check_lambda(self.check_param(param)?, body, info)?
-            }
+            Ast::Lambda {
+                param, body, info, ..
+            } => self.check_lambda(self.check_param(param)?, body, info)?,
             Ast::Literal { value, info } => CheckedAst::LiteralValue {
                 value: value.clone(),
                 info: info.clone(),
             },
-            // Ast::LiteralType { expr } => self.check_literal_type(expr)?,
+            Ast::LiteralType { expr, .. } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -322,7 +324,7 @@ impl TypeChecker<'_> {
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,
-            Ast::Assignment { target, expr, info } => self.check_assignment(target, expr, info)?,
+            Ast::Assignment { target, expr, info, .. } => self.check_assignment(target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
         })
     }
