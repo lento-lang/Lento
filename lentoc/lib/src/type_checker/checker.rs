@@ -1,5 +1,5 @@
 use super::{
-    checked_ast::{CheckedAst, CheckedParam, ParamAst, TypeAst},
+    checked_ast::{CheckedAst, CheckedParam, TypeAst},
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 use crate::{
@@ -10,7 +10,6 @@ use crate::{
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
         pattern::BindPattern,
     },
-    type_checker::{self, specialize},
     util::error::{BaseError, BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -252,11 +251,15 @@ impl TypeChecker<'_> {
                 match expr.borrow() {
                     Ast::Lambda { param, body, info } => {
                         let checked_param = self.check_param(param)?;
-                        let checked =
-                            self.check_lambda(checked_param.clone(), body, return_type, info)?;
+                        let checked = self.check_lambda(checked_param.clone(), body, info)?;
+                        let return_type = if let CheckedAst::Lambda { return_type, .. } = &checked {
+                            return_type.clone()
+                        } else {
+                            checked.get_type().clone()
+                        };
                         let variation = FunctionType {
                             param: checked_param,
-                            return_type: checked.get_type().clone(),
+                            return_type,
                         };
                         log::debug!(
                             "Adding function {} with variation {}",
@@ -307,18 +310,7 @@ impl TypeChecker<'_> {
                 info,
             } => self.check_field_access(record, field, info)?,
             Ast::Identifier { name, info } => self.check_identifier(name, info)?,
-            Ast::FunctionCall { expr, arg, info } => {
-                // Try to specialize it
-                let types = self.env.types.keys().cloned().collect::<HashSet<_>>();
-                let variables = self.env.variables.keys().cloned().collect::<HashSet<_>>();
-                if let Some(res) =
-                    specialize::block_def_call(expr, arg, info, &types, Some(&variables))
-                {
-                    self.check_expr(&res?)?
-                } else {
-                    self.check_call(expr, arg, info)?
-                }
-            }
+            Ast::FunctionCall { expr, arg, info } => self.check_call(expr, arg, info)?,
             Ast::Binary {
                 lhs,
                 op: op_info,
@@ -384,57 +376,13 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_param(&self, param: &ParamAst) -> TypeCheckerResult<CheckedParam> {
-        let param_ty = if let Some(ty) = &param.ty {
-            self.check_type_expr(ty)?
-        } else {
-            std_types::ANY // TODO: Infer a more specific type
-        };
-        let param = CheckedParam {
-            pattern: param.pattern.clone(),
-            ty: param_ty,
-        };
-        Ok(param)
-    }
-
-    /// Check an explicitly typed expression, e.g., `int x`, `List int y` or `(int, string) z`.
-    /// Returns an optional type expression and the remaining expression to be checked.
-    fn check_explicitly_typed_expr(
-        &mut self,
-        expr: &Ast,
-    ) -> TypeCheckerResult<(Option<Type>, Ast)> {
-        match expr {
-            Ast::Identifier { name, info } => {
-                if let Some(ty) = self.lookup_type(name) {
-                    // This is a type annotation
-                    Ok((
-                        Some(ty.clone()),
-                        Ast::Identifier {
-                            name: name.clone(),
-                            info: info.clone(),
-                        },
-                    ))
-                } else {
-                    // This is a normal identifier
-                    Ok((None, expr.clone()))
-                }
-            }
-            Ast::Constructor {
-                expr: type_expr,
-                params,
-                info,
-            } => {
-                let ty = self.check_type_expr(expr)?;
-                Ok((
-                    Some(ty),
-                    Ast::Identifier {
-                        name: type_expr.print_expr(),
-                        info: info.clone(),
-                    },
-                ))
-            }
-            _ => Ok((None, expr.clone())),
-        }
+    fn check_param(&self, param: &Ast) -> TypeCheckerResult<CheckedParam> {
+        let pattern =
+            BindPattern::from_expr(param.clone()).map_err(TypeErrorVariant::ParseError)?;
+        Ok(CheckedParam {
+            pattern,
+            ty: std_types::ANY,
+        })
     }
 
     fn check_lambda(
