@@ -70,8 +70,8 @@ type Tree(A) = Leaf(A) | Node(Tree(A), Tree(A))
 
 // A common pattern: represent type class "dictionaries" as records of methods.
 // (This uses only existing record types and function types as the basis.)
-type Eq(A) = { eq: (A, A) -> bool }
-type Ord(A) = { lt: (A, A) -> bool, eq: (A, A) -> bool }
+type Eq(A) = { eq: A -> A -> bool }
+type Ord(A) = { lt: A -> A -> bool, eq: A -> A -> bool }
 
 // Paper-style constraints (postfix quantification with class constraints)
 type Member = A -> List(A) -> bool all A: Eq
