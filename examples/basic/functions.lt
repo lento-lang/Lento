@@ -24,7 +24,7 @@ fn add_int(x: int, y: int) -> int {
 
 
 // One-line bodies (expression bodies)
-fn inc(x: int) -> int = x + 1;
+fn inc(x: int) /* -> int */ = x + 1; // Inferred return type
 
 
 // Blocks, local bindings, and nested function definitions
@@ -37,12 +37,6 @@ fn outer(x: int) -> int {
     z
 }
 
-
-// Invariant specifications (types)
-// Range types encode simple invariants.
-type Day = int in 1..31
-
-
 // Invariant specifications (contracts)
 fn pure_add(x: int, y: int) -> int
     ensures { result == x + y }
@@ -53,7 +47,6 @@ fn abs(x: int) -> int
 fn mk_day(x: int) -> Day ! { throw RangeError }
     requires { x in 1..31 }
     ensures { result == x }
-
 
 // Happy path: model errors as effects
 fn parse_int(s: str) -> int ! { throw ParseError }
