@@ -1,0 +1,121 @@
+// Effect annotations + contracts (surface syntax)
+//
+//     fn f(x: A) -> B
+//         ! { effects }
+//         requires { P }
+//         ensures { Q }
+//
+// Desugars (conceptually) to a richer computation type:
+//
+//     A -> B ! Phi
+//
+// where:
+//
+//     Phi = (effects, pre, post)
+
+
+// Effects can become progressively more precise:
+//
+//     ! { fs.read }
+//     ! { fs.read(path) }
+//     ! { fs.read(path) } requires { exists(path) }
+//     ! { fs.read(path) } requires { exists(path) } ensures { result == contents(path) }
+
+
+// A minimal effect annotation
+fn load(p: path) -> bytes ! { fs.read, throw IOError }
+
+
+// A more precise effect annotation, with a precondition and postcondition
+fn load(p: path) -> bytes
+    ! { fs.read(p), throw IOError }
+    requires { fs.exists(p) }
+    ensures { result == fs.contents(p) }
+
+
+// Same idea, but using the inline form
+fn read(p: path) -> bytes ! { fs.read }
+fn read(p: path) -> bytes ! { fs.read(p) }
+
+
+// Non-IO effects are fine too
+fn parse_ast(s: str) -> Ast ! { alloc }
+
+
+// Errors as effects: prefer the happy-path return type.
+//
+// Prefer:
+//     fn parse_int(s: str) -> int ! { throw ParseIntError }
+//
+// Rather than:
+//     fn parse_int(s: str) -> Result(int, ParseIntError)
+fn parse_int(s: str) -> int ! { throw ParseIntError }
+
+
+// Higher-order functions can quantify over an abstract effect `e`
+fn with_file<A, e>(
+    p: path,
+    body: File<open> -> A ! { e }
+) -> A
+    ! { fs.open(p), fs.close(p), e }
+    ensures { file.closed(p) }
+
+
+fn map<A, B, e>(
+    xs: [A],
+    f: A -> B ! { e }
+) -> [B] ! { e }
+
+
+// Declaring an effect interface
+effect fs {
+    read: path -> bytes
+    write: (path, bytes) -> unit
+}
+
+
+// Effect sets (example)
+fn load(p: path) -> bytes ! { fs.read }
+
+
+// Effect sets: composing multiple effects
+effect Console {
+    write: str -> unit
+    read: unit -> str
+}
+
+// Handling effects by interpreting them as intrinsic IO
+fn greet() -> unit ! { Console } {
+    Console.write("hello")
+}
+
+handle greet() with {
+    Console.write(msg) => intrinsic.stdout.write(msg)
+    Console.read() => intrinsic.stdin.read()
+}
+
+effect File {
+    read: path -> bytes
+}
+
+fn load() -> bytes ! { File.read, Console.write } {
+    Console.write("loading")
+    File.read("config.json")
+}
+
+
+// Algebraic effects + handlers (sketch)
+effect Choice {
+    choose: unit -> bool
+}
+
+fn test() -> int ! { Choice } {
+    if Choice.choose() { 1 } else { 2 }
+}
+
+handle test() with {
+    Choice.choose() k => [k(true), k(false)]
+}
+
+// The result could be: [1, 2]
+
