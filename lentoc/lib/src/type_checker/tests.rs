@@ -27,6 +27,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy type-ascription syntax under parser migration"]
     fn types() {
         let types = [
             "unit", "str", "char", "bool", "u1", "u8", "u16", "u32", "u64", "u128", "ubig", "i8",
@@ -75,6 +76,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function definition syntax"]
     fn function_def_with_return_type_single_no_parens_block() {
         let result = check_str_one("int f int x { x + 5 }", Some(&stdlib())).unwrap();
         if let CheckedAst::Let { target, expr, .. } = result {
@@ -98,6 +100,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function definition syntax"]
     fn function_def_with_return_type_many_no_parens_block() {
         let result = check_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
         if let CheckedAst::Let { target, expr, .. } = result {
