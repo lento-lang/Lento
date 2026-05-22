@@ -1,113 +1,179 @@
 // Types
 //
-// This file collects type-system examples using Lento's intended surface syntax,
-// plus (commented) excerpts of the paper/core syntax for reference.
-
-// Invariants can be expressed directly as liquid refinement types.
-// Refined base types have the form `{ v: B | phi }`.
-type Day = { v: Int | 1 <= v and v <= 31 }
+// Concrete type-system examples in the intended Lento surface syntax.
+// These are meant to become parser/typechecker tests as the implementation
+// grows toward the paper.
 
 
-// Numeric lattice (illustrative)
-// Lento has sized integers/floats (e.g. u1, u8, u64, i32, f64) plus a `num` top.
-type Age = { v: Int | 0 <= v and v <= 200 }
-type Percent = { v: Int | 0 <= v and v <= 100 }
+// ----------------------------
+// Aliases + basic conventions
+// ----------------------------
+
+// Sized integers/floats exist (u1, u8, u64, i32, f64, ...), plus numeric supertypes.
 type SmallIndex = u8
 
-
-// Type aliases (sugar)
+// Common aliases
 type Bytes = [u8]
 type Path = str
 
-
-// Liquid refinement types (paper/core syntax)
-// Refined base types have the form `{ v: B | phi }` where `phi` is in an
-// SMT-decidable fragment and `v` refers to the value being described.
-//
-// Examples:
-//     type Nat = { v: Int | 0 <= v }
-//     type NonZero = { v: Int | v != 0 }
-//     type Bounded(n: Int) = { v: Int | 0 <= v and v < n }
+// Some examples use lowercase names (as if they were primitives)
+type bytes = Bytes
+type path = Path
 
 
-// Dependent types (paper/core syntax)
-// Types can be parameterized by values to encode relationships.
-//
-//     type Vec(n: Int, a: Type) = { v: [a; n] | Vec.len(v) = n }
-//
-// This is the “length-indexed list” pattern.
+// ----------------------------
+// Refinement (liquid) types
+// ----------------------------
+
+// Refined base types have the form `{ v: B | phi }`.
+// `v` names the value being described; `phi` is in an SMT-decidable fragment.
+type Nat = { v: int | 0 <= v }
+type NonZero = { v: int | v != 0 }
+type Percent = { v: int | 0 <= v <= 100 }
+type Age = { v: int | 0 <= v <= 200 }
+type Day = { v: int | 1 <= v <= 31 }
+
+// Value-parameterized refinements (dependent refinement aliases)
+type Bounded(n: int) = { v: int | 0 <= v < n }
+type Range(lo: int, hi: int) = { v: int | lo <= v <= hi }
+
+// Surface sugar often written using ranges
+// (e.g. `if x in 1..31 { ... }` in statements examples)
+type Month = int in 1..12
+type Year = int in 0..9999
 
 
-// Record and sum types (surface)
-// Record types use `{ field: Type, ... }`.
+// ----------------------------
+// Records (products)
+// ----------------------------
+
 type Point2D = { x: int, y: int }
+type Person = { name: str, age: Age }
+type Date = { day: Day, month: Month, year: Year }
 
-// Sum types are written as enums.
+// Tuple-style product (as used in `examples/types/ranges.lt`)
+type DateTuple = (day: Day, month: Month, year: Year)
+
+
+// ----------------------------
+// Sums (enums) + inductives
+// ----------------------------
+
+// Enums are sums; variants can carry payloads.
 type Option(A) = Some(A) | None
+type Result(A, E) = Ok(A) | Err(E)
+type Either(A, B) = Left(A) | Right(B)
 
-// Record and inductive/sum types (paper/core syntax)
-//
-//     Point2D ::= record{ x: int, y: int }
-//     Option a ::= sum{ Some: a, None: unit }
-//     List a ::= inductive{ Nil: unit, Cons: Sigma head: a . List a }
+// Inductive encodings (recursive sums)
+type List(A) = Nil | Cons(A, List(A))
+type Tree(A) = Leaf(A) | Node(Tree(A), Tree(A))
 
+// A common pattern: represent type class "dictionaries" as records of methods.
+// (This uses only existing record types and function types as the basis.)
+type Eq(A) = { eq: (A, A) -> bool }
+type Ord(A) = { lt: (A, A) -> bool, eq: (A, A) -> bool }
 
-// Polymorphism and type classes (paper surface style)
-// Universal quantification is written postfix via `all`:
-//
-//     id :: a -> a all a: Type
-//
-// Constraints elaborate to implicit evidence parameters:
-//
-//     member :: a -> List a -> bool all a: Eq
-
-
-// Modal types (paper/core syntax)
-//
-//     type Now(a: Type) = square a
-//     type Later(a: Type) = diamond a
-//
-// Often used to model async/await style temporal availability.
+// Paper-style constraints (postfix quantification with class constraints)
+type Member = A -> List(A) -> bool all A: Eq
+type Show = { show: A -> str } all A: Type
 
 
-// Session types (paper/core syntax)
-//
-//     Ping = !unit . ?unit . end
-//     Branch = &{ Left: end, Right: end }
-//     Select = xor{ A: end, B: end }
-//
-// `Chan(S)` carries a channel following protocol `S`.
+// ----------------------------
+// Constructor application
+// ----------------------------
+
+// Constructor application can be written in a constructor-like form.
+type StringIntMap = Map(str, int)
+type ByteToByteMap = Map(u8, u8)
+
+// Lists as types via brackets
+type Ints = [int]
+type Points = [Point2D]
 
 
-// Singleton literal types (paper/core syntax)
-//
-//     Answer = literal(42)
+// ----------------------------
+// Polymorphism (forall / all)
+// ----------------------------
+
+// Generic functions (forall in the paper)
+fn id<A>(x: A) -> A = x
+
+fn compose<A, B, C>(f: B -> C, g: A -> B, x: A) -> C {
+    f(g(x))
+}
+
+fn map<A, B>(xs: [A], f: A -> B) -> [B] {
+    // Intended surface: this would desugar to a fold.
+    intrinsic.todo
+}
+
+// Postfix quantification style from the paper (as a type alias)
+type Id = A -> A all A: Type
+
+// Union/sum types at the type level
+type IntOrStr = int | str
+type Json = null | bool | int | float | str | [Json] | Map(str, Json)
 
 
-// Effect-annotated function types
-// Effects are part of the computation type, not the value type.
-//
-// Surface:
-//     type ReadConfig = Path -> Bytes ! { File.read, throw IOError }
-//     type PureInc = int -> int ! { }
-//
-// Paper/core category E includes forms like:
-//     x: tau_i -> epsilon -> tau_j
-//     tau_i ! epsilon -> tau_j
-//     tau_i ? epsilon -> tau_j
+// ----------------------------
+// Dependent(-ish) types
+// ----------------------------
+
+// Length-indexed vectors (dependent refinement + a measure/predicate)
+// `len` is treated as a logical measure in refinements.
+type Vec(n: int, A: Type) = { v: [A; n] | Vec.len(v) == n }
+
+// Finite set {0..n-1}
+type Fin(n: int) = { v: int | 0 <= v < n }
+
+// Matrix as a vector of rows
+type Matrix(rows: int, cols: int, A: Type) = Vec(rows, Vec(cols, A))
 
 
-// Type constructor application (surface)
-// The compiler's type AST represents constructor application; surface examples
-// commonly use space-separated application.
-type StringIntMap = Map(str, Int)
+// ----------------------------
+// Effectful computation types
+// ----------------------------
 
-// Paper/core syntax also admits application as juxtaposition:
-//     Map str Int
-// The internal printed form is typically constructor-like:
-//     Map(str, Int)
+// Effects are part of computation types.
+type PureInc = int -> int ! { }
+type ReadConfig = path -> bytes ! { File.read, throw IOError }
+
+// Effect-polymorphic function type alias
+type WithEff(A: Type, B: Type, e: Effect) = A -> B ! { e }
 
 
-// Universes (paper/core syntax)
-// The paper uses a cumulative hierarchy of universes to avoid paradoxes:
-//     Type_i
+// ----------------------------
+// Modal types (Now/Later)
+// ----------------------------
+
+// Paper uses `square` / `diamond`; we keep constructor-like application.
+type Now(A: Type) = square(A)
+type Later(A: Type) = diamond(A)
+
+fn pure<A>(x: A) -> Now(A) = square(x)
+fn await<A>(x: Later(A)) -> A ! { Async.await } = intrinsic.todo
+
+
+// ----------------------------
+// Session types
+// ----------------------------
+
+// Paper-style session syntax (intended to be parsed as types)
+type Ping = !unit . ?unit . end
+type Branch = &{ Left: end, Right: end }
+type Select = xor{ A: end, B: end }
+
+// A channel carrying a protocol
+type Chan(S: Session) = Chan(S)
+
+fn send<T, S>(c: Chan(!T . S), x: T) -> Chan(S) ! { Net.send } = intrinsic.todo
+fn recv<T, S>(c: Chan(?T . S)) -> (T, Chan(S)) ! { Net.recv } = intrinsic.todo
+
+
+// ----------------------------
+// Singleton literal types
+// ----------------------------
+
+type Answer = 42 // literal(42)
+fn only_answer(x: Answer) -> int ensures { result == 42 } = 42
+
