@@ -1,6 +1,7 @@
 use super::{op::OpInfo, pattern::BindPattern};
 use crate::{
     interpreter::value::{RecordKey, Value},
+    type_checker::checked_ast::TypeAst,
     util::error::LineInfo,
 };
 use std::fmt::Debug;
@@ -35,12 +36,16 @@ pub enum Ast {
         target: BindPattern,
         /// The source expression to assign to the target.
         expr: Box<Ast>,
+        /// Optional type annotation for the assigned variable.
+        annotation: Option<TypeAst>,
         info: LineInfo,
     },
     /// A lambda expression is an anonymous function that can be passed as a value.
     Lambda {
         param: Box<Ast>,
         body: Box<Ast>,
+        /// Optional return type annotation.
+        return_type: Option<TypeAst>,
         info: LineInfo,
     },
     /// A function call is an invocation of a function with a list of arguments.
@@ -62,8 +67,14 @@ pub enum Ast {
         expr: Box<Ast>,
         info: LineInfo,
     },
-    /// Block expression evaluates all expressions in the block and returns the value of the last expression.
+    /// A block expression evaluates all expressions in the block and returns the value of the last expression.
     Block { exprs: Vec<Ast>, info: LineInfo },
+    /// A literal type expression, e.g. `int`, `List int`, `int -> str ! { e }`.
+    /// This is produced during specialize to distinguish type-level from value-level expressions.
+    LiteralType {
+        expr: TypeAst,
+        info: LineInfo,
+    },
 }
 
 impl Debug for Ast {
@@ -83,15 +94,21 @@ impl Debug for Ast {
             Self::Identifier { name, .. } => {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
-            Self::Assignment { target, expr, .. } => f
+            Self::Assignment {
+                target, expr, annotation, ..
+            } => f
                 .debug_struct("Assignment")
                 .field("target", target)
                 .field("expr", expr)
+                .field("annotation", annotation)
                 .finish(),
-            Self::Lambda { param, body, .. } => f
+            Self::Lambda {
+                param, body, return_type, ..
+            } => f
                 .debug_struct("Lambda")
                 .field("param", param)
                 .field("body", body)
+                .field("return_type", return_type)
                 .finish(),
             Self::FunctionCall { expr, arg, .. } => f
                 .debug_struct("FunctionCall")
@@ -117,6 +134,9 @@ impl Debug for Ast {
                 .field("expr", expr)
                 .finish(),
             Self::Block { exprs, .. } => f.debug_struct("Block").field("exprs", exprs).finish(),
+            Self::LiteralType { expr, .. } => {
+                f.debug_struct("LiteralType").field("expr", expr).finish()
+            }
         }
     }
 }
@@ -143,6 +163,7 @@ impl Ast {
             Ast::Unary { info, .. } => info,
             Ast::Assignment { info, .. } => info,
             Ast::Block { info, .. } => info,
+            Ast::LiteralType { info, .. } => info,
         }
     }
 
@@ -150,6 +171,24 @@ impl Ast {
         match self {
             Ast::Block { exprs, .. } => exprs.last().map_or_else(|| self.info(), |e| e.last_info()),
             _ => self.info(),
+        }
+    }
+
+    pub fn into_info(self) -> LineInfo {
+        match self {
+            Ast::Literal { info, .. } => info,
+            Ast::Tuple { info, .. } => info,
+            Ast::List { info, .. } => info,
+            Ast::Record { info, .. } => info,
+            Ast::MemberAccess { info, .. } => info,
+            Ast::Identifier { info, .. } => info,
+            Ast::FunctionCall { info, .. } => info,
+            Ast::Lambda { info, .. } => info,
+            Ast::Binary { info, .. } => info,
+            Ast::Unary { info, .. } => info,
+            Ast::Assignment { info, .. } => info,
+            Ast::Block { info, .. } => info,
+            Ast::LiteralType { info, .. } => info,
         }
     }
 
@@ -212,9 +251,14 @@ impl Ast {
             Ast::Assignment {
                 target: lhs,
                 expr: rhs,
+                annotation,
                 ..
             } => {
-                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
+                let ann = annotation
+                    .as_ref()
+                    .map(|a| format!("{} ", a.pretty_print()))
+                    .unwrap_or_default();
+                format!("({}{} = {})", ann, lhs.print_expr(), rhs.print_expr())
             }
             Ast::Block { exprs, .. } => format!(
                 "{{ {} }}",
@@ -224,6 +268,7 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
+            Ast::LiteralType { expr, .. } => expr.pretty_print(),
         }
     }
 }
@@ -246,18 +291,6 @@ impl PartialEq for Ast {
                     expr: r0, arg: r1, ..
                 },
             ) => l0 == r0 && l1 == r1,
-            (
-                Self::Lambda {
-                    param: l_param,
-                    body: l_body,
-                    ..
-                },
-                Self::Lambda {
-                    param: r_param,
-                    body: r_body,
-                    ..
-                },
-            ) => l_param == r_param && l_body == r_body,
             (
                 Self::Binary {
                     rhs: rhs1,
@@ -284,15 +317,35 @@ impl PartialEq for Ast {
                 Self::Assignment {
                     target: l1,
                     expr: l2,
+                    annotation: l3,
                     ..
                 },
                 Self::Assignment {
                     target: r1,
                     expr: r2,
+                    annotation: r3,
                     ..
                 },
-            ) => l1 == r1 && l2 == r2,
+            ) => l1 == r1 && l2 == r2 && l3 == r3,
+            (
+                Self::Lambda {
+                    param: l_param,
+                    body: l_body,
+                    return_type: l_ret,
+                    ..
+                },
+                Self::Lambda {
+                    param: r_param,
+                    body: r_body,
+                    return_type: r_ret,
+                    ..
+                },
+            ) => l_param == r_param && l_body == r_body && l_ret == r_ret,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
+            (
+                Self::LiteralType { expr: l0, .. },
+                Self::LiteralType { expr: r0, .. },
+            ) => l0 == r0,
             _ => false,
         }
     }
