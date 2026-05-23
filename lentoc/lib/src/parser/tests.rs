@@ -5,8 +5,13 @@ mod tests {
             number::{Number, UnsignedInteger},
             value::{RecordKey, Value},
         },
-        parser::{ast::Ast, parser::from_string, pattern::BindPattern},
+        parser::{
+            ast::Ast,
+            parser::{from_string, FN_ARROW_SYM},
+            pattern::BindPattern,
+        },
         stdlib::init::{stdlib, Initializer},
+        type_checker::checked_ast::TypeAst,
         util::error::LineInfo,
     };
 
@@ -1184,6 +1189,32 @@ mod tests {
         if let Ast::TypeDecl { name, params, .. } = result {
             assert_eq!(name, "Foo");
             assert!(params.is_empty());
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_union() {
+        let result = parse_str_one("type X = int | bool", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Binary { .. }));
+            if let TypeAst::Binary { op, .. } = body {
+                assert_eq!(op.symbol, "|");
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_function_type() {
+        let result = parse_str_one("type Mapper = int -> bool", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Binary { .. }));
+            if let TypeAst::Binary { op, .. } = body {
+                assert_eq!(op.symbol, FN_ARROW_SYM);
+            }
         } else {
             panic!("Expected type declaration");
         }

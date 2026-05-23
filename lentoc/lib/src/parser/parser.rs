@@ -75,6 +75,9 @@ pub fn from_stream<R: Read>(reader: R) -> Parser<R> {
 pub(crate) const COMMA_SYM: &str = ",";
 pub(crate) const ASSIGNMENT_SYM: &str = "=";
 pub(crate) const MEMBER_ACCESS_SYM: &str = ".";
+pub(crate) const FN_ARROW_SYM: &str = "->";
+pub(crate) const EFFECT_ASCRIPTION_SYM: &str = "!";
+pub(crate) const SUM_TYPE_SYM: &str = "|";
 
 /// Default operators used in the language grammar and required for parsing. \
 /// These operators are defined in the parser and are required to produce valid ASTs. \
@@ -108,7 +111,7 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
         },
         // Effect annotation operator (e.g. `A -> B ! { e }`)
         OpInfo {
-            symbol: "!".to_string(),
+            symbol: EFFECT_ASCRIPTION_SYM.to_string(),
             position: OpPos::Infix,
             precedence: prec::EFFECT_ASCRIPTION_PREC,
             associativity: OpAssoc::Left,
@@ -124,7 +127,7 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
         },
         // Function arrow (e.g. `A -> B`)
         OpInfo {
-            symbol: "->".to_string(),
+            symbol: FN_ARROW_SYM.to_string(),
             position: OpPos::Infix,
             precedence: prec::FUNCTION_ARROW_PREC,
             associativity: OpAssoc::Right,
@@ -132,7 +135,7 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
         },
         // Sum types (e.g. `int | str`)
         OpInfo {
-            symbol: "|".to_string(),
+            symbol: SUM_TYPE_SYM.to_string(),
             position: OpPos::Infix,
             precedence: prec::SUM_TYPE_PREC,
             associativity: OpAssoc::Left,
@@ -1011,7 +1014,7 @@ impl<R: Read> Parser<R> {
         // Use a min prec just above assignment so `= body` isn't consumed.
         let mut return_type_expr: Option<Ast> = None;
         if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-            if matches!(&t.token, Token::Operator(op) if op == "->") {
+            if matches!(&t.token, Token::Operator(op) if op == FN_ARROW_SYM) {
                 self.lexer.next_token().unwrap(); // consume ->
                 return_type_expr = Some(self.parse_expr(prec::FUNCTION_APP_PREC + 1)?);
             }
