@@ -243,6 +243,22 @@ pub fn stdlib() -> Initializer {
             }
         })
         .chain([
+            ("u1".into(), std_types::UINT1),
+            ("u8".into(), std_types::UINT8),
+            ("u16".into(), std_types::UINT16),
+            ("u32".into(), std_types::UINT32),
+            ("u64".into(), std_types::UINT64),
+            ("u128".into(), std_types::UINT128),
+            ("ubig".into(), std_types::UINTBIG),
+            ("i8".into(), std_types::INT8),
+            ("i16".into(), std_types::INT16),
+            ("i32".into(), std_types::INT32),
+            ("i64".into(), std_types::INT64),
+            ("i128".into(), std_types::INT128),
+            ("ibig".into(), std_types::INTBIG),
+            ("f32".into(), std_types::FLOAT32),
+            ("f64".into(), std_types::FLOAT64),
+            ("fbig".into(), std_types::FLOATBIG),
             ("uint".into(), std_types::UINT()),
             ("int".into(), std_types::INT()),
             ("float".into(), std_types::FLOAT()),

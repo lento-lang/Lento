@@ -34,6 +34,10 @@ pub enum TypeAst {
         fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
     },
+    Literal {
+        value: Value,
+        info: LineInfo,
+    },
 }
 
 impl Debug for TypeAst {
@@ -50,6 +54,7 @@ impl Debug for TypeAst {
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
+            Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
         }
     }
 }
@@ -60,6 +65,7 @@ impl TypeAst {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Constructor { info, .. } => info,
             TypeAst::Record { info, .. } => info,
+            TypeAst::Literal { info, .. } => info,
         }
     }
 
@@ -88,6 +94,7 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Literal { value, .. } => value.pretty_print(),
         }
     }
 
@@ -116,6 +123,7 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Literal { value, .. } => value.pretty_print(),
         }
     }
 }
@@ -136,6 +144,7 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
+            (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
             _ => false,
         }
     }
@@ -176,9 +185,7 @@ impl CheckedParam {
 #[derive(Debug, Clone)]
 pub enum CheckedAst {
     /// A literal is a constant value that is directly represented in the source code.
-    LiteralValue { value: Value, info: LineInfo },
-    /// A literal type is a type that is directly represented in the source code.
-    LiteralType { ty: Type, info: LineInfo },
+    Literal { value: Value, info: LineInfo },
     /// A tuple is a fixed-size collection of elements of possibly different types.
     Tuple {
         exprs: Vec<CheckedAst>,
@@ -241,8 +248,8 @@ pub enum CheckedAst {
         ty: Type,
         info: LineInfo,
     },
-    /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
-    Assignment {
+    /// A let expression binds a value to a matching pattern (identifier, tuple, record, etc.).
+    Let {
         target: BindPattern,
         expr: Box<CheckedAst>,
         info: LineInfo,
@@ -255,13 +262,33 @@ pub enum CheckedAst {
         ty: Type,
         info: LineInfo,
     },
+    /// A function declaration (signature only, no body).
+    /// e.g. `fn id :: a -> a`
+    FunctionDecl {
+        name: String,
+        sig_type: Type,
+        info: LineInfo,
+    },
+    /// A function definition (with body and optional return type/effects).
+    /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
+    FunctionDef {
+        name: String,
+        params: Vec<CheckedParam>,
+        return_type: Option<Type>,
+        requires: Option<Box<CheckedAst>>,
+        ensures: Option<Box<CheckedAst>>,
+        body: Box<CheckedAst>,
+        info: LineInfo,
+    },
+    /// A type declaration.
+    /// e.g. `type SmallIndex = u8`, `type Option(A) = Some(A) | None`
+    TypeDecl { name: String, info: LineInfo },
 }
 
 impl GetType for CheckedAst {
     fn get_type(&self) -> &Type {
         match self {
-            CheckedAst::LiteralValue { value: v, info: _ } => v.get_type(),
-            CheckedAst::LiteralType { .. } => &std_types::TYPE,
+            CheckedAst::Literal { value: v, info: _ } => v.get_type(),
             CheckedAst::Tuple { ty, .. } => ty,
             CheckedAst::List { ty, .. } => ty,
             CheckedAst::Record { ty, .. } => ty,
@@ -269,8 +296,11 @@ impl GetType for CheckedAst {
             CheckedAst::Identifier { ty, .. } => ty,
             CheckedAst::FunctionCall { ret_ty, .. } => ret_ty,
             CheckedAst::Lambda { ty, .. } => ty,
-            CheckedAst::Assignment { .. } => &std_types::UNIT,
+            CheckedAst::Let { .. } => &std_types::UNIT,
             CheckedAst::Block { exprs: _, ty, .. } => ty,
+            CheckedAst::FunctionDecl { sig_type, .. } => sig_type,
+            CheckedAst::FunctionDef { .. } => &std_types::UNIT,
+            CheckedAst::TypeDecl { .. } => &std_types::UNIT,
         }
     }
 }
@@ -304,8 +334,7 @@ impl CheckedAst {
 
     pub fn info(&self) -> &LineInfo {
         match self {
-            CheckedAst::LiteralValue { info, .. } => info,
-            CheckedAst::LiteralType { info, .. } => info,
+            CheckedAst::Literal { info, .. } => info,
             CheckedAst::Tuple { info, .. } => info,
             CheckedAst::List { info, .. } => info,
             CheckedAst::Record { info, .. } => info,
@@ -313,15 +342,17 @@ impl CheckedAst {
             CheckedAst::Identifier { info, .. } => info,
             CheckedAst::FunctionCall { info, .. } => info,
             CheckedAst::Lambda { info, .. } => info,
-            CheckedAst::Assignment { info, .. } => info,
+            CheckedAst::Let { info, .. } => info,
             CheckedAst::Block { info, .. } => info,
+            CheckedAst::FunctionDecl { info, .. } => info,
+            CheckedAst::FunctionDef { info, .. } => info,
+            CheckedAst::TypeDecl { info, .. } => info,
         }
     }
 
     pub fn specialize(&mut self, judgements: &TypeJudgements, changed: &mut bool) {
         match self {
-            CheckedAst::LiteralValue { .. } => (),
-            CheckedAst::LiteralType { .. } => (),
+            CheckedAst::Literal { .. } => (),
             CheckedAst::Tuple {
                 exprs: elements,
                 ty,
@@ -386,7 +417,7 @@ impl CheckedAst {
                 *ty = ty.specialize(judgements, changed);
                 body.specialize(judgements, changed);
             }
-            CheckedAst::Assignment {
+            CheckedAst::Let {
                 target: lhs,
                 expr: rhs,
                 ..
@@ -404,13 +435,38 @@ impl CheckedAst {
                 }
                 *ty = ty.specialize(judgements, changed);
             }
+            CheckedAst::FunctionDecl { sig_type, .. } => {
+                *sig_type = sig_type.specialize(judgements, changed);
+            }
+            CheckedAst::FunctionDef {
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                ..
+            } => {
+                for param in params.iter_mut() {
+                    param.ty = param.ty.specialize(judgements, changed);
+                }
+                if let Some(ret) = return_type {
+                    *ret = ret.specialize(judgements, changed);
+                }
+                if let Some(req) = requires {
+                    req.specialize(judgements, changed);
+                }
+                if let Some(ens) = ensures {
+                    ens.specialize(judgements, changed);
+                }
+                body.specialize(judgements, changed);
+            }
+            CheckedAst::TypeDecl { .. } => (),
         }
     }
 
     pub fn print_expr(&self) -> String {
         match self {
-            CheckedAst::LiteralValue { value, info: _ } => value.pretty_print(),
-            CheckedAst::LiteralType { ty: value, info: _ } => value.pretty_print(),
+            CheckedAst::Literal { value, info: _ } => value.pretty_print(),
             CheckedAst::Tuple {
                 exprs: elements, ..
             } => format!(
@@ -480,7 +536,7 @@ impl CheckedAst {
                     body.print_expr()
                 )
             }
-            CheckedAst::Assignment {
+            CheckedAst::Let {
                 target: lhs,
                 expr: rhs,
                 ..
@@ -497,13 +553,54 @@ impl CheckedAst {
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
+            CheckedAst::FunctionDecl { name, sig_type, .. } => {
+                format!("fn {} :: {}", name, sig_type)
+            }
+            CheckedAst::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| p.pattern.print_expr())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r))
+                    .unwrap_or_default();
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|r| format!(" ensures {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                format!(
+                    "fn {}({}){}{}{} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    req,
+                    ens,
+                    body.print_expr()
+                )
+            }
+            CheckedAst::TypeDecl { name, .. } => {
+                format!("type {}", name)
+            }
         }
     }
 
     pub fn pretty_print(&self) -> String {
         match self {
-            Self::LiteralValue { value: l, .. } => l.pretty_print(),
-            Self::LiteralType { ty: l, .. } => l.pretty_print(),
+            Self::Literal { value: l, .. } => l.pretty_print(),
             Self::Tuple { exprs: t, .. } => {
                 let mut result = "(".to_string();
                 for (i, v) in t.iter().enumerate() {
@@ -557,7 +654,7 @@ impl CheckedAst {
                     body.pretty_print()
                 )
             }
-            Self::Assignment {
+            Self::Let {
                 target: lhs,
                 expr: rhs,
                 ..
@@ -578,6 +675,48 @@ impl CheckedAst {
                 }
                 result.push('}');
                 result
+            }
+            Self::FunctionDecl { name, sig_type, .. } => {
+                format!("fn {} :: {}", name, sig_type)
+            }
+            Self::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| p.pattern.pretty_print())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r))
+                    .unwrap_or_default();
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.pretty_print()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|r| format!(" ensures {{ {} }}", r.pretty_print()))
+                    .unwrap_or_default();
+                format!(
+                    "fn {}({}){}{}{} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    req,
+                    ens,
+                    body.pretty_print()
+                )
+            }
+            Self::TypeDecl { name, .. } => {
+                format!("type {}", name)
             }
         }
     }

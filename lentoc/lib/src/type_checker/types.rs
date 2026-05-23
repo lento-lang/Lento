@@ -874,4 +874,37 @@ pub mod std_types {
             )),
         )
     }
+
+    pub fn from_str(name: &str) -> Option<Type> {
+        Some(match name {
+            "type" => TYPE,
+            "unit" => UNIT,
+            "str" => STRING,
+            "char" => CHAR,
+            "bool" => BOOL,
+            "u1" => UINT1,
+            "u8" => UINT8,
+            "u16" => UINT16,
+            "u32" => UINT32,
+            "u64" => UINT64,
+            "u128" => UINT128,
+            "ubig" => UINTBIG,
+            "i8" => INT8,
+            "i16" => INT16,
+            "i32" => INT32,
+            "i64" => INT64,
+            "i128" => INT128,
+            "ibig" => INTBIG,
+            "f32" => FLOAT32,
+            "f64" => FLOAT64,
+            "fbig" => FLOATBIG,
+            "uint" => UINT(),
+            "int" => INT(),
+            "float" => FLOAT(),
+            "num" => NUM(),
+            "List" => LIST(),
+            "Map" => MAP(),
+            _ => return None,
+        })
+    }
 }

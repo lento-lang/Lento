@@ -1,6 +1,7 @@
 use super::{op::OpInfo, pattern::BindPattern};
 use crate::{
     interpreter::value::{RecordKey, Value},
+    type_checker::checked_ast::TypeAst,
     util::error::LineInfo,
 };
 use std::fmt::Debug;
@@ -29,18 +30,22 @@ pub enum Ast {
     },
     /// An identifier is a named reference to a value in the environment.
     Identifier { name: String, info: LineInfo },
-    /// An assignment expression assigns a value to a variable via a matching pattern (identifier, destructuring of a tuple, record, etc.).
-    Assignment {
+    /// A let expression binds a pattern to a value.
+    Let {
         /// The target expression to assign to.
         target: BindPattern,
         /// The source expression to assign to the target.
         expr: Box<Ast>,
+        /// Optional type annotation for the assigned variable.
+        annotation: Option<TypeAst>,
         info: LineInfo,
     },
     /// A lambda expression is an anonymous function that can be passed as a value.
     Lambda {
         param: Box<Ast>,
         body: Box<Ast>,
+        /// Optional return type annotation.
+        return_type: Option<TypeAst>,
         info: LineInfo,
     },
     /// A function call is an invocation of a function with a list of arguments.
@@ -62,8 +67,38 @@ pub enum Ast {
         expr: Box<Ast>,
         info: LineInfo,
     },
-    /// Block expression evaluates all expressions in the block and returns the value of the last expression.
+    /// A block expression evaluates all expressions in the block and returns the value of the last expression.
     Block { exprs: Vec<Ast>, info: LineInfo },
+    /// A function declaration (signature only, no body).
+    /// e.g. `fn id :: a -> a`
+    FunctionDecl {
+        name: String,
+        /// The type signature expression after `::`.
+        signature: TypeAst,
+        info: LineInfo,
+    },
+    /// A function definition (with body and optional return type/effects).
+    /// e.g. `fn add(x, y) = x + y`, `fn foo(x) -> int ! { e } = x`
+    FunctionDef {
+        name: String,
+        params: Vec<(BindPattern, Option<TypeAst>)>,
+        /// Optional return type expression (after `->`, may include `! { effects }`).
+        return_type: Option<Box<Ast>>,
+        /// Optional pre-condition specification (`requires { ... }`) as code.
+        requires: Option<Box<Ast>>,
+        /// Optional post-condition specification (`ensures { ... }`) as code.
+        ensures: Option<Box<Ast>>,
+        body: Box<Ast>,
+        info: LineInfo,
+    },
+    /// A type declaration.
+    /// e.g. `type SmallIndex = u8`, `type Option(A) = Some(A) | None`
+    TypeDecl {
+        name: String,
+        params: Vec<Ast>,
+        body: TypeAst,
+        info: LineInfo,
+    },
 }
 
 impl Debug for Ast {
@@ -83,15 +118,27 @@ impl Debug for Ast {
             Self::Identifier { name, .. } => {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
-            Self::Assignment { target, expr, .. } => f
-                .debug_struct("Assignment")
+            Self::Let {
+                target,
+                expr,
+                annotation,
+                ..
+            } => f
+                .debug_struct("Let")
                 .field("target", target)
                 .field("expr", expr)
+                .field("annotation", annotation)
                 .finish(),
-            Self::Lambda { param, body, .. } => f
+            Self::Lambda {
+                param,
+                body,
+                return_type,
+                ..
+            } => f
                 .debug_struct("Lambda")
                 .field("param", param)
                 .field("body", body)
+                .field("return_type", return_type)
                 .finish(),
             Self::FunctionCall { expr, arg, .. } => f
                 .debug_struct("FunctionCall")
@@ -117,6 +164,38 @@ impl Debug for Ast {
                 .field("expr", expr)
                 .finish(),
             Self::Block { exprs, .. } => f.debug_struct("Block").field("exprs", exprs).finish(),
+            Self::FunctionDecl {
+                name, signature, ..
+            } => f
+                .debug_struct("FunctionDecl")
+                .field("name", name)
+                .field("signature", signature)
+                .finish(),
+            Self::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                ..
+            } => f
+                .debug_struct("FunctionDef")
+                .field("name", name)
+                .field("params", params)
+                .field("return_type", return_type)
+                .field("requires", requires)
+                .field("ensures", ensures)
+                .field("body", body)
+                .finish(),
+            Self::TypeDecl {
+                name, params, body, ..
+            } => f
+                .debug_struct("TypeDecl")
+                .field("name", name)
+                .field("params", params)
+                .field("body", body)
+                .finish(),
         }
     }
 }
@@ -141,8 +220,11 @@ impl Ast {
             Ast::Lambda { info, .. } => info,
             Ast::Binary { info, .. } => info,
             Ast::Unary { info, .. } => info,
-            Ast::Assignment { info, .. } => info,
+            Ast::Let { info, .. } => info,
             Ast::Block { info, .. } => info,
+            Ast::FunctionDecl { info, .. } => info,
+            Ast::FunctionDef { info, .. } => info,
+            Ast::TypeDecl { info, .. } => info,
         }
     }
 
@@ -209,12 +291,17 @@ impl Ast {
             } => {
                 format!("({} {})", op.symbol.clone(), operand.print_expr())
             }
-            Ast::Assignment {
+            Ast::Let {
                 target: lhs,
                 expr: rhs,
+                annotation,
                 ..
             } => {
-                format!("({} = {})", lhs.print_expr(), rhs.print_expr())
+                let ann = annotation
+                    .as_ref()
+                    .map(|a| format!("{} ", a.pretty_print()))
+                    .unwrap_or_default();
+                format!("({}{} = {})", ann, lhs.print_expr(), rhs.print_expr())
             }
             Ast::Block { exprs, .. } => format!(
                 "{{ {} }}",
@@ -224,6 +311,67 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join("; ")
             ),
+            Ast::FunctionDecl {
+                name, signature, ..
+            } => {
+                format!("fn {} :: {}", name, signature.pretty_print())
+            }
+            Ast::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                ..
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|(p, ty)| match ty {
+                        Some(ty) => format!("{}: {}", p.print_expr(), ty.pretty_print()),
+                        None => p.print_expr(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let ret = return_type
+                    .as_ref()
+                    .map(|r| format!(" -> {}", r.print_expr()))
+                    .unwrap_or_default();
+                let req = requires
+                    .as_ref()
+                    .map(|r| format!(" requires {{ {} }}", r.print_expr()))
+                    .unwrap_or_default();
+                let ens = ensures
+                    .as_ref()
+                    .map(|e| format!(" ensures {{ {} }}", e.print_expr()))
+                    .unwrap_or_default();
+                format!(
+                    "fn {}({}){}{}{} = {}",
+                    name,
+                    params_str,
+                    ret,
+                    req,
+                    ens,
+                    body.print_expr()
+                )
+            }
+            Ast::TypeDecl {
+                name, params, body, ..
+            } => {
+                let params_str = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "({})",
+                        params
+                            .iter()
+                            .map(|p| p.print_expr())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                };
+                format!("type {}{} = {}", name, params_str, body.print_expr())
+            }
         }
     }
 }
@@ -247,18 +395,6 @@ impl PartialEq for Ast {
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::Lambda {
-                    param: l_param,
-                    body: l_body,
-                    ..
-                },
-                Self::Lambda {
-                    param: r_param,
-                    body: r_body,
-                    ..
-                },
-            ) => l_param == r_param && l_body == r_body,
-            (
                 Self::Binary {
                     rhs: rhs1,
                     op: op1,
@@ -281,18 +417,80 @@ impl PartialEq for Ast {
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::Assignment {
+                Self::Let {
                     target: l1,
                     expr: l2,
+                    annotation: l3,
                     ..
                 },
-                Self::Assignment {
+                Self::Let {
                     target: r1,
                     expr: r2,
+                    annotation: r3,
                     ..
                 },
-            ) => l1 == r1 && l2 == r2,
+            ) => l1 == r1 && l2 == r2 && l3 == r3,
+            (
+                Self::Lambda {
+                    param: l_param,
+                    body: l_body,
+                    return_type: l_ret,
+                    ..
+                },
+                Self::Lambda {
+                    param: r_param,
+                    body: r_body,
+                    return_type: r_ret,
+                    ..
+                },
+            ) => l_param == r_param && l_body == r_body && l_ret == r_ret,
             (Self::Block { exprs: l0, .. }, Self::Block { exprs: r0, .. }) => l0 == r0,
+            (
+                Self::FunctionDecl {
+                    name: l0,
+                    signature: l1,
+                    ..
+                },
+                Self::FunctionDecl {
+                    name: r0,
+                    signature: r1,
+                    ..
+                },
+            ) => l0 == r0 && l1 == r1,
+            (
+                Self::FunctionDef {
+                    name: l0,
+                    params: l1,
+                    return_type: l2,
+                    requires: l3,
+                    ensures: l4,
+                    body: l5,
+                    ..
+                },
+                Self::FunctionDef {
+                    name: r0,
+                    params: r1,
+                    return_type: r2,
+                    requires: r3,
+                    ensures: r4,
+                    body: r5,
+                    ..
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2 && l3 == r3 && l4 == r4 && l5 == r5,
+            (
+                Self::TypeDecl {
+                    name: l0,
+                    params: l1,
+                    body: l2,
+                    ..
+                },
+                Self::TypeDecl {
+                    name: r0,
+                    params: r1,
+                    body: r2,
+                    ..
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             _ => false,
         }
     }

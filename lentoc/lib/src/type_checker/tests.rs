@@ -32,14 +32,14 @@ mod tests {
             "unit", "str", "char", "bool", "u1", "u8", "u16", "u32", "u64", "u128", "ubig", "i8",
             "i16", "i32", "i64", "i128", "ibig", "f32", "f64", "fbig",
         ];
-        let mut parser = from_string(types.join(" "));
+        let mut parser = from_string(types.join("; "));
         stdlib().init_parser(&mut parser);
         let mut checker = TypeChecker::default();
         stdlib().init_type_checker(&mut checker);
         let ast = parser.parse_all().unwrap();
         let checked_ast = checker.check_top_exprs(&ast).unwrap();
         assert!(checked_ast.iter().zip(types).all(|(ast, ty)| {
-            if let CheckedAst::LiteralValue {
+            if let CheckedAst::Literal {
                 value: Value::Type(t),
                 info: _,
             } = ast
@@ -76,18 +76,12 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_single_no_parens_block() {
-        let result = check_str_one("int f int x { x + 5 }", Some(&stdlib())).unwrap();
-        if let CheckedAst::Assignment { target, expr, .. } = result {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "f");
-            }
-            assert!(matches!(*expr, CheckedAst::Lambda { .. }));
-            if let CheckedAst::Lambda { param, body, .. } = *expr {
-                if let BindPattern::Variable { name, .. } = &param.pattern {
-                    assert_eq!(name, "x");
-                }
-                assert!(matches!(*body, CheckedAst::Block { .. }));
+        let result = check_str_one("fn f(x: int) -> int = x + 5", Some(&stdlib())).unwrap();
+        if let CheckedAst::FunctionDef { name, params, .. } = result {
+            assert_eq!(name, "f");
+            assert_eq!(params.len(), 1);
+            if let BindPattern::Variable { name, .. } = &params[0].pattern {
+                assert_eq!(name, "x");
             }
         } else {
             panic!(
@@ -99,24 +93,18 @@ mod tests {
 
     #[test]
     fn function_def_with_return_type_many_no_parens_block() {
-        let result = check_str_one("int add int x, int y { x + y }", Some(&stdlib())).unwrap();
-        if let CheckedAst::Assignment { target, expr, .. } = result {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "add");
+        let result =
+            check_str_one("fn add(x: int, y: int) -> int = x + y", Some(&stdlib())).unwrap();
+        if let CheckedAst::FunctionDef { name, params, .. } = result {
+            assert_eq!(name, "add");
+            assert_eq!(params.len(), 2);
+            assert!(matches!(params[0].pattern, BindPattern::Variable { .. }));
+            assert!(matches!(params[1].pattern, BindPattern::Variable { .. }));
+            if let BindPattern::Variable { name, .. } = &params[0].pattern {
+                assert_eq!(name, "x");
             }
-            assert!(matches!(*expr, CheckedAst::Lambda { .. }));
-            if let CheckedAst::Lambda { param, body, .. } = *expr {
-                if let BindPattern::Variable { name, .. } = &param.pattern {
-                    assert_eq!(name, "y");
-                }
-                assert!(matches!(*body, CheckedAst::Lambda { .. }));
-                if let CheckedAst::Lambda { param, body, .. } = *body {
-                    if let BindPattern::Variable { name, .. } = &param.pattern {
-                        assert_eq!(name, "x");
-                    }
-                    assert!(matches!(*body, CheckedAst::Block { .. }));
-                }
+            if let BindPattern::Variable { name, .. } = &params[1].pattern {
+                assert_eq!(name, "y");
             }
         } else {
             panic!(
@@ -124,5 +112,27 @@ mod tests {
                 result
             );
         }
+    }
+
+    #[test]
+    fn checked_type_decl() {
+        let result = check_str_one("type Foo = u8", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_function_def_has_all_params() {
+        let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
+        if let CheckedAst::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 2);
+        } else {
+            panic!("Expected CheckedAst::FunctionDef");
+        }
+    }
+
+    #[test]
+    fn checked_let_keyword_decl() {
+        let result = check_str_one("let x = 1", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
     }
 }

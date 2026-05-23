@@ -44,14 +44,13 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             ..
         } => eval_call(function, arg, env, ast.info())?,
         CheckedAst::Tuple { exprs, .. } => eval_tuple(exprs, env)?,
-        CheckedAst::LiteralValue { value, .. } => value.clone(),
-        CheckedAst::LiteralType { ty: value, .. } => Value::Type(value.clone()),
+        CheckedAst::Literal { value, .. } => value.clone(),
         CheckedAst::Identifier { name, .. } => match env.lookup_identifier(name) {
             (Some(v), _) => v.clone(),
             (_, Some(f)) => Value::Function(Box::new(f.clone())),
             (_, _) => unreachable!("Undefined identifier: {}", name),
         },
-        CheckedAst::Assignment { target, expr, .. } => {
+        CheckedAst::Let { target, expr, .. } => {
             let value = eval_expr(expr, env)?;
             eval_assignment(target, &value, env)?;
             value
@@ -105,8 +104,11 @@ pub fn eval_expr(ast: &CheckedAst, env: &mut Environment) -> InterpretResult {
             }
             result
         }
+        CheckedAst::FunctionDecl { .. }
+        | CheckedAst::FunctionDef { .. }
+        | CheckedAst::TypeDecl { .. } => Value::Unit,
     };
-    if !matches!(ast, CheckedAst::LiteralValue { .. }) {
+    if !matches!(ast, CheckedAst::Literal { .. }) {
         log::trace!(
             "Eval: {} -> {}",
             ast.print_expr(),

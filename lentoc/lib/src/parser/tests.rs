@@ -285,12 +285,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy assignment syntax"]
     fn typed_assignment() {
         let result = parse_str_one("int x = 1", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
-        if let Ast::Assignment { target, expr, .. } = &result {
+        assert!(matches!(result, Ast::Let { .. }));
+        if let Ast::Let { target, expr, .. } = &result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
             // if let Some(annotation) = annotation {
@@ -308,7 +309,7 @@ mod tests {
         let result = parse_str_one("x = 1", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
+        assert!(matches!(result, Ast::Let { .. }));
     }
 
     #[test]
@@ -316,8 +317,8 @@ mod tests {
         let result = parse_str_one("x = 1 + 2", Some(&stdlib()));
         let result = result.unwrap();
 
-        assert!(matches!(result, Ast::Assignment { .. }));
-        if let Ast::Assignment { target, expr, .. } = &result {
+        assert!(matches!(result, Ast::Let { .. }));
+        if let Ast::Let { target, expr, .. } = &result {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(matches!(*expr.to_owned(), Ast::Binary { .. }));
         }
@@ -553,31 +554,37 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_explicit_args_and_ret() {
         parse_str_one("u8 add(u8 x, u8 y, u8 z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_args_and_ret() {
         parse_str_one("u8 add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_args() {
         parse_str_one("add u8 x, u8 y, u8 z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_implicit_args_and_ret() {
         parse_str_one("add(x, y, z) = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_implicit_args_and_ret() {
         parse_str_one("add x, y, z = { x + y + z }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_mixed_parens() {
         parse_str_one(
             "u8 add x, y, (z), a, (b), (c) = { x + y + z + a + b + c }",
@@ -587,41 +594,49 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_explicit_oneline() {
         parse_str_one("u8 add(u8 x, u8 y, u8 z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_explicit_oneline() {
         parse_str_one("u8 add u8 x, u8 y, u8 z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_paren_implicit_oneline() {
         parse_str_one("add(x, y, z) = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_no_paren_implicit_oneline() {
         parse_str_one("add x, y, z = x + y + z;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type() {
         parse_str_one("int add(int x, int y) = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type_no_parens() {
         parse_str_one("int add int x, int y = x + y;", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_return_type_block() {
         parse_str_one("int add(int x, int y) = { x + y }", Some(&stdlib())).unwrap();
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_multiple_statements() {
         parse_str_one(
             "int add(int x, int y) = {
@@ -634,6 +649,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_nested() {
         parse_str_one(
             "int outer(int x) = {
@@ -646,9 +662,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy assignment syntax"]
     fn assignment_with_type() {
         let result = parse_str_one("int x = 123", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "x");
@@ -664,9 +681,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_arg() {
         let result = parse_str_one("int f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -705,9 +723,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_paren_arg() {
         let result = parse_str_one("f(int x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -742,9 +761,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_parenless_arg() {
         let result = parse_str_one("int f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -780,9 +800,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_parenless_arg() {
         let result = parse_str_one("f(x) = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -814,9 +835,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_arg() {
         let result = parse_str_one("int f int x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -855,9 +877,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_explicit_arg() {
         let result = parse_str_one("f x = x + 5", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -889,9 +912,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_multiple_explicit_args() {
         let result = parse_str_one("f int x, int y = x + y", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -933,6 +957,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_args_block() {
         let result = parse_str_one(
             "int f(int x, int y) = {
@@ -940,7 +965,7 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -990,6 +1015,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_args_block() {
         let result = parse_str_one(
             "int f int x, int y = {
@@ -997,7 +1023,7 @@ mod tests {
                 }",
             Some(&stdlib()),
         );
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             assert!(matches!(target, BindPattern::Variable { .. }));
             if let BindPattern::Variable { name, .. } = target {
                 assert_eq!(name, "f");
@@ -1047,9 +1073,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_paren_args_oneline() {
         let result = parse_str_one("int f(int x, int y) = x + y;", Some(&stdlib()));
-        if let Ast::Assignment { target, expr, .. } = result.unwrap() {
+        if let Ast::Let { target, expr, .. } = result.unwrap() {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -1095,6 +1122,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "legacy function-definition syntax"]
     fn function_def_with_type_and_explicit_args_multiline() {
         let result = parse_str_one(
             "int f
@@ -1104,7 +1132,7 @@ mod tests {
             Some(&stdlib()),
         );
         let result = result.unwrap();
-        if let Ast::Assignment { target, expr, .. } = result {
+        if let Ast::Let { target, expr, .. } = result {
             // assert!(annotation.is_some());
             // if let Some(TypeAst::Identifier { name, .. }) = annotation {
             //     assert_eq!(name, "int");
@@ -1146,6 +1174,47 @@ mod tests {
             }
         } else {
             dbg!(result);
+            panic!("Expected function definition");
+        }
+    }
+
+    #[test]
+    fn type_decl_simple() {
+        let result = parse_str_one("type Foo = u8", None).unwrap();
+        if let Ast::TypeDecl { name, params, .. } = result {
+            assert_eq!(name, "Foo");
+            assert!(params.is_empty());
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn function_def_bind_pattern_params() {
+        let result = parse_str_one("fn f((x, y), { a: a }) = x", None).unwrap();
+        if let Ast::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 2);
+            assert!(matches!(params[0].0, BindPattern::Tuple { .. }));
+            assert!(matches!(params[1].0, BindPattern::Record { .. }));
+        } else {
+            panic!("Expected function definition");
+        }
+    }
+
+    #[test]
+    fn let_keyword_decl() {
+        let result = parse_str_one("let x = 1", None).unwrap();
+        assert!(matches!(result, Ast::Let { .. }));
+    }
+
+    #[test]
+    fn function_def_typed_params_parse() {
+        let result = parse_str_one("fn id(x: u8) = x", Some(&stdlib())).unwrap();
+        if let Ast::FunctionDef { params, .. } = result {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(params[0].0, BindPattern::Variable { .. }));
+            assert!(params[0].1.is_some());
+        } else {
             panic!("Expected function definition");
         }
     }

@@ -244,12 +244,105 @@ impl TypeChecker<'_> {
 
     fn scan_forward(&mut self, expr: &[Ast]) -> TypeCheckerResult<()> {
         for e in expr {
-            if let Ast::Assignment { target, expr, .. } = e {
+            if let Ast::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                info,
+            } = e
+            {
+                let declared_return = if let Some(ret_ast) = return_type {
+                    let type_ast =
+                        crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
+                    Some(self.check_type_expr(&type_ast)?)
+                } else {
+                    None
+                };
+                let _declared_requires = if let Some(req_ast) = requires {
+                    Some(self.check_expr(req_ast)?)
+                } else {
+                    None
+                };
+                let _declared_ensures = if let Some(ens_ast) = ensures {
+                    Some(self.check_expr(ens_ast)?)
+                } else {
+                    None
+                };
+                let mut checked_params = Vec::new();
+                for (p, ty_ast) in params.iter() {
+                    let ty = if let Some(ty_ast) = ty_ast {
+                        self.check_type_expr(ty_ast)?
+                    } else {
+                        std_types::ANY
+                    };
+                    checked_params.push(CheckedParam::new(p.clone(), ty));
+                }
+                if checked_params
+                    .iter()
+                    .all(|p| p.ty.equals(&std_types::ANY).success)
+                {
+                    if let Some(ret) = &declared_return {
+                        if ret.subtype(&std_types::NUM()).success {
+                            for p in checked_params.iter_mut() {
+                                p.ty = ret.clone();
+                            }
+                        }
+                    }
+                }
+
+                let mut body_scope = self.new_scope();
+                for checked_param in &checked_params {
+                    for (name, ty) in binding_typed_names(&checked_param.pattern, &checked_param.ty)
+                    {
+                        body_scope.add_variable(name, ty);
+                    }
+                }
+                let checked_body = body_scope.check_expr(body)?;
+                let return_ty = declared_return.unwrap_or_else(|| checked_body.get_type().clone());
+
+                let mut variation: Option<FunctionType> = None;
+                for p in checked_params.iter().rev() {
+                    variation = Some(FunctionType {
+                        param: p.clone(),
+                        return_type: variation
+                            .map(|f| Type::Function(Box::new(f)))
+                            .unwrap_or_else(|| return_ty.clone()),
+                    });
+                }
+                let variation = variation.ok_or_else(|| {
+                    TypeErrorVariant::TypeError(TypeError::new(
+                        "Expected at least one function parameter".to_string(),
+                        info.clone(),
+                    ))
+                })?;
+                self.env.add_function(name.clone(), variation);
+                continue;
+            }
+            if let Ast::FunctionDecl {
+                name, signature, ..
+            } = e
+            {
+                // Register the declared name with the declared type signature.
+                let sig_type = self.check_type_expr(signature)?;
+                self.env.add_variable(name.clone(), sig_type);
+                continue;
+            }
+            if let Ast::TypeDecl { name, .. } = e {
+                // Register type name as a variable (type-level binding)
+                self.env.add_variable(name.clone(), std_types::TYPE.clone());
+                continue;
+            }
+            if let Ast::Let { target, expr, .. } = e {
                 let BindPattern::Variable { name, .. } = target else {
                     continue;
                 };
                 match expr.borrow() {
-                    Ast::Lambda { param, body, info } => {
+                    Ast::Lambda {
+                        param, body, info, ..
+                    } => {
                         let checked_param = self.check_param(param)?;
                         let checked = self.check_lambda(checked_param.clone(), body, info)?;
                         let return_type = if let CheckedAst::Lambda { return_type, .. } = &checked {
@@ -293,14 +386,13 @@ impl TypeChecker<'_> {
     /// Check the type of an expression
     pub fn check_expr(&mut self, expr: &Ast) -> TypeCheckerResult<CheckedAst> {
         Ok(match expr {
-            Ast::Lambda { param, body, info } => {
-                self.check_lambda(self.check_param(param)?, body, info)?
-            }
-            Ast::Literal { value, info } => CheckedAst::LiteralValue {
+            Ast::Lambda {
+                param, body, info, ..
+            } => self.check_lambda(self.check_param(param)?, body, info)?,
+            Ast::Literal { value, info } => CheckedAst::Literal {
                 value: value.clone(),
                 info: info.clone(),
             },
-            // Ast::LiteralType { expr } => self.check_literal_type(expr)?,
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
@@ -322,19 +414,110 @@ impl TypeChecker<'_> {
                 expr: operand,
                 info,
             } => self.check_unary(op, operand, info)?,
-            Ast::Assignment { target, expr, info } => self.check_assignment(target, expr, info)?,
+            Ast::Let {
+                target, expr, info, ..
+            } => self.check_let(target, expr, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
+            Ast::FunctionDecl {
+                name,
+                signature,
+                info,
+            } => {
+                let sig_type = self.check_type_expr(signature)?;
+                CheckedAst::FunctionDecl {
+                    name: name.clone(),
+                    sig_type,
+                    info: info.clone(),
+                }
+            }
+            Ast::FunctionDef {
+                name,
+                params,
+                return_type,
+                requires,
+                ensures,
+                body,
+                info,
+            } => {
+                let declared_return = if let Some(ret_ast) = return_type {
+                    let type_ast =
+                        crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
+                    Some(self.check_type_expr(&type_ast)?)
+                } else {
+                    None
+                };
+                let declared_requires = if let Some(req_ast) = requires {
+                    Some(Box::new(self.check_expr(req_ast)?))
+                } else {
+                    None
+                };
+                let declared_ensures = if let Some(ens_ast) = ensures {
+                    Some(Box::new(self.check_expr(ens_ast)?))
+                } else {
+                    None
+                };
+                let mut checked_params = Vec::new();
+                for (p, ty_ast) in params.iter() {
+                    let ty = if let Some(ty_ast) = ty_ast {
+                        self.check_type_expr(ty_ast)?
+                    } else {
+                        std_types::ANY
+                    };
+                    checked_params.push(CheckedParam::new(p.clone(), ty));
+                }
+                if checked_params
+                    .iter()
+                    .all(|p| p.ty.equals(&std_types::ANY).success)
+                {
+                    if let Some(ret) = &declared_return {
+                        if ret.subtype(&std_types::NUM()).success {
+                            for p in checked_params.iter_mut() {
+                                p.ty = ret.clone();
+                            }
+                        }
+                    }
+                }
+
+                let mut body_scope = self.new_scope();
+                for checked_param in &checked_params {
+                    for (name, ty) in binding_typed_names(&checked_param.pattern, &checked_param.ty)
+                    {
+                        body_scope.add_variable(name, ty);
+                    }
+                }
+                let checked_body = body_scope.check_expr(body)?;
+                let ret_type = declared_return.unwrap_or_else(|| checked_body.get_type().clone());
+
+                CheckedAst::FunctionDef {
+                    name: name.clone(),
+                    params: checked_params,
+                    return_type: Some(ret_type),
+                    requires: declared_requires,
+                    ensures: declared_ensures,
+                    body: Box::new(checked_body),
+                    info: info.clone(),
+                }
+            }
+            Ast::TypeDecl {
+                name, body, info, ..
+            } => {
+                let _ = self.check_type_expr(body)?;
+                CheckedAst::TypeDecl {
+                    name: name.clone(),
+                    info: info.clone(),
+                }
+            }
         })
     }
 
     fn check_type_expr(&self, expr: &TypeAst) -> TypeCheckerResult<Type> {
         Ok(match expr {
-            TypeAst::Identifier { name, info } => {
-                self.lookup_type(name).cloned().ok_or_else(|| {
+            TypeAst::Identifier { name, info } => std_types::from_str(name)
+                .or_else(|| self.lookup_type(name).cloned())
+                .ok_or_else(|| {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
-                })?
-            }
+                })?,
             TypeAst::Constructor { expr, params, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
@@ -364,15 +547,16 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
             }
-        })
-    }
-
-    fn check_literal_type(&self, expr: &TypeAst) -> TypeCheckerResult<CheckedAst> {
-        let info = expr.info();
-        let ty = self.check_type_expr(expr)?;
-        Ok(CheckedAst::LiteralType {
-            ty,
-            info: info.clone(),
+            TypeAst::Literal { value, info } => match value {
+                Value::Type(ty) => ty.clone(),
+                _ => {
+                    return Err(TypeError::new(
+                        format!("Invalid literal in type position: {}", value.pretty_print()),
+                        info.clone(),
+                    )
+                    .into())
+                }
+            },
         })
     }
 
@@ -558,7 +742,7 @@ impl TypeChecker<'_> {
                 ty: ty.clone(),
                 info: info.clone(),
             },
-            Some(IdentifierType::Type(ty)) => CheckedAst::LiteralValue {
+            Some(IdentifierType::Type(ty)) => CheckedAst::Literal {
                 value: Value::Type(ty.clone()),
                 info: info.clone(),
             },
@@ -592,7 +776,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_assignment(
+    fn check_let(
         &mut self,
         target: &BindPattern,
         expr: &Ast,
@@ -636,7 +820,7 @@ impl TypeChecker<'_> {
                 //     }
                 // }
                 self.add_variable(name.clone(), ty.clone());
-                Ok(CheckedAst::Assignment {
+                Ok(CheckedAst::Let {
                     target: BindPattern::Variable {
                         name: name.clone(),
                         info: info.clone(),
@@ -646,7 +830,7 @@ impl TypeChecker<'_> {
                 })
             }
             _ => Err(TypeErrorVariant::ParseError(ParseError::new(
-                format!("Invalid assignment target: {}", target.print_expr()),
+                format!("Invalid let binding target: {}", target.print_expr()),
                 target.info().clone(),
             ))),
         }
