@@ -1,4 +1,4 @@
-use crate::{interpreter::value::RecordKey, util::str::Str};
+use crate::{interpreter::value::RecordKey, parser::parser::FN_ARROW_SYM, util::str::Str};
 use colorful::Colorful;
 use std::{
     collections::HashMap,
@@ -158,7 +158,7 @@ impl FunctionType {
         format!(
             "{} {} {}",
             self.param.ty.pretty_print_color(),
-            "->".dark_gray(),
+            FN_ARROW_SYM.dark_gray(),
             self.return_type.pretty_print_color()
         )
     }

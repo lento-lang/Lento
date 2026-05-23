@@ -1,6 +1,7 @@
 use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
+    parser::op::OpInfo,
     parser::pattern::BindPattern,
     type_checker::types::Type,
     util::error::LineInfo,
@@ -34,6 +35,12 @@ pub enum TypeAst {
         fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
     },
+    Binary {
+        lhs: Box<TypeAst>,
+        op: OpInfo,
+        rhs: Box<TypeAst>,
+        info: LineInfo,
+    },
     Literal {
         value: Value,
         info: LineInfo,
@@ -54,6 +61,12 @@ impl Debug for TypeAst {
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
+            Self::Binary { lhs, op, rhs, .. } => f
+                .debug_struct("Binary")
+                .field("lhs", lhs)
+                .field("op", op)
+                .field("rhs", rhs)
+                .finish(),
             Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
         }
     }
@@ -65,6 +78,7 @@ impl TypeAst {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Constructor { info, .. } => info,
             TypeAst::Record { info, .. } => info,
+            TypeAst::Binary { info, .. } => info,
             TypeAst::Literal { info, .. } => info,
         }
     }
@@ -93,6 +107,9 @@ impl TypeAst {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
+            }
+            TypeAst::Binary { lhs, op, rhs, .. } => {
+                format!("({} {} {})", lhs.print_expr(), op.symbol, rhs.print_expr())
             }
             TypeAst::Literal { value, .. } => value.pretty_print(),
         }
@@ -123,6 +140,14 @@ impl TypeAst {
                         .join(", ")
                 )
             }
+            TypeAst::Binary { lhs, op, rhs, .. } => {
+                format!(
+                    "({} {} {})",
+                    lhs.pretty_print(),
+                    op.symbol,
+                    rhs.pretty_print()
+                )
+            }
             TypeAst::Literal { value, .. } => value.pretty_print(),
         }
     }
@@ -144,6 +169,20 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
+            (
+                Self::Binary {
+                    lhs: l0,
+                    op: l1,
+                    rhs: l2,
+                    info: _,
+                },
+                Self::Binary {
+                    lhs: r0,
+                    op: r1,
+                    rhs: r2,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
             _ => false,
         }

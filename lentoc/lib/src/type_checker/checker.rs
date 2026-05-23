@@ -8,6 +8,7 @@ use crate::{
         ast::Ast,
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
+        parser::{FN_ARROW_SYM, SUM_TYPE_SYM},
         pattern::BindPattern,
     },
     util::error::{BaseError, BaseErrorExt, LineInfo},
@@ -546,6 +547,24 @@ impl TypeChecker<'_> {
                     .map(|(k, v)| Ok((k.clone(), self.check_type_expr(v)?)))
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
+            }
+            TypeAst::Binary { lhs, op, rhs, info } => {
+                let lhs_ty = self.check_type_expr(lhs)?;
+                let rhs_ty = self.check_type_expr(rhs)?;
+                match op.symbol.as_str() {
+                    SUM_TYPE_SYM => Type::Sum(vec![lhs_ty, rhs_ty]).simplify(),
+                    FN_ARROW_SYM => Type::Function(Box::new(FunctionType::new(
+                        CheckedParam::from_str("_", lhs_ty),
+                        rhs_ty,
+                    ))),
+                    _ => {
+                        return Err(TypeError::new(
+                            format!("Unsupported type operator {}", op.symbol),
+                            info.clone(),
+                        )
+                        .into())
+                    }
+                }
             }
             TypeAst::Literal { value, info } => match value {
                 Value::Type(ty) => ty.clone(),

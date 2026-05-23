@@ -3,7 +3,7 @@ use crate::{
         ast::Ast,
         error::ParseError,
         op::OpInfo,
-        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM},
+        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, FN_ARROW_SYM, SUM_TYPE_SYM},
         pattern::BindPattern,
     },
     type_checker::checked_ast::{ParamAst, TypeAst},
@@ -595,7 +595,11 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
     match expr {
         Ast::Identifier { name, .. } => types.contains(name),
         // Sum types like `int | str`
-        Ast::Binary { lhs, rhs, .. } => is_type_expr(lhs, types) && is_type_expr(rhs, types),
+        Ast::Binary { lhs, op, rhs, .. } => {
+            (op.symbol == SUM_TYPE_SYM || op.symbol == FN_ARROW_SYM)
+                && is_type_expr(lhs, types)
+                && is_type_expr(rhs, types)
+        }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
         Ast::Literal { .. } => false,
         Ast::FunctionCall { expr, arg, .. } => {
@@ -649,6 +653,16 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             Ok(TypeAst::Constructor {
                 expr: Box::new(head),
                 params,
+                info,
+            })
+        }
+        Ast::Binary { lhs, op, rhs, info }
+            if op.symbol == SUM_TYPE_SYM || op.symbol == FN_ARROW_SYM =>
+        {
+            Ok(TypeAst::Binary {
+                lhs: Box::new(into_type_ast(*lhs)?),
+                op,
+                rhs: Box::new(into_type_ast(*rhs)?),
                 info,
             })
         }
