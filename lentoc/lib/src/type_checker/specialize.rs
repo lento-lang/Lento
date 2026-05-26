@@ -608,7 +608,9 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
                 && is_type_expr(rhs, types)
         }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
-        Ast::StaticVec { elem, len, .. } => is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. }),
+        Ast::StaticVec { elem, len, .. } => {
+            is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. })
+        }
         Ast::Literal { .. } => true,
         Ast::FunctionCall { expr, arg, .. } => {
             is_type_expr(expr, types) && is_type_expr(arg, types)
@@ -645,7 +647,7 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
         Ast::StaticVec { elem, len, info } => {
             let elem = into_type_ast(*elem)?;
             let len = static_vec_len_from_ast(*len)?;
-            Ok(TypeAst::StaticVector {
+            Ok(TypeAst::Array {
                 elem: Box::new(elem),
                 len,
                 info,

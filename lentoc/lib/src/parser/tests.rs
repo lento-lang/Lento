@@ -5,11 +5,7 @@ mod tests {
             number::{Number, UnsignedInteger},
             value::{RecordKey, Value},
         },
-        parser::{
-            ast::Ast,
-            parser::from_string,
-            pattern::BindPattern,
-        },
+        parser::{ast::Ast, parser::from_string, pattern::BindPattern},
         stdlib::init::{stdlib, Initializer},
         type_checker::checked_ast::TypeAst,
         util::error::LineInfo,
@@ -1285,7 +1281,8 @@ mod tests {
 
     #[test]
     fn type_decl_record_type() {
-        let result = parse_str_one("type Eq = { eq: Self -> Self -> bool }", Some(&stdlib())).unwrap();
+        let result =
+            parse_str_one("type Eq = { eq: Self -> Self -> bool }", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
             assert!(matches!(body, TypeAst::Record { .. }));
         } else {
@@ -1308,8 +1305,8 @@ mod tests {
         let result = parse_str_one("type MyArr T = [T; 6]", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { params, body, .. } = result {
             assert_eq!(params.len(), 1);
-            assert!(matches!(body, TypeAst::StaticVector { .. }));
-            if let TypeAst::StaticVector { len, .. } = body {
+            assert!(matches!(body, TypeAst::Array { .. }));
+            if let TypeAst::Array { len, .. } = body {
                 assert_eq!(len, 6);
             }
         } else {

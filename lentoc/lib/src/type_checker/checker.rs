@@ -639,7 +639,7 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Tuple(elems)
             }
-            TypeAst::StaticVector { elem, len, .. } => {
+            TypeAst::Array { elem, len, .. } => {
                 let elem_ty = self.check_type_expr(elem)?;
                 Type::Tuple(vec![elem_ty; *len])
             }

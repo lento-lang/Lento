@@ -35,7 +35,7 @@ pub enum TypeAst {
         items: Vec<TypeAst>,
         info: LineInfo,
     },
-    StaticVector {
+    Array {
         elem: Box<TypeAst>,
         len: usize,
         info: LineInfo,
@@ -78,8 +78,8 @@ impl Debug for TypeAst {
                 .field("args", args)
                 .finish(),
             Self::Tuple { items, .. } => f.debug_struct("Tuple").field("items", items).finish(),
-            Self::StaticVector { elem, len, .. } => f
-                .debug_struct("StaticVector")
+            Self::Array { elem, len, .. } => f
+                .debug_struct("Array")
                 .field("elem", elem)
                 .field("len", len)
                 .finish(),
@@ -117,7 +117,7 @@ impl TypeAst {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Application { info, .. } => info,
             TypeAst::Tuple { info, .. } => info,
-            TypeAst::StaticVector { info, .. } => info,
+            TypeAst::Array { info, .. } => info,
             TypeAst::Record { info, .. } => info,
             TypeAst::Refinement { info, .. } => info,
             TypeAst::Sum { info, .. } => info,
@@ -129,9 +129,7 @@ impl TypeAst {
     pub fn print_expr(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Application {
-                expr, args, ..
-            } => {
+            TypeAst::Application { expr, args, .. } => {
                 format!(
                     "{}({})",
                     expr.print_expr(),
@@ -155,7 +153,7 @@ impl TypeAst {
                     )
                 }
             }
-            TypeAst::StaticVector { elem, len, .. } => {
+            TypeAst::Array { elem, len, .. } => {
                 format!("[{}; {}]", elem.print_expr(), len)
             }
             TypeAst::Record { fields, .. } => {
@@ -174,7 +172,12 @@ impl TypeAst {
                 predicate,
                 ..
             } => {
-                format!("{{ {}: {} | {} }}", binder, base.print_expr(), predicate.print_expr())
+                format!(
+                    "{{ {}: {} | {} }}",
+                    binder,
+                    base.print_expr(),
+                    predicate.print_expr()
+                )
             }
             TypeAst::Sum { variants, .. } => {
                 format!(
@@ -205,9 +208,7 @@ impl TypeAst {
     pub fn pretty_print(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Application {
-                expr, args, ..
-            } => {
+            TypeAst::Application { expr, args, .. } => {
                 format!(
                     "{}({})",
                     expr.pretty_print(),
@@ -231,7 +232,7 @@ impl TypeAst {
                     )
                 }
             }
-            TypeAst::StaticVector { elem, len, .. } => {
+            TypeAst::Array { elem, len, .. } => {
                 format!("[{}; {}]", elem.pretty_print(), len)
             }
             TypeAst::Record { fields, .. } => {
@@ -250,7 +251,12 @@ impl TypeAst {
                 predicate,
                 ..
             } => {
-                format!("{{ {}: {} | {} }}", binder, base.pretty_print(), predicate.print_expr())
+                format!(
+                    "{{ {}: {} | {} }}",
+                    binder,
+                    base.pretty_print(),
+                    predicate.print_expr()
+                )
             }
             TypeAst::Sum { variants, .. } => {
                 format!(
@@ -295,23 +301,14 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
+            (Self::Tuple { items: l0, info: _ }, Self::Tuple { items: r0, info: _ }) => l0 == r0,
             (
-                Self::Tuple {
-                    items: l0,
-                    info: _,
-                },
-                Self::Tuple {
-                    items: r0,
-                    info: _,
-                },
-            ) => l0 == r0,
-            (
-                Self::StaticVector {
+                Self::Array {
                     elem: l0,
                     len: l1,
                     info: _,
                 },
-                Self::StaticVector {
+                Self::Array {
                     elem: r0,
                     len: r1,
                     info: _,
