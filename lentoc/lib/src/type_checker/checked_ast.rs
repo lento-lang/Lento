@@ -1,6 +1,7 @@
 use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
+    parser::ast::Ast,
     parser::pattern::BindPattern,
     type_checker::types::Type,
     util::error::LineInfo,
@@ -34,8 +35,19 @@ pub enum TypeAst {
         items: Vec<TypeAst>,
         info: LineInfo,
     },
+    StaticVector {
+        elem: Box<TypeAst>,
+        len: usize,
+        info: LineInfo,
+    },
     Record {
         fields: Vec<(RecordKey, TypeAst)>,
+        info: LineInfo,
+    },
+    Refinement {
+        binder: RecordKey,
+        base: Box<TypeAst>,
+        predicate: Box<Ast>,
         info: LineInfo,
     },
     Sum {
@@ -66,9 +78,25 @@ impl Debug for TypeAst {
                 .field("args", args)
                 .finish(),
             Self::Tuple { items, .. } => f.debug_struct("Tuple").field("items", items).finish(),
+            Self::StaticVector { elem, len, .. } => f
+                .debug_struct("StaticVector")
+                .field("elem", elem)
+                .field("len", len)
+                .finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
+            Self::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => f
+                .debug_struct("Refinement")
+                .field("binder", binder)
+                .field("base", base)
+                .field("predicate", predicate)
+                .finish(),
             Self::Sum { variants, .. } => {
                 f.debug_struct("Sum").field("variants", variants).finish()
             }
@@ -89,7 +117,9 @@ impl TypeAst {
             TypeAst::Identifier { info, .. } => info,
             TypeAst::Application { info, .. } => info,
             TypeAst::Tuple { info, .. } => info,
+            TypeAst::StaticVector { info, .. } => info,
             TypeAst::Record { info, .. } => info,
+            TypeAst::Refinement { info, .. } => info,
             TypeAst::Sum { info, .. } => info,
             TypeAst::Lambda { info, .. } => info,
             TypeAst::Literal { info, .. } => info,
@@ -125,6 +155,9 @@ impl TypeAst {
                     )
                 }
             }
+            TypeAst::StaticVector { elem, len, .. } => {
+                format!("[{}; {}]", elem.print_expr(), len)
+            }
             TypeAst::Record { fields, .. } => {
                 format!(
                     "{{ {} }}",
@@ -134,6 +167,14 @@ impl TypeAst {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
+            }
+            TypeAst::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => {
+                format!("{{ {}: {} | {} }}", binder, base.print_expr(), predicate.print_expr())
             }
             TypeAst::Sum { variants, .. } => {
                 format!(
@@ -190,6 +231,9 @@ impl TypeAst {
                     )
                 }
             }
+            TypeAst::StaticVector { elem, len, .. } => {
+                format!("[{}; {}]", elem.pretty_print(), len)
+            }
             TypeAst::Record { fields, .. } => {
                 format!(
                     "{{ {} }}",
@@ -199,6 +243,14 @@ impl TypeAst {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
+            }
+            TypeAst::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => {
+                format!("{{ {}: {} | {} }}", binder, base.pretty_print(), predicate.print_expr())
             }
             TypeAst::Sum { variants, .. } => {
                 format!(
@@ -254,6 +306,18 @@ impl PartialEq for TypeAst {
                 },
             ) => l0 == r0,
             (
+                Self::StaticVector {
+                    elem: l0,
+                    len: l1,
+                    info: _,
+                },
+                Self::StaticVector {
+                    elem: r0,
+                    len: r1,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1,
+            (
                 Self::Record {
                     fields: l0,
                     info: _,
@@ -263,6 +327,20 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0,
+            (
+                Self::Refinement {
+                    binder: l0,
+                    base: l1,
+                    predicate: l2,
+                    info: _,
+                },
+                Self::Refinement {
+                    binder: r0,
+                    base: r1,
+                    predicate: r2,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             (
                 Self::Sum {
                     variants: l0,

@@ -149,6 +149,42 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
             associativity: OpAssoc::Left,
             allow_trailing: false,
         },
+        // Comparison operators (needed for refinement predicates)
+        OpInfo {
+            symbol: ">".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EQUALITY_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: ">=".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EQUALITY_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: "<".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EQUALITY_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: "<=".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EQUALITY_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
+        OpInfo {
+            symbol: "!=".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::EQUALITY_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
     ]
 }
 
@@ -358,15 +394,40 @@ impl<R: Read> Parser<R> {
     }
 
     fn parse_list(&mut self, start_info: LineInfo) -> ParseResult {
+        // Static vector syntax: [elem; len]
+        if let Ok(end) = self.lexer.peek_token(0) {
+            if end.token == Token::RightBracket {
+                self.lexer.next_token().unwrap();
+                return Ok(Ast::List {
+                    exprs: vec![],
+                    info: start_info.join(&end.info),
+                });
+            }
+        }
+        let first_expr = self.parse_expr(COMMA_PREC)?;
+        if let Ok(sep) = self.lexer.peek_token(0) {
+            if sep.token == Token::SemiColon {
+                self.lexer.next_token().unwrap(); // consume ';'
+                let len_expr = self.parse_expr(COMMA_PREC)?;
+                let end = self.parse_expected_eq(Token::RightBracket, "]")?;
+                return Ok(Ast::StaticVec {
+                    elem: Box::new(first_expr),
+                    len: Box::new(len_expr),
+                    info: start_info.join(&end.info),
+                });
+            }
+        }
+
         let mut exprs = Vec::new();
+        exprs.push(first_expr);
         while let Ok(end) = self.lexer.peek_token(0) {
             if end.token == Token::RightBracket {
                 break;
             }
-            exprs.push(self.parse_expr(COMMA_PREC)?);
             if let Ok(nt) = self.lexer.peek_token(0) {
                 if nt.token == Token::Operator(COMMA_SYM.to_string()) {
                     self.lexer.next_token().unwrap();
+                    exprs.push(self.parse_expr(COMMA_PREC)?);
                     continue;
                 } else if nt.token == Token::RightBracket {
                     break;
@@ -1106,7 +1167,9 @@ impl<R: Read> Parser<R> {
         };
         let name_info = name_token.info;
 
-        // Check for optional parenthesized parameter list: type Name(Param1, Param2)
+        // Optional type parameters:
+        // - parenthesized: `type Name(T, U) = ...`
+        // - bare: `type Name T U = ...`
         let params: Vec<Ast> = if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
             if matches!(t.token, Token::LeftParen { .. }) {
                 self.lexer.next_token().unwrap(); // consume (
@@ -1151,7 +1214,20 @@ impl<R: Read> Parser<R> {
                 }
                 p
             } else {
-                vec![]
+                let mut p = Vec::new();
+                while let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+                    if next.token == Token::Operator("=".to_string()) {
+                        break;
+                    }
+                    let Token::Identifier(name) = &next.token else {
+                        break;
+                    };
+                    let name = name.clone();
+                    let info = next.info.clone();
+                    self.lexer.next_token().unwrap(); // consume identifier
+                    p.push(Ast::Identifier { name, info });
+                }
+                p
             }
         } else {
             vec![]

@@ -1284,6 +1284,57 @@ mod tests {
     }
 
     #[test]
+    fn type_decl_record_type() {
+        let result = parse_str_one("type Eq = { eq: Self -> Self -> bool }", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Record { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_refinement_type() {
+        let result = parse_str_one("type Nat = { v: int | v >= 0 }", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Refinement { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_static_vec_generic_bare_param() {
+        let result = parse_str_one("type MyArr T = [T; 6]", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { params, body, .. } = result {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(body, TypeAst::StaticVector { .. }));
+            if let TypeAst::StaticVector { len, .. } = body {
+                assert_eq!(len, 6);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_apply_bare_and_paren() {
+        let result = parse_str_one("type A = MyArr X", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+
+        let result = parse_str_one("type B = MyArr(X)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
     fn function_def_bind_pattern_params() {
         let result = parse_str_one("fn f((x, y), { a: a }) = x", None).unwrap();
         if let Ast::FunctionDef { params, .. } = result {

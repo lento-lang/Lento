@@ -1,4 +1,6 @@
 use crate::{
+    interpreter::number::{Number, UnsignedInteger},
+    interpreter::value::RecordKey,
     parser::{
         ast::Ast,
         error::ParseError,
@@ -606,6 +608,7 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
                 && is_type_expr(rhs, types)
         }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
+        Ast::StaticVec { elem, len, .. } => is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. }),
         Ast::Literal { .. } => true,
         Ast::FunctionCall { expr, arg, .. } => {
             is_type_expr(expr, types) && is_type_expr(arg, types)
@@ -639,6 +642,15 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
                 info: info.clone(),
             })
         }
+        Ast::StaticVec { elem, len, info } => {
+            let elem = into_type_ast(*elem)?;
+            let len = static_vec_len_from_ast(*len)?;
+            Ok(TypeAst::StaticVector {
+                elem: Box::new(elem),
+                len,
+                info,
+            })
+        }
         Ast::Tuple { exprs, info } => {
             let items = exprs
                 .into_iter()
@@ -647,6 +659,9 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             Ok(TypeAst::Tuple { items, info })
         }
         Ast::Record { fields, info } => {
+            if let Some(refinement) = try_into_refinement(&fields, &info)? {
+                return Ok(refinement);
+            }
             let fields = fields
                 .into_iter()
                 .map(|(key, value)| Ok((key, into_type_ast(value)?)))
@@ -778,6 +793,72 @@ fn into_effect_ast(effect_expr: Ast) -> Result<TypeAst, ParseError> {
             }
         }
         expr => into_type_ast(expr),
+    }
+}
+
+fn try_into_refinement(
+    fields: &[(RecordKey, Ast)],
+    info: &LineInfo,
+) -> Result<Option<TypeAst>, ParseError> {
+    if fields.len() != 1 {
+        return Ok(None);
+    }
+    let (binder, field_ty) = &fields[0];
+    let Ast::Binary { lhs, op, rhs, .. } = field_ty else {
+        return Ok(None);
+    };
+    if op.symbol != SUM_TYPE_SYM {
+        return Ok(None);
+    }
+    let base_is_type = matches!(into_type_ast((**lhs).clone()), Ok(_));
+    let pred_is_type = matches!(into_type_ast((**rhs).clone()), Ok(_));
+    if !base_is_type || pred_is_type {
+        return Ok(None);
+    }
+
+    let base = into_type_ast((**lhs).clone())?;
+    Ok(Some(TypeAst::Refinement {
+        binder: binder.clone(),
+        base: Box::new(base),
+        predicate: Box::new((**rhs).clone()),
+        info: info.clone(),
+    }))
+}
+
+fn static_vec_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
+    let info = ast.info().clone();
+    let Ast::Literal { value, .. } = ast else {
+        return Err(ParseError::new(
+            "Expected static vector length to be an integer literal".to_string(),
+            info,
+        ));
+    };
+    let crate::interpreter::value::Value::Number(n) = value else {
+        return Err(ParseError::new(
+            "Expected static vector length to be a numeric literal".to_string(),
+            info,
+        ));
+    };
+    number_to_usize(&n).ok_or_else(|| {
+        ParseError::new(
+            "Expected static vector length to be a non-negative integer".to_string(),
+            info,
+        )
+    })
+}
+
+fn number_to_usize(n: &Number) -> Option<usize> {
+    match n {
+        Number::UnsignedInteger(u) => match u {
+            UnsignedInteger::UInt1(v) => Some((*v).into()),
+            UnsignedInteger::UInt8(v) => Some((*v).into()),
+            UnsignedInteger::UInt16(v) => Some((*v).into()),
+            UnsignedInteger::UInt32(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt64(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt128(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UIntVar(v) => v.to_string().parse::<usize>().ok(),
+        },
+        _ => None,
     }
 }
 

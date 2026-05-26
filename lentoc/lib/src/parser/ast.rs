@@ -15,6 +15,12 @@ pub enum Ast {
     Tuple { exprs: Vec<Ast>, info: LineInfo },
     /// A dynamic list of elements.
     List { exprs: Vec<Ast>, info: LineInfo },
+    /// A static vector expression `[elem; len]`.
+    StaticVec {
+        elem: Box<Ast>,
+        len: Box<Ast>,
+        info: LineInfo,
+    },
     /// A record is a collection of key-value fields.
     Record {
         fields: Vec<(RecordKey, Ast)>,
@@ -107,6 +113,11 @@ impl Debug for Ast {
             Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
             Self::Tuple { exprs, .. } => f.debug_struct("Tuple").field("exprs", exprs).finish(),
             Self::List { exprs, .. } => f.debug_struct("List").field("exprs", exprs).finish(),
+            Self::StaticVec { elem, len, .. } => f
+                .debug_struct("StaticVec")
+                .field("elem", elem)
+                .field("len", len)
+                .finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
@@ -213,6 +224,7 @@ impl Ast {
             Ast::Literal { info, .. } => info,
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
+            Ast::StaticVec { info, .. } => info,
             Ast::Record { info, .. } => info,
             Ast::MemberAccess { info, .. } => info,
             Ast::Identifier { info, .. } => info,
@@ -258,6 +270,9 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            Ast::StaticVec { elem, len, .. } => {
+                format!("[{}; {}]", elem.print_expr(), len.print_expr())
+            }
             Ast::Record { fields, .. } => format!(
                 "{{ {} }}",
                 fields
@@ -382,6 +397,18 @@ impl PartialEq for Ast {
             (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
             (Self::Tuple { exprs: l0, .. }, Self::Tuple { exprs: r0, .. }) => l0 == r0,
             (Self::List { exprs: l0, info: _ }, Self::List { exprs: r0, info: _ }) => l0 == r0,
+            (
+                Self::StaticVec {
+                    elem: l0,
+                    len: l1,
+                    info: _,
+                },
+                Self::StaticVec {
+                    elem: r0,
+                    len: r1,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1,
             (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
             (Self::Identifier { name: name1, .. }, Self::Identifier { name: name2, .. }) => {
                 name1 == name2

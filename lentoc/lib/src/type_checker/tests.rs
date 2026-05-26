@@ -26,6 +26,22 @@ mod tests {
         }
     }
 
+    fn check_str_all(
+        input: &str,
+        init: Option<&Initializer>,
+    ) -> TypeCheckerResult<Vec<CheckedAst>> {
+        let mut parser = from_string(input.to_string());
+        let mut checker = TypeChecker::default();
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+            init.init_type_checker(&mut checker);
+        }
+        match parser.parse_all() {
+            Ok(ast) => checker.check_top_exprs(&ast),
+            Err(err) => Err(TypeErrorVariant::ParseError(err)),
+        }
+    }
+
     #[test]
     fn types() {
         let types = [
@@ -118,6 +134,36 @@ mod tests {
     fn checked_type_decl() {
         let result = check_str_one("type Foo = u8", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_record_type_decl() {
+        let result = check_str_one(
+            "type Eq = { eq: Self -> Self -> bool }",
+            Some(&stdlib()),
+        )
+        .unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_refinement_type_decl_and_use() {
+        let program = "type Nat = { v: int | v >= 0 }; fn id(x: Nat) -> Nat = x";
+        let checked = check_str_all(program, Some(&stdlib())).unwrap();
+        assert_eq!(checked.len(), 2);
+        assert!(matches!(checked[0], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[1], CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_generic_static_vec_alias_and_application() {
+        let program =
+            "type X = int; type MyArr T = [T; 6]; fn id(x: MyArr int) -> MyArr(X) = x";
+        let checked = check_str_all(program, Some(&stdlib())).unwrap();
+        assert_eq!(checked.len(), 3);
+        assert!(matches!(checked[0], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[1], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[2], CheckedAst::FunctionDef { .. }));
     }
 
     #[test]
