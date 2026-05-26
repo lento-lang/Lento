@@ -341,20 +341,24 @@ impl<R: Read> Parser<R> {
         if let Some(res) = self.parse_record_fields(&start_info) {
             res
         } else {
-            // Parse as block
-            let mut exprs = Vec::new();
-            while let Ok(end) = self.lexer.peek_token(0) {
-                if end.token == Token::RightBrace {
-                    break;
-                }
-                exprs.push(self.parse_top()?);
-            }
-            let last = self.parse_expected_eq(Token::RightBrace, "}")?;
-            Ok(Ast::Block {
-                exprs,
-                info: start_info.join(&last.info),
-            })
+            self.parse_block(start_info)
         }
+    }
+
+    fn parse_block(&mut self, start_info: LineInfo) -> Result<Ast, ParseError> {
+        // Parse as block
+        let mut exprs = Vec::new();
+        while let Ok(end) = self.lexer.peek_token(0) {
+            if end.token == Token::RightBrace {
+                break;
+            }
+            exprs.push(self.parse_top()?);
+        }
+        let last = self.parse_expected_eq(Token::RightBrace, "}")?;
+        Ok(Ast::Block {
+            exprs,
+            info: start_info.join(&last.info),
+        })
     }
 
     fn parse_list(&mut self, start_info: LineInfo) -> ParseResult {
@@ -1053,20 +1057,21 @@ impl<R: Read> Parser<R> {
             } else if t.token == Token::LeftBrace {
                 // Block body: fn name(params) -> ... { body }
                 self.lexer.next_token().unwrap(); // consume {
-                body = self.parse_record_or_block(t.info)?;
+                body = self.parse_block(t.info)?;
             } else {
-                // No body — declaration-style within definition parsing
-                // e.g. fn foo(x) -> int (just a signature with params)
-                body = Ast::Literal {
-                    value: Value::Unit,
-                    info: t.info.clone(),
-                };
+                return Err(ParseError::new(
+                    format!(
+                        "Expected `=` or `{{` after function signature, found {}",
+                        t.token
+                    ),
+                    t.info,
+                ));
             }
         } else {
-            body = Ast::Literal {
-                value: Value::Unit,
-                info: LineInfo::default(),
-            };
+            return Err(ParseError::new(
+                "Expected `=` or `{` after function signature".to_string(),
+                LineInfo::default(),
+            ));
         }
 
         let body_info = body.info().clone();
