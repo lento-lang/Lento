@@ -8,7 +8,6 @@ use crate::{
         ast::Ast,
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
-        parser::{FN_ARROW_SYM, SUM_TYPE_SYM},
         pattern::BindPattern,
     },
     util::error::{BaseError, BaseErrorExt, LineInfo},
@@ -519,7 +518,7 @@ impl TypeChecker<'_> {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?,
-            TypeAst::Constructor { expr, params, info } => {
+            TypeAst::Application { expr, args: params, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
                     return Err(TypeError::new(
@@ -541,6 +540,13 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Constructor(base_name, args, base_type)
             }
+            TypeAst::Tuple { items, .. } => {
+                let elems = items
+                    .iter()
+                    .map(|a| self.check_type_expr(a))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Tuple(elems)
+            }
             TypeAst::Record { fields, .. } => {
                 let fields = fields
                     .iter()
@@ -548,34 +554,22 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
             }
-            TypeAst::Binary { lhs, op, rhs, info } => {
+            TypeAst::Sum { variants, .. } => {
+                let variants = variants
+                    .iter()
+                    .map(|v| self.check_type_expr(v))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Sum(variants).simplify()
+            }
+            TypeAst::Lambda { lhs, rhs, .. } => {
                 let lhs_ty = self.check_type_expr(lhs)?;
                 let rhs_ty = self.check_type_expr(rhs)?;
-                match op.symbol.as_str() {
-                    SUM_TYPE_SYM => Type::Sum(vec![lhs_ty, rhs_ty]).simplify(),
-                    FN_ARROW_SYM => Type::Function(Box::new(FunctionType::new(
-                        CheckedParam::from_str("_", lhs_ty),
-                        rhs_ty,
-                    ))),
-                    _ => {
-                        return Err(TypeError::new(
-                            format!("Unsupported type operator {}", op.symbol),
-                            info.clone(),
-                        )
-                        .into())
-                    }
-                }
+                Type::Function(Box::new(FunctionType::new(
+                    CheckedParam::from_str("_", lhs_ty),
+                    rhs_ty,
+                )))
             }
-            TypeAst::Literal { value, info } => match value {
-                Value::Type(ty) => ty.clone(),
-                _ => {
-                    return Err(TypeError::new(
-                        format!("Invalid literal in type position: {}", value.pretty_print()),
-                        info.clone(),
-                    )
-                    .into())
-                }
-            },
+            TypeAst::Literal { value, .. } => value.get_type().clone(),
         })
     }
 

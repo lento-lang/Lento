@@ -7,7 +7,7 @@ mod tests {
         },
         parser::{
             ast::Ast,
-            parser::{from_string, FN_ARROW_SYM},
+            parser::from_string,
             pattern::BindPattern,
         },
         stdlib::init::{stdlib, Initializer},
@@ -1198,9 +1198,9 @@ mod tests {
     fn type_decl_union() {
         let result = parse_str_one("type X = int | bool", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
-            assert!(matches!(body, TypeAst::Binary { .. }));
-            if let TypeAst::Binary { op, .. } = body {
-                assert_eq!(op.symbol, "|");
+            assert!(matches!(body, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = body {
+                assert_eq!(variants.len(), 2);
             }
         } else {
             panic!("Expected type declaration");
@@ -1211,10 +1211,73 @@ mod tests {
     fn type_decl_function_type() {
         let result = parse_str_one("type Mapper = int -> bool", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
-            assert!(matches!(body, TypeAst::Binary { .. }));
-            if let TypeAst::Binary { op, .. } = body {
-                assert_eq!(op.symbol, FN_ARROW_SYM);
+            assert!(matches!(body, TypeAst::Lambda { .. }));
+            if let TypeAst::Lambda { eff, .. } = body {
+                assert!(eff.is_none());
             }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_function_type_with_effect() {
+        let result = parse_str_one("type Mapper = int -> bool ! io", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Lambda { .. }));
+            if let TypeAst::Lambda { eff, .. } = body {
+                assert!(eff.is_some());
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_application_paren_args() {
+        let result = parse_str_one("type Dict = Map(int, int)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+            if let TypeAst::Application { expr, args, .. } = body {
+                assert!(matches!(*expr, TypeAst::Identifier { .. }));
+                assert_eq!(args.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_application_juxtaposition_args() {
+        let result = parse_str_one("type Dict = Map int int", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+            if let TypeAst::Application { args, .. } = body {
+                assert_eq!(args.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_tuple_type() {
+        let result = parse_str_one("type Pair = (int, bool)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Tuple { .. }));
+            if let TypeAst::Tuple { items, .. } = body {
+                assert_eq!(items.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_singleton_literal() {
+        let result = parse_str_one("type FortyTwo = 42", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Literal { .. }));
         } else {
             panic!("Expected type declaration");
         }
