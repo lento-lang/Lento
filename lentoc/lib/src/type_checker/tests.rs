@@ -230,4 +230,17 @@ mod tests {
         let result = check_str_one("let x = 1", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::Let { .. }));
     }
+
+    #[test]
+    fn checked_type_decl_literal_sum() {
+        let result = check_str_one("type FewNums = 5 | 6 | 7", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_literal_sum_annotation() {
+        let result =
+            check_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
 }

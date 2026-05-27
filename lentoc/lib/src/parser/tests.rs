@@ -1369,4 +1369,36 @@ mod tests {
             panic!("Expected function definition");
         }
     }
+
+    #[test]
+    fn type_decl_literal_sum() {
+        let result = parse_str_one("type FewNums = 5 | 6 | 7", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = body {
+                assert_eq!(variants.len(), 3);
+                for variant in &variants {
+                    assert!(matches!(variant, TypeAst::Literal { .. }));
+                }
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn let_with_literal_sum_annotation() {
+        let result = parse_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            let ann = annotation.unwrap();
+            assert!(matches!(ann, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = ann {
+                assert_eq!(variants.len(), 2);
+                assert!(matches!(&variants[0], TypeAst::Literal { .. }));
+                assert!(matches!(&variants[1], TypeAst::Literal { .. }));
+            }
+        } else {
+            panic!("Expected let binding");
+        }
+    }
 }

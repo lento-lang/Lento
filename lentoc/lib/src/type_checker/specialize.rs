@@ -751,20 +751,6 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             info,
         )),
         Ast::Block { exprs, info } => {
-            if exprs.len() == 2 {
-                let base_result = into_type_ast(exprs[0].clone());
-                let pred_result = into_type_ast(exprs[1].clone());
-                if let Ok(base) = base_result {
-                    if pred_result.is_err() {
-                        return Ok(TypeAst::Refinement {
-                            binder: RecordKey::String("_".to_string()),
-                            base: Box::new(base),
-                            predicate: Box::new(exprs[1].clone()),
-                            info,
-                        });
-                    }
-                }
-            }
             let mut items = Vec::new();
             for expr in exprs {
                 items.push(into_type_ast(expr)?);
@@ -772,9 +758,6 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             if items.len() == 1 {
                 Ok(items.remove(0))
             } else {
-                // A block with multiple type expressions could also
-                // represent a TypeAst::Refinement if the items form a
-                // base-type-and-predicate shape.
                 Ok(TypeAst::Tuple { items, info })
             }
         }
