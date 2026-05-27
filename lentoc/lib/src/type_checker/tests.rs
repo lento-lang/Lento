@@ -167,6 +167,24 @@ mod tests {
     }
 
     #[test]
+    fn checked_list_type_decl() {
+        let result = check_str_one("type Foo = [int]", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_list_type_annotation() {
+        let result = check_str_one("fn id(x: [int]) -> [int] = x", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_list_type_in_function_sig() {
+        let result = check_str_one("fn f(x: [int]) -> [int] = x", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
     fn checked_function_def_has_all_params() {
         let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { params, .. } = result {

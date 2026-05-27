@@ -634,13 +634,9 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             info: info.clone(),
         }),
         Ast::List { mut exprs, info } if exprs.len() == 1 => {
-            let inner = into_type_ast(exprs.remove(0))?;
-            Ok(TypeAst::Application {
-                expr: Box::new(TypeAst::Identifier {
-                    name: "List".to_string(),
-                    info: info.clone(),
-                }),
-                args: vec![inner],
+            let elem = into_type_ast(exprs.remove(0))?;
+            Ok(TypeAst::List {
+                elem: Box::new(elem),
                 info: info.clone(),
             })
         }

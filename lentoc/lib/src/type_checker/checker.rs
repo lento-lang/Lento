@@ -643,6 +643,10 @@ impl TypeChecker<'_> {
                 let elem_ty = self.check_type_expr(elem)?;
                 Type::Tuple(vec![elem_ty; *len])
             }
+            TypeAst::List { elem, .. } => {
+                let elem_ty = self.check_type_expr(elem)?;
+                Type::List(Box::new(elem_ty))
+            }
             TypeAst::Record { fields, .. } => {
                 let fields = fields
                     .iter()

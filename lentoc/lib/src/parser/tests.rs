@@ -1315,6 +1315,19 @@ mod tests {
     }
 
     #[test]
+    fn type_decl_list_type() {
+        let result = parse_str_one("type Foo = [int]", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::List { .. }));
+            if let TypeAst::List { elem, .. } = &body {
+                assert!(matches!(elem.as_ref(), TypeAst::Identifier { name, .. } if name == "int"));
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
     fn type_decl_apply_bare_and_paren() {
         let result = parse_str_one("type A = MyArr X", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {

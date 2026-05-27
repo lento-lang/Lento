@@ -40,6 +40,10 @@ pub enum TypeAst {
         len: usize,
         info: LineInfo,
     },
+    List {
+        elem: Box<TypeAst>,
+        info: LineInfo,
+    },
     Record {
         fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
@@ -83,6 +87,10 @@ impl Debug for TypeAst {
                 .field("elem", elem)
                 .field("len", len)
                 .finish(),
+            Self::List { elem, .. } => f
+                .debug_struct("List")
+                .field("elem", elem)
+                .finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
@@ -118,6 +126,7 @@ impl TypeAst {
             TypeAst::Application { info, .. } => info,
             TypeAst::Tuple { info, .. } => info,
             TypeAst::Array { info, .. } => info,
+            TypeAst::List { info, .. } => info,
             TypeAst::Record { info, .. } => info,
             TypeAst::Refinement { info, .. } => info,
             TypeAst::Sum { info, .. } => info,
@@ -155,6 +164,9 @@ impl TypeAst {
             }
             TypeAst::Array { elem, len, .. } => {
                 format!("[{}; {}]", elem.print_expr(), len)
+            }
+            TypeAst::List { elem, .. } => {
+                format!("[{}]", elem.print_expr())
             }
             TypeAst::Record { fields, .. } => {
                 format!(
@@ -235,6 +247,9 @@ impl TypeAst {
             TypeAst::Array { elem, len, .. } => {
                 format!("[{}; {}]", elem.pretty_print(), len)
             }
+            TypeAst::List { elem, .. } => {
+                format!("[{}]", elem.pretty_print())
+            }
             TypeAst::Record { fields, .. } => {
                 format!(
                     "{{ {} }}",
@@ -314,6 +329,10 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
+            (
+                Self::List { elem: l0, info: _ },
+                Self::List { elem: r0, info: _ },
+            ) => l0 == r0,
             (
                 Self::Record {
                     fields: l0,
