@@ -1,12 +1,33 @@
 use super::types::{std_types, FunctionType, GetType, TypeJudgements, TypeTrait};
 use crate::{
     interpreter::value::{Function, RecordKey, Value},
-    parser::op::OpInfo,
+    parser::ast::Ast,
     parser::pattern::BindPattern,
     type_checker::types::Type,
     util::error::LineInfo,
 };
 use std::fmt::Debug;
+
+/// A single effect, e.g. `IO`, or `throw X` (future).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Effect {
+    pub name: String,
+    pub params: Vec<String>,
+}
+
+impl Effect {
+    pub fn print_expr(&self) -> String {
+        if self.params.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}({})", self.name, self.params.join(", "))
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        self.print_expr()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ParamAst {
@@ -26,19 +47,42 @@ pub enum TypeAst {
         name: String,
         info: LineInfo,
     },
-    Constructor {
+    Application {
         expr: Box<TypeAst>,
-        params: Vec<TypeAst>,
+        args: Vec<TypeAst>,
+        info: LineInfo,
+    },
+    Tuple {
+        items: Vec<TypeAst>,
+        info: LineInfo,
+    },
+    Array {
+        elem: Box<TypeAst>,
+        len: usize,
+        info: LineInfo,
+    },
+    List {
+        elem: Box<TypeAst>,
         info: LineInfo,
     },
     Record {
         fields: Vec<(RecordKey, TypeAst)>,
         info: LineInfo,
     },
-    Binary {
+    Refinement {
+        binder: RecordKey,
+        base: Box<TypeAst>,
+        predicate: Box<Ast>,
+        info: LineInfo,
+    },
+    Sum {
+        variants: Vec<TypeAst>,
+        info: LineInfo,
+    },
+    Lambda {
         lhs: Box<TypeAst>,
-        op: OpInfo,
         rhs: Box<TypeAst>,
+        eff: Vec<Effect>,
         info: LineInfo,
     },
     Literal {
@@ -53,19 +97,43 @@ impl Debug for TypeAst {
             Self::Identifier { name, .. } => {
                 f.debug_struct("Identifier").field("name", name).finish()
             }
-            Self::Constructor { expr, params, .. } => f
-                .debug_struct("Constructor")
+            Self::Application { expr, args, .. } => f
+                .debug_struct("Application")
                 .field("expr", expr)
-                .field("params", params)
+                .field("args", args)
+                .finish(),
+            Self::Tuple { items, .. } => f.debug_struct("Tuple").field("items", items).finish(),
+            Self::Array { elem, len, .. } => f
+                .debug_struct("Array")
+                .field("elem", elem)
+                .field("len", len)
+                .finish(),
+            Self::List { elem, .. } => f
+                .debug_struct("List")
+                .field("elem", elem)
                 .finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
-            Self::Binary { lhs, op, rhs, .. } => f
-                .debug_struct("Binary")
+            Self::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => f
+                .debug_struct("Refinement")
+                .field("binder", binder)
+                .field("base", base)
+                .field("predicate", predicate)
+                .finish(),
+            Self::Sum { variants, .. } => {
+                f.debug_struct("Sum").field("variants", variants).finish()
+            }
+            Self::Lambda { lhs, rhs, eff, .. } => f
+                .debug_struct("Lambda")
                 .field("lhs", lhs)
-                .field("op", op)
                 .field("rhs", rhs)
+                .field("eff", eff)
                 .finish(),
             Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
         }
@@ -76,9 +144,14 @@ impl TypeAst {
     pub fn info(&self) -> &LineInfo {
         match self {
             TypeAst::Identifier { info, .. } => info,
-            TypeAst::Constructor { info, .. } => info,
+            TypeAst::Application { info, .. } => info,
+            TypeAst::Tuple { info, .. } => info,
+            TypeAst::Array { info, .. } => info,
+            TypeAst::List { info, .. } => info,
             TypeAst::Record { info, .. } => info,
-            TypeAst::Binary { info, .. } => info,
+            TypeAst::Refinement { info, .. } => info,
+            TypeAst::Sum { info, .. } => info,
+            TypeAst::Lambda { info, .. } => info,
             TypeAst::Literal { info, .. } => info,
         }
     }
@@ -86,9 +159,7 @@ impl TypeAst {
     pub fn print_expr(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor {
-                expr, params: args, ..
-            } => {
+            TypeAst::Application { expr, args, .. } => {
                 format!(
                     "{}({})",
                     expr.print_expr(),
@@ -97,6 +168,26 @@ impl TypeAst {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
+            }
+            TypeAst::Tuple { items, .. } => {
+                if items.is_empty() {
+                    "()".to_string()
+                } else {
+                    format!(
+                        "({})",
+                        items
+                            .iter()
+                            .map(|a| a.print_expr())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                }
+            }
+            TypeAst::Array { elem, len, .. } => {
+                format!("[{}; {}]", elem.print_expr(), len)
+            }
+            TypeAst::List { elem, .. } => {
+                format!("[{}]", elem.print_expr())
             }
             TypeAst::Record { fields, .. } => {
                 format!(
@@ -108,8 +199,40 @@ impl TypeAst {
                         .join(", ")
                 )
             }
-            TypeAst::Binary { lhs, op, rhs, .. } => {
-                format!("({} {} {})", lhs.print_expr(), op.symbol, rhs.print_expr())
+            TypeAst::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => {
+                format!(
+                    "{{ {}: {} | {} }}",
+                    binder,
+                    base.print_expr(),
+                    predicate.print_expr()
+                )
+            }
+            TypeAst::Sum { variants, .. } => {
+                format!(
+                    "({})",
+                    variants
+                        .iter()
+                        .map(|t| t.print_expr())
+                        .collect::<Vec<String>>()
+                        .join(" | ")
+                )
+            }
+            TypeAst::Lambda { lhs, rhs, eff, .. } => {
+                if eff.is_empty() {
+                    format!("({} -> {})", lhs.print_expr(), rhs.print_expr())
+                } else {
+                    format!(
+                        "({} -> {} ! {})",
+                        lhs.print_expr(),
+                        rhs.print_expr(),
+                        eff.iter().map(|e| e.print_expr()).collect::<Vec<_>>().join(", ")
+                    )
+                }
             }
             TypeAst::Literal { value, .. } => value.pretty_print(),
         }
@@ -118,9 +241,7 @@ impl TypeAst {
     pub fn pretty_print(&self) -> String {
         match self {
             TypeAst::Identifier { name, .. } => name.clone(),
-            TypeAst::Constructor {
-                expr, params: args, ..
-            } => {
+            TypeAst::Application { expr, args, .. } => {
                 format!(
                     "{}({})",
                     expr.pretty_print(),
@@ -129,6 +250,26 @@ impl TypeAst {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
+            }
+            TypeAst::Tuple { items, .. } => {
+                if items.is_empty() {
+                    "()".to_string()
+                } else {
+                    format!(
+                        "({})",
+                        items
+                            .iter()
+                            .map(|a| a.pretty_print())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                }
+            }
+            TypeAst::Array { elem, len, .. } => {
+                format!("[{}; {}]", elem.pretty_print(), len)
+            }
+            TypeAst::List { elem, .. } => {
+                format!("[{}]", elem.pretty_print())
             }
             TypeAst::Record { fields, .. } => {
                 format!(
@@ -140,13 +281,40 @@ impl TypeAst {
                         .join(", ")
                 )
             }
-            TypeAst::Binary { lhs, op, rhs, .. } => {
+            TypeAst::Refinement {
+                binder,
+                base,
+                predicate,
+                ..
+            } => {
                 format!(
-                    "({} {} {})",
-                    lhs.pretty_print(),
-                    op.symbol,
-                    rhs.pretty_print()
+                    "{{ {}: {} | {} }}",
+                    binder,
+                    base.pretty_print(),
+                    predicate.print_expr()
                 )
+            }
+            TypeAst::Sum { variants, .. } => {
+                format!(
+                    "({})",
+                    variants
+                        .iter()
+                        .map(|t| t.pretty_print())
+                        .collect::<Vec<String>>()
+                        .join(" | ")
+                )
+            }
+            TypeAst::Lambda { lhs, rhs, eff, .. } => {
+                if eff.is_empty() {
+                    format!("({} -> {})", lhs.pretty_print(), rhs.pretty_print())
+                } else {
+                    format!(
+                        "({} -> {} ! {})",
+                        lhs.pretty_print(),
+                        rhs.pretty_print(),
+                        eff.iter().map(|e| e.pretty_print()).collect::<Vec<_>>().join(", ")
+                    )
+                }
             }
             TypeAst::Literal { value, .. } => value.pretty_print(),
         }
@@ -158,28 +326,79 @@ impl PartialEq for TypeAst {
         match (self, other) {
             (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
             (
-                Self::Constructor {
+                Self::Application {
                     expr: l0,
-                    params: l1,
+                    args: l1,
                     info: _,
                 },
-                Self::Constructor {
+                Self::Application {
                     expr: r0,
-                    params: r1,
+                    args: r1,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1,
+            (Self::Tuple { items: l0, info: _ }, Self::Tuple { items: r0, info: _ }) => l0 == r0,
+            (
+                Self::Array {
+                    elem: l0,
+                    len: l1,
+                    info: _,
+                },
+                Self::Array {
+                    elem: r0,
+                    len: r1,
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
             (
-                Self::Binary {
-                    lhs: l0,
-                    op: l1,
-                    rhs: l2,
+                Self::List { elem: l0, info: _ },
+                Self::List { elem: r0, info: _ },
+            ) => l0 == r0,
+            (
+                Self::Record {
+                    fields: l0,
                     info: _,
                 },
-                Self::Binary {
+                Self::Record {
+                    fields: r0,
+                    info: _,
+                },
+            ) => l0 == r0,
+            (
+                Self::Refinement {
+                    binder: l0,
+                    base: l1,
+                    predicate: l2,
+                    info: _,
+                },
+                Self::Refinement {
+                    binder: r0,
+                    base: r1,
+                    predicate: r2,
+                    info: _,
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
+            (
+                Self::Sum {
+                    variants: l0,
+                    info: _,
+                },
+                Self::Sum {
+                    variants: r0,
+                    info: _,
+                },
+            ) => l0 == r0,
+            (
+                Self::Lambda {
+                    lhs: l0,
+                    rhs: l1,
+                    eff: l2,
+                    info: _,
+                },
+                Self::Lambda {
                     lhs: r0,
-                    op: r1,
-                    rhs: r2,
+                    rhs: r1,
+                    eff: r2,
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1 && l2 == r2,

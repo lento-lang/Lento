@@ -5,11 +5,7 @@ mod tests {
             number::{Number, UnsignedInteger},
             value::{RecordKey, Value},
         },
-        parser::{
-            ast::Ast,
-            parser::{from_string, FN_ARROW_SYM},
-            pattern::BindPattern,
-        },
+        parser::{ast::Ast, parser::from_string, pattern::BindPattern},
         stdlib::init::{stdlib, Initializer},
         type_checker::checked_ast::TypeAst,
         util::error::LineInfo,
@@ -287,26 +283,6 @@ mod tests {
         } else {
             panic!("Expected identifier");
         };
-    }
-
-    #[test]
-    #[ignore = "legacy assignment syntax"]
-    fn typed_assignment() {
-        let result = parse_str_one("int x = 1", Some(&stdlib()));
-        let result = result.unwrap();
-
-        assert!(matches!(result, Ast::Let { .. }));
-        if let Ast::Let { target, expr, .. } = &result {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
-            // if let Some(annotation) = annotation {
-            //     assert!(matches!(annotation, TypeAst::Identifier { .. }));
-            //     let TypeAst::Identifier { name, .. } = &annotation else {
-            //         panic!("Expected identifier");
-            //     };
-            //     assert_eq!(name, "int");
-            // }
-        }
     }
 
     #[test]
@@ -664,25 +640,6 @@ mod tests {
             Some(&stdlib()),
         )
         .unwrap();
-    }
-
-    #[test]
-    #[ignore = "legacy assignment syntax"]
-    fn assignment_with_type() {
-        let result = parse_str_one("int x = 123", Some(&stdlib()));
-        if let Ast::Let { target, expr, .. } = result.unwrap() {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "x");
-            }
-            // assert!(annotation.is_some());
-            // if let Some(TypeAst::Identifier { name, .. }) = &annotation {
-            //     assert_eq!(name, "int");
-            // }
-            assert!(matches!(*expr, Ast::Literal { .. }));
-        } else {
-            panic!("Expected assignment");
-        }
     }
 
     #[test]
@@ -1198,9 +1155,9 @@ mod tests {
     fn type_decl_union() {
         let result = parse_str_one("type X = int | bool", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
-            assert!(matches!(body, TypeAst::Binary { .. }));
-            if let TypeAst::Binary { op, .. } = body {
-                assert_eq!(op.symbol, "|");
+            assert!(matches!(body, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = body {
+                assert_eq!(variants.len(), 2);
             }
         } else {
             panic!("Expected type declaration");
@@ -1211,10 +1168,138 @@ mod tests {
     fn type_decl_function_type() {
         let result = parse_str_one("type Mapper = int -> bool", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
-            assert!(matches!(body, TypeAst::Binary { .. }));
-            if let TypeAst::Binary { op, .. } = body {
-                assert_eq!(op.symbol, FN_ARROW_SYM);
+            assert!(matches!(body, TypeAst::Lambda { .. }));
+            if let TypeAst::Lambda { eff, .. } = body {
+                assert!(eff.is_empty());
             }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_function_type_with_effect() {
+        let result = parse_str_one("type Mapper = int -> bool ! io", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Lambda { .. }));
+            if let TypeAst::Lambda { eff, .. } = body {
+                assert!(!eff.is_empty());
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_application_paren_args() {
+        let result = parse_str_one("type Dict = Map(int, int)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+            if let TypeAst::Application { expr, args, .. } = body {
+                assert!(matches!(*expr, TypeAst::Identifier { .. }));
+                assert_eq!(args.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_application_juxtaposition_args() {
+        let result = parse_str_one("type Dict = Map int int", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+            if let TypeAst::Application { args, .. } = body {
+                assert_eq!(args.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_tuple_type() {
+        let result = parse_str_one("type Pair = (int, bool)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Tuple { .. }));
+            if let TypeAst::Tuple { items, .. } = body {
+                assert_eq!(items.len(), 2);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_singleton_literal() {
+        let result = parse_str_one("type FortyTwo = 42", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Literal { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_record_type() {
+        let result =
+            parse_str_one("type Eq = { eq: Self -> Self -> bool }", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Record { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_refinement_type() {
+        let result = parse_str_one("type Nat = { v: int | v >= 0 }", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Refinement { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_static_vec_generic_bare_param() {
+        let result = parse_str_one("type MyArr T = [T; 6]", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { params, body, .. } = result {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(body, TypeAst::Array { .. }));
+            if let TypeAst::Array { len, .. } = body {
+                assert_eq!(len, 6);
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_list_type() {
+        let result = parse_str_one("type Foo = [int]", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::List { .. }));
+            if let TypeAst::List { elem, .. } = &body {
+                assert!(matches!(elem.as_ref(), TypeAst::Identifier { name, .. } if name == "int"));
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_apply_bare_and_paren() {
+        let result = parse_str_one("type A = MyArr X", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
+        } else {
+            panic!("Expected type declaration");
+        }
+
+        let result = parse_str_one("type B = MyArr(X)", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Application { .. }));
         } else {
             panic!("Expected type declaration");
         }
@@ -1239,6 +1324,41 @@ mod tests {
     }
 
     #[test]
+    fn let_with_type_annotation() {
+        let result = parse_str_one("let x: int = 5", Some(&stdlib())).unwrap();
+        if let Ast::Let { target, annotation, .. } = result {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::Identifier { name, .. } if name == "int"));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
+    fn let_with_list_type_annotation() {
+        let result = parse_str_one("let xs: [int] = [1, 2, 3]", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::List { .. }));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
+    fn let_with_tuple_type_annotation() {
+        let result =
+            parse_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::Tuple { .. }));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
     fn function_def_typed_params_parse() {
         let result = parse_str_one("fn id(x: u8) = x", Some(&stdlib())).unwrap();
         if let Ast::FunctionDef { params, .. } = result {
@@ -1247,6 +1367,38 @@ mod tests {
             assert!(params[0].1.is_some());
         } else {
             panic!("Expected function definition");
+        }
+    }
+
+    #[test]
+    fn type_decl_literal_sum() {
+        let result = parse_str_one("type FewNums = 5 | 6 | 7", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            assert!(matches!(body, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = body {
+                assert_eq!(variants.len(), 3);
+                for variant in &variants {
+                    assert!(matches!(variant, TypeAst::Literal { .. }));
+                }
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn let_with_literal_sum_annotation() {
+        let result = parse_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            let ann = annotation.unwrap();
+            assert!(matches!(ann, TypeAst::Sum { .. }));
+            if let TypeAst::Sum { variants, .. } = ann {
+                assert_eq!(variants.len(), 2);
+                assert!(matches!(&variants[0], TypeAst::Literal { .. }));
+                assert!(matches!(&variants[1], TypeAst::Literal { .. }));
+            }
+        } else {
+            panic!("Expected let binding");
         }
     }
 }

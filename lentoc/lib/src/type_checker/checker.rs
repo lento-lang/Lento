@@ -3,12 +3,14 @@ use super::{
     types::{std_types, FunctionType, GetType, Type, TypeTrait},
 };
 use crate::{
-    interpreter::value::{RecordKey, Value},
+    interpreter::{
+        number::{Number, UnsignedInteger},
+        value::{RecordKey, Value},
+    },
     parser::{
         ast::Ast,
         error::ParseError,
         op::{OpHandler, OpInfo, Operator, RuntimeOpHandler, StaticOpAst, StaticOpHandler},
-        parser::{FN_ARROW_SYM, SUM_TYPE_SYM},
         pattern::BindPattern,
     },
     util::error::{BaseError, BaseErrorExt, LineInfo},
@@ -92,6 +94,9 @@ struct TypeEnv {
     // The type environment
     types: HashMap<String, Type>,
 
+    // Type declaration parameters by alias name
+    type_params: HashMap<String, Vec<String>>,
+
     // The operators environment
     operators: Vec<Operator>,
 }
@@ -117,6 +122,17 @@ impl TypeEnv {
     // Add a type to the type environment
     pub fn add_type(&mut self, name: &str, ty: Type) {
         self.types.insert(name.to_string(), ty);
+    }
+
+    pub fn add_type_with_params(&mut self, name: &str, ty: Type, params: Vec<String>) {
+        self.types.insert(name.to_string(), ty);
+        if !params.is_empty() {
+            self.type_params.insert(name.to_string(), params);
+        }
+    }
+
+    pub fn lookup_type_params(&self, name: &str) -> Option<&[String]> {
+        self.type_params.get(name).map(Vec::as_slice)
     }
 
     // Add a variable to the type environment
@@ -155,6 +171,10 @@ impl TypeChecker<'_> {
         self.env.add_type(name, ty);
     }
 
+    pub fn add_type_with_params(&mut self, name: &str, ty: Type, params: Vec<String>) {
+        self.env.add_type_with_params(name, ty, params);
+    }
+
     pub fn add_operator(&mut self, op: Operator) {
         self.env.add_operator(op);
     }
@@ -190,6 +210,12 @@ impl TypeChecker<'_> {
         self.env
             .lookup_type(name)
             .or_else(|| self.parent.and_then(|p| p.lookup_type(name)))
+    }
+
+    fn lookup_type_params(&self, name: &str) -> Option<&[String]> {
+        self.env
+            .lookup_type_params(name)
+            .or_else(|| self.parent.and_then(|p| p.lookup_type_params(name)))
     }
 
     fn lookup_identifier(&self, name: &str) -> Option<IdentifierType> {
@@ -331,9 +357,29 @@ impl TypeChecker<'_> {
                 self.env.add_variable(name.clone(), sig_type);
                 continue;
             }
-            if let Ast::TypeDecl { name, .. } = e {
+            if let Ast::TypeDecl {
+                name, params, body, ..
+            } = e
+            {
                 // Register type name as a variable (type-level binding)
                 self.env.add_variable(name.clone(), std_types::TYPE.clone());
+
+                let mut type_scope = self.new_scope();
+                type_scope.add_type("Self", Type::Variable(name.clone().into()));
+                let mut param_names = Vec::new();
+                for p in params {
+                    let Ast::Identifier { name: param_name, .. } = p else {
+                        continue;
+                    };
+                    param_names.push(param_name.clone());
+                    type_scope.add_type(param_name, Type::Variable(param_name.clone().into()));
+                }
+                let body_ty = type_scope.check_type_expr(body)?;
+                self.env.add_type_with_params(
+                    name,
+                    Type::Alias(name.clone().into(), Box::new(body_ty)),
+                    param_names,
+                );
                 continue;
             }
             if let Ast::Let { target, expr, .. } = e {
@@ -396,6 +442,7 @@ impl TypeChecker<'_> {
             },
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
+            Ast::Array { elem, len, info } => self.check_array(elem, len, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
             Ast::MemberAccess {
                 expr: record,
@@ -416,8 +463,11 @@ impl TypeChecker<'_> {
                 info,
             } => self.check_unary(op, operand, info)?,
             Ast::Let {
-                target, expr, info, ..
-            } => self.check_let(target, expr, info)?,
+                target,
+                expr,
+                annotation,
+                info,
+            } => self.check_let(target, expr, annotation, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
             Ast::FunctionDecl {
                 name,
@@ -500,9 +550,20 @@ impl TypeChecker<'_> {
                 }
             }
             Ast::TypeDecl {
-                name, body, info, ..
+                name,
+                params,
+                body,
+                info,
             } => {
-                let _ = self.check_type_expr(body)?;
+                let mut type_scope = self.new_scope();
+                type_scope.add_type("Self", Type::Variable(name.clone().into()));
+                for p in params {
+                    let Ast::Identifier { name: param_name, .. } = p else {
+                        continue;
+                    };
+                    type_scope.add_type(param_name, Type::Variable(param_name.clone().into()));
+                }
+                let _ = type_scope.check_type_expr(body)?;
                 CheckedAst::TypeDecl {
                     name: name.clone(),
                     info: info.clone(),
@@ -519,7 +580,7 @@ impl TypeChecker<'_> {
                     TypeError::new(format!("Unknown type {}", name.clone().red()), info.clone())
                         .with_label("This type is not defined".to_string(), info.clone())
                 })?,
-            TypeAst::Constructor { expr, params, info } => {
+            TypeAst::Application { expr, args: params, info } => {
                 let expr_info = expr.info();
                 let Type::Alias(base_name, base_type) = self.check_type_expr(expr)? else {
                     return Err(TypeError::new(
@@ -539,7 +600,55 @@ impl TypeChecker<'_> {
                     .iter()
                     .map(|a| self.check_type_expr(a))
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
-                Type::Constructor(base_name, args, base_type)
+
+                let param_names = self.lookup_type_params(&base_name.to_string()).unwrap_or(&[]);
+                if !param_names.is_empty() {
+                    if args.len() != param_names.len() {
+                        return Err(TypeError::new(
+                            format!(
+                                "Type {} expects {} argument(s), found {}",
+                                base_name,
+                                param_names.len(),
+                                args.len()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!(
+                                "Expected {} type argument(s) for {}",
+                                param_names.len(),
+                                base_name
+                            ),
+                            expr_info.clone(),
+                        )
+                        .into());
+                    }
+                    let judgements = param_names
+                        .iter()
+                        .cloned()
+                        .zip(args.iter().cloned())
+                        .map(|(name, ty)| (name.into(), ty))
+                        .collect();
+                    let mut changed = false;
+                    base_type.specialize(&judgements, &mut changed)
+                } else {
+                    Type::Constructor(base_name, args, base_type)
+                }
+            }
+            TypeAst::Tuple { items, .. } => {
+                let elems = items
+                    .iter()
+                    .map(|a| self.check_type_expr(a))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Tuple(elems)
+            }
+            TypeAst::Array { elem, len, .. } => {
+                let elem_ty = self.check_type_expr(elem)?;
+                Type::Tuple(vec![elem_ty; *len])
+            }
+            TypeAst::List { elem, .. } => {
+                let elem_ty = self.check_type_expr(elem)?;
+                Type::List(Box::new(elem_ty))
             }
             TypeAst::Record { fields, .. } => {
                 let fields = fields
@@ -548,34 +657,23 @@ impl TypeChecker<'_> {
                     .collect::<TypeCheckerResult<Vec<_>>>()?;
                 Type::Record(fields)
             }
-            TypeAst::Binary { lhs, op, rhs, info } => {
+            TypeAst::Refinement { base, .. } => self.check_type_expr(base)?,
+            TypeAst::Sum { variants, .. } => {
+                let variants = variants
+                    .iter()
+                    .map(|v| self.check_type_expr(v))
+                    .collect::<TypeCheckerResult<Vec<_>>>()?;
+                Type::Sum(variants).simplify()
+            }
+            TypeAst::Lambda { lhs, rhs, .. } => {
                 let lhs_ty = self.check_type_expr(lhs)?;
                 let rhs_ty = self.check_type_expr(rhs)?;
-                match op.symbol.as_str() {
-                    SUM_TYPE_SYM => Type::Sum(vec![lhs_ty, rhs_ty]).simplify(),
-                    FN_ARROW_SYM => Type::Function(Box::new(FunctionType::new(
-                        CheckedParam::from_str("_", lhs_ty),
-                        rhs_ty,
-                    ))),
-                    _ => {
-                        return Err(TypeError::new(
-                            format!("Unsupported type operator {}", op.symbol),
-                            info.clone(),
-                        )
-                        .into())
-                    }
-                }
+                Type::Function(Box::new(FunctionType::new(
+                    CheckedParam::from_str("_", lhs_ty),
+                    rhs_ty,
+                )))
             }
-            TypeAst::Literal { value, info } => match value {
-                Value::Type(ty) => ty.clone(),
-                _ => {
-                    return Err(TypeError::new(
-                        format!("Invalid literal in type position: {}", value.pretty_print()),
-                        info.clone(),
-                    )
-                    .into())
-                }
-            },
+            TypeAst::Literal { value, .. } => value.get_type().clone(),
         })
     }
 
@@ -673,6 +771,43 @@ impl TypeChecker<'_> {
         Ok(CheckedAst::List {
             exprs: checked_elems,
             ty: Type::List(Box::new(list_type)),
+            info: info.clone(),
+        })
+    }
+
+    fn check_array(
+        &mut self,
+        elem: &Ast,
+        len: &Ast,
+        info: &LineInfo,
+    ) -> TypeCheckerResult<CheckedAst> {
+        let len_checked = self.check_expr(len)?;
+        let len_value = match len_checked {
+            CheckedAst::Literal {
+                value: Value::Number(n),
+                ..
+            } => n,
+            _ => {
+                return Err(TypeError::new(
+                    "Array length must be a numeric literal".to_string(),
+                    len.info().clone(),
+                )
+                .into())
+            }
+        };
+        let len = number_to_usize(&len_value).ok_or_else(|| {
+            TypeErrorVariant::TypeError(TypeError::new(
+                "Array length must be a non-negative integer".to_string(),
+                len.info().clone(),
+            ))
+        })?;
+
+        let checked_elem = self.check_expr(elem)?;
+        let elem_ty = checked_elem.get_type().clone();
+        let exprs = vec![checked_elem; len];
+        Ok(CheckedAst::List {
+            exprs,
+            ty: Type::List(Box::new(elem_ty)),
             info: info.clone(),
         })
     }
@@ -799,6 +934,7 @@ impl TypeChecker<'_> {
         &mut self,
         target: &BindPattern,
         expr: &Ast,
+        annotation: &Option<TypeAst>,
         info: &LineInfo,
     ) -> TypeCheckerResult<CheckedAst> {
         match target {
@@ -816,28 +952,31 @@ impl TypeChecker<'_> {
                 }
                 let expr = self.check_expr(expr)?;
                 let ty = expr.get_type().clone();
-                // if let Some(ty_ast) = annotation {
-                //     let expected_ty = self.check_type_expr(ty_ast)?;
-                //     if !ty.subtype(&expected_ty).success {
-                //         return Err(TypeError::new(
-                //             format!(
-                //                 "Cannot assign {} to {}",
-                //                 ty.pretty_print_color(),
-                //                 expected_ty.pretty_print_color()
-                //             ),
-                //             info.clone(),
-                //         )
-                //         .with_label(
-                //             format!("This is of type {}", ty.pretty_print_color()),
-                //             expr.info().clone(),
-                //         )
-                //         .with_label(
-                //             format!("This expected type {}", expected_ty.pretty_print_color()),
-                //             info.clone(),
-                //         )
-                //         .into());
-                //     }
-                // }
+                if let Some(ty_ast) = annotation {
+                    let expected_ty = self.check_type_expr(ty_ast)?;
+                    if !ty.subtype(&expected_ty).success {
+                        return Err(TypeError::new(
+                            format!(
+                                "Cannot assign {} to {}",
+                                ty.pretty_print_color(),
+                                expected_ty.pretty_print_color()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!("This is of type {}", ty.pretty_print_color()),
+                            expr.info().clone(),
+                        )
+                        .with_label(
+                            format!(
+                                "This expected type {}",
+                                expected_ty.pretty_print_color()
+                            ),
+                            info.clone(),
+                        )
+                        .into());
+                    }
+                }
                 self.add_variable(name.clone(), ty.clone());
                 Ok(CheckedAst::Let {
                     target: BindPattern::Variable {
@@ -1340,4 +1479,19 @@ fn binding_typed_names(pattern: &BindPattern, ty: &Type) -> HashSet<(String, Typ
     let mut names = HashSet::new();
     visit(pattern, ty, &mut names);
     names
+}
+
+fn number_to_usize(n: &Number) -> Option<usize> {
+    match n {
+        Number::UnsignedInteger(u) => match u {
+            UnsignedInteger::UInt1(v) => Some((*v).into()),
+            UnsignedInteger::UInt8(v) => Some((*v).into()),
+            UnsignedInteger::UInt16(v) => Some((*v).into()),
+            UnsignedInteger::UInt32(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt64(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt128(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UIntVar(v) => v.to_string().parse::<usize>().ok(),
+        },
+        _ => None,
+    }
 }

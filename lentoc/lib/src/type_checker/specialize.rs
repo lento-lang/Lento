@@ -1,12 +1,17 @@
 use crate::{
+    interpreter::number::{Number, UnsignedInteger},
+    interpreter::value::RecordKey,
     parser::{
         ast::Ast,
         error::ParseError,
         op::OpInfo,
-        parser::{ParseResult, ASSIGNMENT_SYM, COMMA_SYM, FN_ARROW_SYM, SUM_TYPE_SYM},
+        parser::{
+            ParseResult, ASSIGNMENT_SYM, COMMA_SYM, EFFECT_ASCRIPTION_SYM, FN_ARROW_SYM,
+            SUM_TYPE_SYM,
+        },
         pattern::BindPattern,
     },
-    type_checker::checked_ast::{ParamAst, TypeAst},
+    type_checker::checked_ast::{Effect, ParamAst, TypeAst},
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -25,7 +30,7 @@ use std::collections::HashSet;
 /// - `f(x, y) = b` into `Assignment { target: BindPattern::Function { name: f, params: [x, y] }, expr: b }`
 /// - `f x, y = b` into `Assignment { target: BindPattern::Function { name: f, params: [x, y] }, expr: b }`
 /// - `int f str x, bool y = b` into `Assignment { annotation: Some(int), target: BindPattern::Function { name: f, params: [str x, bool y] }, expr: b }`
-/// - `List int` into `LiteralType { expr: TypeAst::Constructor { expr: List }, args: [int] }`
+/// - `List int` into `LiteralType { expr: TypeAst::Application { expr: List }, args: [int] }`
 pub fn top(expr: Ast, types: &HashSet<String>, variables: Option<&HashSet<String>>) -> ParseResult {
     match expr {
         // Specialize type constructors to literal types
@@ -549,12 +554,12 @@ pub fn try_type_annotation(
         let last_info = params
             .last()
             .map_or(constructor_info.clone(), |p| p.info().clone());
-        let type_expr = TypeAst::Constructor {
+        let type_expr = TypeAst::Application {
             expr: Box::new(TypeAst::Identifier {
                 name: constructor_name.clone(),
                 info: constructor_info.clone(),
             }),
-            params,
+            args: params,
             info: constructor_info.join(&last_info),
         };
         // Remove the type annotation expressions from the list
@@ -596,12 +601,17 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
         Ast::Identifier { name, .. } => types.contains(name),
         // Sum types like `int | str`
         Ast::Binary { lhs, op, rhs, .. } => {
-            (op.symbol == SUM_TYPE_SYM || op.symbol == FN_ARROW_SYM)
+            (op.symbol == SUM_TYPE_SYM
+                || op.symbol == FN_ARROW_SYM
+                || op.symbol == EFFECT_ASCRIPTION_SYM)
                 && is_type_expr(lhs, types)
                 && is_type_expr(rhs, types)
         }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
-        Ast::Literal { .. } => false,
+        Ast::Array { elem, len, .. } => {
+            is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. })
+        }
+        Ast::Literal { .. } => true,
         Ast::FunctionCall { expr, arg, .. } => {
             is_type_expr(expr, types) && is_type_expr(arg, types)
         }
@@ -624,17 +634,32 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             info: info.clone(),
         }),
         Ast::List { mut exprs, info } if exprs.len() == 1 => {
-            let inner = into_type_ast(exprs.remove(0))?;
-            Ok(TypeAst::Constructor {
-                expr: Box::new(TypeAst::Identifier {
-                    name: "List".to_string(),
-                    info: info.clone(),
-                }),
-                params: vec![inner],
+            let elem = into_type_ast(exprs.remove(0))?;
+            Ok(TypeAst::List {
+                elem: Box::new(elem),
                 info: info.clone(),
             })
         }
+        Ast::Array { elem, len, info } => {
+            let elem = into_type_ast(*elem)?;
+            let len = array_len_from_ast(*len)?;
+            Ok(TypeAst::Array {
+                elem: Box::new(elem),
+                len,
+                info,
+            })
+        }
+        Ast::Tuple { exprs, info } => {
+            let items = exprs
+                .into_iter()
+                .map(into_type_ast)
+                .collect::<Result<Vec<_>, ParseError>>()?;
+            Ok(TypeAst::Tuple { items, info })
+        }
         Ast::Record { fields, info } => {
+            if let Some(refinement) = try_into_refinement(&fields, &info)? {
+                return Ok(refinement);
+            }
             let fields = fields
                 .into_iter()
                 .map(|(key, value)| Ok((key, into_type_ast(value)?)))
@@ -642,34 +667,203 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             Ok(TypeAst::Record { fields, info })
         }
         Ast::FunctionCall { expr, arg, info } => {
-            let mut params = vec![into_type_ast(*arg)?];
+            let mut params = Vec::new();
+            match *arg {
+                Ast::Tuple { exprs, .. } => {
+                    for arg_expr in exprs {
+                        params.push(into_type_ast(arg_expr)?);
+                    }
+                }
+                arg => params.push(into_type_ast(arg)?),
+            }
             let mut head = *expr;
             while let Ast::FunctionCall { expr, arg, .. } = head {
-                params.push(into_type_ast(*arg)?);
+                match *arg {
+                    Ast::Tuple { exprs, .. } => {
+                        for arg_expr in exprs.into_iter().rev() {
+                            params.push(into_type_ast(arg_expr)?);
+                        }
+                    }
+                    arg => params.push(into_type_ast(arg)?),
+                }
                 head = *expr;
             }
             params.reverse();
             let head = into_type_ast(head)?;
-            Ok(TypeAst::Constructor {
+            Ok(TypeAst::Application {
                 expr: Box::new(head),
-                params,
+                args: params,
                 info,
             })
         }
-        Ast::Binary { lhs, op, rhs, info }
-            if op.symbol == SUM_TYPE_SYM || op.symbol == FN_ARROW_SYM =>
-        {
-            Ok(TypeAst::Binary {
-                lhs: Box::new(into_type_ast(*lhs)?),
-                op,
-                rhs: Box::new(into_type_ast(*rhs)?),
+        Ast::Binary { lhs, op, rhs, info } if op.symbol == SUM_TYPE_SYM => {
+            let lhs = into_type_ast(*lhs)?;
+            let rhs = into_type_ast(*rhs)?;
+            let mut variants = Vec::new();
+            match lhs {
+                TypeAst::Sum { variants: lhs, .. } => variants.extend(lhs),
+                lhs => variants.push(lhs),
+            }
+            match rhs {
+                TypeAst::Sum { variants: rhs, .. } => variants.extend(rhs),
+                rhs => variants.push(rhs),
+            }
+            Ok(TypeAst::Sum { variants, info })
+        }
+        Ast::Binary { lhs, op, rhs, info } if op.symbol == FN_ARROW_SYM => {
+            // Effect ascription attaches to the return side:
+            //   `A -> B ! IO`  parses as  `A -> (B ! IO)`
+            // The `!` binds tighter than `->` (prec 750 vs 650), so the
+            // effect is always on the rhs of the arrow; a `!` on the lhs
+            // would be `(A ! IO) -> B`, which is semantically invalid
+            // (input types do not have effects).
+            let mut eff = vec![];
+
+            let lhs = into_type_ast(*lhs)?;
+
+            let rhs = match *rhs {
+                Ast::Binary {
+                    lhs: eff_lhs,
+                    op: eff_op,
+                    rhs: eff_rhs,
+                    ..
+                } if eff_op.symbol == EFFECT_ASCRIPTION_SYM => {
+                    eff = into_effect_ast(*eff_rhs)?;
+                    into_type_ast(*eff_lhs)?
+                }
+                rhs => into_type_ast(rhs)?,
+            };
+
+            Ok(TypeAst::Lambda {
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+                eff,
                 info,
             })
+        }
+        Ast::Binary { op, info, .. } if op.symbol == EFFECT_ASCRIPTION_SYM => Err(ParseError::new(
+            "Effect ascription is only valid on function types".to_string(),
+            info,
+        )),
+        Ast::Block { exprs, info } => {
+            let mut items = Vec::new();
+            for expr in exprs {
+                items.push(into_type_ast(expr)?);
+            }
+            if items.len() == 1 {
+                Ok(items.remove(0))
+            } else {
+                Ok(TypeAst::Tuple { items, info })
+            }
+        }
+        Ast::Literal { value, info } => {
+            if matches!(value, crate::interpreter::value::Value::Type(_)) {
+                return Err(ParseError::new(
+                    "Expected a value literal singleton type, found a type literal".to_string(),
+                    info,
+                ));
+            }
+            Ok(TypeAst::Literal { value, info })
         }
         _ => Err(ParseError::new(
             format!("Expected a type expression, found: {}", expr.print_expr()),
             expr.info().clone(),
         )),
+    }
+}
+
+fn into_effect_ast(effect_expr: Ast) -> Result<Vec<Effect>, ParseError> {
+    match effect_expr {
+        Ast::Identifier { name, info: _ } => {
+            Ok(vec![Effect { name, params: vec![] }])
+        }
+        Ast::Tuple { exprs, info: _ } => {
+            let mut effects = Vec::new();
+            for expr in exprs {
+                effects.extend(into_effect_ast(expr)?);
+            }
+            Ok(effects)
+        }
+        Ast::Block { exprs, info: _ } => {
+            // { IO } -> single effect
+            // { IO, File } -> block containing a single tuple: Tuple([IO, File])
+            // { IO; File } -> block with multiple exprs (semicolon-separated)
+            let mut effects = Vec::new();
+            for expr in exprs {
+                effects.extend(into_effect_ast(expr)?);
+            }
+            Ok(effects)
+        }
+        _ => Err(ParseError::new(
+            "Expected an effect expression".to_string(),
+            effect_expr.info().clone(),
+        )),
+    }
+}
+
+fn try_into_refinement(
+    fields: &[(RecordKey, Ast)],
+    info: &LineInfo,
+) -> Result<Option<TypeAst>, ParseError> {
+    if fields.len() != 1 {
+        return Ok(None);
+    }
+    let (binder, field_ty) = &fields[0];
+    let Ast::Binary { lhs, op, rhs, .. } = field_ty else {
+        return Ok(None);
+    };
+    if op.symbol != SUM_TYPE_SYM {
+        return Ok(None);
+    }
+    let base_is_type = matches!(into_type_ast((**lhs).clone()), Ok(_));
+    let pred_is_type = matches!(into_type_ast((**rhs).clone()), Ok(_));
+    if !base_is_type || pred_is_type {
+        return Ok(None);
+    }
+
+    let base = into_type_ast((**lhs).clone())?;
+    Ok(Some(TypeAst::Refinement {
+        binder: binder.clone(),
+        base: Box::new(base),
+        predicate: Box::new((**rhs).clone()),
+        info: info.clone(),
+    }))
+}
+
+fn array_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
+    let info = ast.info().clone();
+    let Ast::Literal { value, .. } = ast else {
+        return Err(ParseError::new(
+            "Expected array length to be an integer literal".to_string(),
+            info,
+        ));
+    };
+    let crate::interpreter::value::Value::Number(n) = value else {
+        return Err(ParseError::new(
+            "Expected array length to be a numeric literal".to_string(),
+            info,
+        ));
+    };
+    number_to_usize(&n).ok_or_else(|| {
+        ParseError::new(
+            "Expected array length to be a non-negative integer".to_string(),
+            info,
+        )
+    })
+}
+
+fn number_to_usize(n: &Number) -> Option<usize> {
+    match n {
+        Number::UnsignedInteger(u) => match u {
+            UnsignedInteger::UInt1(v) => Some((*v).into()),
+            UnsignedInteger::UInt8(v) => Some((*v).into()),
+            UnsignedInteger::UInt16(v) => Some((*v).into()),
+            UnsignedInteger::UInt32(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt64(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UInt128(v) => usize::try_from(*v).ok(),
+            UnsignedInteger::UIntVar(v) => v.to_string().parse::<usize>().ok(),
+        },
+        _ => None,
     }
 }
 

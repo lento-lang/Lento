@@ -26,6 +26,22 @@ mod tests {
         }
     }
 
+    fn check_str_all(
+        input: &str,
+        init: Option<&Initializer>,
+    ) -> TypeCheckerResult<Vec<CheckedAst>> {
+        let mut parser = from_string(input.to_string());
+        let mut checker = TypeChecker::default();
+        if let Some(init) = init {
+            init.init_parser(&mut parser);
+            init.init_type_checker(&mut checker);
+        }
+        match parser.parse_all() {
+            Ok(ast) => checker.check_top_exprs(&ast),
+            Err(err) => Err(TypeErrorVariant::ParseError(err)),
+        }
+    }
+
     #[test]
     fn types() {
         let types = [
@@ -121,6 +137,85 @@ mod tests {
     }
 
     #[test]
+    fn checked_record_type_decl() {
+        let result = check_str_one(
+            "type Eq = { eq: Self -> Self -> bool }",
+            Some(&stdlib()),
+        )
+        .unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_refinement_type_decl_and_use() {
+        let program = "type Nat = { v: int | v >= 0 }; fn id(x: Nat) -> Nat = x";
+        let checked = check_str_all(program, Some(&stdlib())).unwrap();
+        assert_eq!(checked.len(), 2);
+        assert!(matches!(checked[0], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[1], CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_generic_static_vec_alias_and_application() {
+        let program =
+            "type X = int; type MyArr T = [T; 6]; fn id(x: MyArr int) -> MyArr(X) = x";
+        let checked = check_str_all(program, Some(&stdlib())).unwrap();
+        assert_eq!(checked.len(), 3);
+        assert!(matches!(checked[0], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[1], CheckedAst::TypeDecl { .. }));
+        assert!(matches!(checked[2], CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_list_type_decl() {
+        let result = check_str_one("type Foo = [int]", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_list_type_annotation() {
+        let result = check_str_one("fn id(x: [int]) -> [int] = x", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_list_type_in_function_sig() {
+        let result = check_str_one("fn f(x: [int]) -> [int] = x", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::FunctionDef { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_type_annotation() {
+        let result = check_str_one("let x: u8 = 5", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_list_type_annotation() {
+        let result = check_str_one("let xs: [int] = [1, 2, 3]", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_tuple_type_annotation() {
+        let result =
+            check_str_one("let pair: (u1, bool) = (1, true)", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_type_mismatch_rejected() {
+        let result = check_str_one("let x: bool = 5", Some(&stdlib()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn checked_let_supertype_int() {
+        let result = check_str_one("let x: int = 2", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
     fn checked_function_def_has_all_params() {
         let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { params, .. } = result {
@@ -133,6 +228,19 @@ mod tests {
     #[test]
     fn checked_let_keyword_decl() {
         let result = check_str_one("let x = 1", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_type_decl_literal_sum() {
+        let result = check_str_one("type FewNums = 5 | 6 | 7", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_literal_sum_annotation() {
+        let result =
+            check_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::Let { .. }));
     }
 }
