@@ -1363,6 +1363,41 @@ mod tests {
     }
 
     #[test]
+    fn let_with_type_annotation() {
+        let result = parse_str_one("let x: int = 5", Some(&stdlib())).unwrap();
+        if let Ast::Let { target, annotation, .. } = result {
+            assert!(matches!(target, BindPattern::Variable { .. }));
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::Identifier { name, .. } if name == "int"));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
+    fn let_with_list_type_annotation() {
+        let result = parse_str_one("let xs: [int] = [1, 2, 3]", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::List { .. }));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
+    fn let_with_tuple_type_annotation() {
+        let result =
+            parse_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
+        if let Ast::Let { annotation, .. } = result {
+            assert!(annotation.is_some());
+            assert!(matches!(annotation.unwrap(), TypeAst::Tuple { .. }));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
     fn function_def_typed_params_parse() {
         let result = parse_str_one("fn id(x: u8) = x", Some(&stdlib())).unwrap();
         if let Ast::FunctionDef { params, .. } = result {

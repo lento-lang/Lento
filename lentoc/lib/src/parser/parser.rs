@@ -872,14 +872,40 @@ impl<R: Read> Parser<R> {
 
     /// Parse a `let` statement after the `let` keyword has been consumed.
     fn parse_let_stmt(&mut self) -> ParseResult {
-        let expr = self.parse_expr(0)?;
-        match expr {
-            Ast::Let { .. } => Ok(expr),
-            _ => Err(ParseError::new(
-                "Expected `let <pattern> = <expr>`".to_string(),
-                expr.info().clone(),
-            )),
+        let target_expr = self.parse_term()?;
+        let mut annotation = None;
+
+        // Check for optional type annotation `: type`
+        if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if matches!(next.token, Token::Colon) {
+                self.lexer.next_token().unwrap(); // consume ':'
+                let ann_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
+                annotation =
+                    Some(crate::type_checker::specialize::into_type_ast(ann_expr)?);
+            }
         }
+
+        // Expect `=`
+        if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if let Token::Operator(op) = &next.token {
+                if op.as_str() == ASSIGNMENT_SYM {
+                    self.lexer.next_token().unwrap(); // consume '='
+                    let value = self.parse_expr(0)?;
+                    let info = target_expr.info().join(value.info());
+                    return Ok(Ast::Let {
+                        target: BindPattern::from_expr(target_expr)?,
+                        expr: Box::new(value),
+                        annotation,
+                        info,
+                    });
+                }
+            }
+        }
+
+        Err(ParseError::new(
+            "Expected `let <pattern> = <expr>`".to_string(),
+            target_expr.info().clone(),
+        ))
     }
 
     /// Parse a top-level expression.

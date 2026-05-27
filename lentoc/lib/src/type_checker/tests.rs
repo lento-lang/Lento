@@ -185,6 +185,25 @@ mod tests {
     }
 
     #[test]
+    fn checked_let_with_type_annotation() {
+        let result = check_str_one("let x: int = 5", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_list_type_annotation() {
+        let result = check_str_one("let xs: [int] = [1, 2, 3]", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_with_tuple_type_annotation() {
+        let result =
+            check_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
     fn checked_function_def_has_all_params() {
         let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { params, .. } = result {
