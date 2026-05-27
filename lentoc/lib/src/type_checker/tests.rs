@@ -210,6 +210,12 @@ mod tests {
     }
 
     #[test]
+    fn checked_let_supertype_int() {
+        let result = check_str_one("let x: int = 2", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
     fn checked_function_def_has_all_params() {
         let result = check_str_one("fn add(x, y) = 1", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { params, .. } = result {
