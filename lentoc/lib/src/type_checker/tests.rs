@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn checked_let_with_type_annotation() {
-        let result = check_str_one("let x: int = 5", Some(&stdlib())).unwrap();
+        let result = check_str_one("let x: u8 = 5", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::Let { .. }));
     }
 
@@ -199,8 +199,14 @@ mod tests {
     #[test]
     fn checked_let_with_tuple_type_annotation() {
         let result =
-            check_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
+            check_str_one("let pair: (u1, bool) = (1, true)", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::Let { .. }));
+    }
+
+    #[test]
+    fn checked_let_type_mismatch_rejected() {
+        let result = check_str_one("let x: bool = 5", Some(&stdlib()));
+        assert!(result.is_err());
     }
 
     #[test]

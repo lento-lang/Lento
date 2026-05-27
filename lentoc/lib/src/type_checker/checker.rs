@@ -463,8 +463,11 @@ impl TypeChecker<'_> {
                 info,
             } => self.check_unary(op, operand, info)?,
             Ast::Let {
-                target, expr, info, ..
-            } => self.check_let(target, expr, info)?,
+                target,
+                expr,
+                annotation,
+                info,
+            } => self.check_let(target, expr, annotation, info)?,
             Ast::Block { exprs, info } => self.check_block(exprs, info)?,
             Ast::FunctionDecl {
                 name,
@@ -931,6 +934,7 @@ impl TypeChecker<'_> {
         &mut self,
         target: &BindPattern,
         expr: &Ast,
+        annotation: &Option<TypeAst>,
         info: &LineInfo,
     ) -> TypeCheckerResult<CheckedAst> {
         match target {
@@ -948,28 +952,31 @@ impl TypeChecker<'_> {
                 }
                 let expr = self.check_expr(expr)?;
                 let ty = expr.get_type().clone();
-                // if let Some(ty_ast) = annotation {
-                //     let expected_ty = self.check_type_expr(ty_ast)?;
-                //     if !ty.subtype(&expected_ty).success {
-                //         return Err(TypeError::new(
-                //             format!(
-                //                 "Cannot assign {} to {}",
-                //                 ty.pretty_print_color(),
-                //                 expected_ty.pretty_print_color()
-                //             ),
-                //             info.clone(),
-                //         )
-                //         .with_label(
-                //             format!("This is of type {}", ty.pretty_print_color()),
-                //             expr.info().clone(),
-                //         )
-                //         .with_label(
-                //             format!("This expected type {}", expected_ty.pretty_print_color()),
-                //             info.clone(),
-                //         )
-                //         .into());
-                //     }
-                // }
+                if let Some(ty_ast) = annotation {
+                    let expected_ty = self.check_type_expr(ty_ast)?;
+                    if !ty.subtype(&expected_ty).success {
+                        return Err(TypeError::new(
+                            format!(
+                                "Cannot assign {} to {}",
+                                ty.pretty_print_color(),
+                                expected_ty.pretty_print_color()
+                            ),
+                            info.clone(),
+                        )
+                        .with_label(
+                            format!("This is of type {}", ty.pretty_print_color()),
+                            expr.info().clone(),
+                        )
+                        .with_label(
+                            format!(
+                                "This expected type {}",
+                                expected_ty.pretty_print_color()
+                            ),
+                            info.clone(),
+                        )
+                        .into());
+                    }
+                }
                 self.add_variable(name.clone(), ty.clone());
                 Ok(CheckedAst::Let {
                     target: BindPattern::Variable {
