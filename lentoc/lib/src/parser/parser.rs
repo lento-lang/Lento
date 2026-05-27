@@ -410,7 +410,7 @@ impl<R: Read> Parser<R> {
                 self.lexer.next_token().unwrap(); // consume ';'
                 let len_expr = self.parse_expr(COMMA_PREC)?;
                 let end = self.parse_expected_eq(Token::RightBracket, "]")?;
-                return Ok(Ast::StaticVec {
+                return Ok(Ast::Array {
                     elem: Box::new(first_expr),
                     len: Box::new(len_expr),
                     info: start_info.join(&end.info),

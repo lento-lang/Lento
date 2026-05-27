@@ -15,8 +15,8 @@ pub enum Ast {
     Tuple { exprs: Vec<Ast>, info: LineInfo },
     /// A dynamic list of elements.
     List { exprs: Vec<Ast>, info: LineInfo },
-    /// A static vector expression `[elem; len]`.
-    StaticVec {
+    /// An array expression `[elem; len]`.
+    Array {
         elem: Box<Ast>,
         len: Box<Ast>,
         info: LineInfo,
@@ -113,8 +113,8 @@ impl Debug for Ast {
             Self::Literal { value, .. } => f.debug_struct("Literal").field("value", value).finish(),
             Self::Tuple { exprs, .. } => f.debug_struct("Tuple").field("exprs", exprs).finish(),
             Self::List { exprs, .. } => f.debug_struct("List").field("exprs", exprs).finish(),
-            Self::StaticVec { elem, len, .. } => f
-                .debug_struct("StaticVec")
+            Self::Array { elem, len, .. } => f
+                .debug_struct("Array")
                 .field("elem", elem)
                 .field("len", len)
                 .finish(),
@@ -224,7 +224,7 @@ impl Ast {
             Ast::Literal { info, .. } => info,
             Ast::Tuple { info, .. } => info,
             Ast::List { info, .. } => info,
-            Ast::StaticVec { info, .. } => info,
+            Ast::Array { info, .. } => info,
             Ast::Record { info, .. } => info,
             Ast::MemberAccess { info, .. } => info,
             Ast::Identifier { info, .. } => info,
@@ -270,7 +270,7 @@ impl Ast {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Ast::StaticVec { elem, len, .. } => {
+            Ast::Array { elem, len, .. } => {
                 format!("[{}; {}]", elem.print_expr(), len.print_expr())
             }
             Ast::Record { fields, .. } => format!(
@@ -398,21 +398,27 @@ impl PartialEq for Ast {
             (Self::Tuple { exprs: l0, .. }, Self::Tuple { exprs: r0, .. }) => l0 == r0,
             (Self::List { exprs: l0, info: _ }, Self::List { exprs: r0, info: _ }) => l0 == r0,
             (
-                Self::StaticVec {
+                Self::Array {
                     elem: l0,
                     len: l1,
                     info: _,
                 },
-                Self::StaticVec {
+                Self::Array {
                     elem: r0,
                     len: r1,
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
             (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
-            (Self::Identifier { name: name1, .. }, Self::Identifier { name: name2, .. }) => {
-                name1 == name2
-            }
+            (
+                Self::MemberAccess {
+                    expr: l0, field: l1, ..
+                },
+                Self::MemberAccess {
+                    expr: r0, field: r1, ..
+                },
+            ) => l0 == r0 && l1 == r1,
+            (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
             (
                 Self::FunctionCall {
                     expr: l0, arg: l1, ..

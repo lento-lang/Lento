@@ -608,7 +608,7 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
                 && is_type_expr(rhs, types)
         }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
-        Ast::StaticVec { elem, len, .. } => {
+        Ast::Array { elem, len, .. } => {
             is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. })
         }
         Ast::Literal { .. } => true,
@@ -644,9 +644,9 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
                 info: info.clone(),
             })
         }
-        Ast::StaticVec { elem, len, info } => {
+        Ast::Array { elem, len, info } => {
             let elem = into_type_ast(*elem)?;
-            let len = static_vec_len_from_ast(*len)?;
+            let len = array_len_from_ast(*len)?;
             Ok(TypeAst::Array {
                 elem: Box::new(elem),
                 len,
@@ -827,23 +827,23 @@ fn try_into_refinement(
     }))
 }
 
-fn static_vec_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
+fn array_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
     let info = ast.info().clone();
     let Ast::Literal { value, .. } = ast else {
         return Err(ParseError::new(
-            "Expected static vector length to be an integer literal".to_string(),
+            "Expected array length to be an integer literal".to_string(),
             info,
         ));
     };
     let crate::interpreter::value::Value::Number(n) = value else {
         return Err(ParseError::new(
-            "Expected static vector length to be a numeric literal".to_string(),
+            "Expected array length to be a numeric literal".to_string(),
             info,
         ));
     };
     number_to_usize(&n).ok_or_else(|| {
         ParseError::new(
-            "Expected static vector length to be a non-negative integer".to_string(),
+            "Expected array length to be a non-negative integer".to_string(),
             info,
         )
     })

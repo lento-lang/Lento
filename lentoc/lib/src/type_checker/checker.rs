@@ -442,7 +442,7 @@ impl TypeChecker<'_> {
             },
             Ast::Tuple { exprs, info } => self.check_tuple(exprs, info)?,
             Ast::List { exprs: elems, info } => self.check_list(elems, info)?,
-            Ast::StaticVec { elem, len, info } => self.check_static_vec(elem, len, info)?,
+            Ast::Array { elem, len, info } => self.check_array(elem, len, info)?,
             Ast::Record { fields, info } => self.check_record(fields, info)?,
             Ast::MemberAccess {
                 expr: record,
@@ -768,7 +768,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn check_static_vec(
+    fn check_array(
         &mut self,
         elem: &Ast,
         len: &Ast,
@@ -782,7 +782,7 @@ impl TypeChecker<'_> {
             } => n,
             _ => {
                 return Err(TypeError::new(
-                    "Static vector length must be a numeric literal".to_string(),
+                    "Array length must be a numeric literal".to_string(),
                     len.info().clone(),
                 )
                 .into())
@@ -790,7 +790,7 @@ impl TypeChecker<'_> {
         };
         let len = number_to_usize(&len_value).ok_or_else(|| {
             TypeErrorVariant::TypeError(TypeError::new(
-                "Static vector length must be a non-negative integer".to_string(),
+                "Array length must be a non-negative integer".to_string(),
                 len.info().clone(),
             ))
         })?;
