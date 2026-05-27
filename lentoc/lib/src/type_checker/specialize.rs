@@ -11,7 +11,7 @@ use crate::{
         },
         pattern::BindPattern,
     },
-    type_checker::checked_ast::{ParamAst, TypeAst},
+    type_checker::checked_ast::{Effect, ParamAst, TypeAst},
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -717,7 +717,7 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             // effect is always on the rhs of the arrow; a `!` on the lhs
             // would be `(A ! IO) -> B`, which is semantically invalid
             // (input types do not have effects).
-            let mut eff = None;
+            let mut eff = vec![];
 
             let lhs = into_type_ast(*lhs)?;
 
@@ -728,7 +728,7 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
                     rhs: eff_rhs,
                     ..
                 } if eff_op.symbol == EFFECT_ASCRIPTION_SYM => {
-                    eff = Some(Box::new(into_effect_ast(*eff_rhs)?));
+                    eff = into_effect_ast(*eff_rhs)?;
                     into_type_ast(*eff_lhs)?
                 }
                 rhs => into_type_ast(rhs)?,
@@ -772,20 +772,32 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
     }
 }
 
-fn into_effect_ast(effect_expr: Ast) -> Result<TypeAst, ParseError> {
+fn into_effect_ast(effect_expr: Ast) -> Result<Vec<Effect>, ParseError> {
     match effect_expr {
-        Ast::Block { exprs, info } => {
-            let mut items = Vec::new();
-            for expr in exprs {
-                items.push(into_type_ast(expr)?);
-            }
-            if items.len() == 1 {
-                Ok(items.remove(0))
-            } else {
-                Ok(TypeAst::Tuple { items, info })
-            }
+        Ast::Identifier { name, info: _ } => {
+            Ok(vec![Effect { name, params: vec![] }])
         }
-        expr => into_type_ast(expr),
+        Ast::Tuple { exprs, info: _ } => {
+            let mut effects = Vec::new();
+            for expr in exprs {
+                effects.extend(into_effect_ast(expr)?);
+            }
+            Ok(effects)
+        }
+        Ast::Block { exprs, info: _ } => {
+            // { IO } -> single effect
+            // { IO, File } -> block containing a single tuple: Tuple([IO, File])
+            // { IO; File } -> block with multiple exprs (semicolon-separated)
+            let mut effects = Vec::new();
+            for expr in exprs {
+                effects.extend(into_effect_ast(expr)?);
+            }
+            Ok(effects)
+        }
+        _ => Err(ParseError::new(
+            "Expected an effect expression".to_string(),
+            effect_expr.info().clone(),
+        )),
     }
 }
 

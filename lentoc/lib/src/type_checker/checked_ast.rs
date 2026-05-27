@@ -8,6 +8,27 @@ use crate::{
 };
 use std::fmt::Debug;
 
+/// A single effect, e.g. `IO`, or `throw X` (future).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Effect {
+    pub name: String,
+    pub params: Vec<String>,
+}
+
+impl Effect {
+    pub fn print_expr(&self) -> String {
+        if self.params.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}({})", self.name, self.params.join(", "))
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        self.print_expr()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParamAst {
     pub ty: Option<TypeAst>,
@@ -61,7 +82,7 @@ pub enum TypeAst {
     Lambda {
         lhs: Box<TypeAst>,
         rhs: Box<TypeAst>,
-        eff: Option<Box<TypeAst>>,
+        eff: Vec<Effect>,
         info: LineInfo,
     },
     Literal {
@@ -202,15 +223,15 @@ impl TypeAst {
                 )
             }
             TypeAst::Lambda { lhs, rhs, eff, .. } => {
-                if let Some(eff) = eff {
+                if eff.is_empty() {
+                    format!("({} -> {})", lhs.print_expr(), rhs.print_expr())
+                } else {
                     format!(
                         "({} -> {} ! {})",
                         lhs.print_expr(),
                         rhs.print_expr(),
-                        eff.print_expr()
+                        eff.iter().map(|e| e.print_expr()).collect::<Vec<_>>().join(", ")
                     )
-                } else {
-                    format!("({} -> {})", lhs.print_expr(), rhs.print_expr())
                 }
             }
             TypeAst::Literal { value, .. } => value.pretty_print(),
@@ -284,15 +305,15 @@ impl TypeAst {
                 )
             }
             TypeAst::Lambda { lhs, rhs, eff, .. } => {
-                if let Some(eff) = eff {
+                if eff.is_empty() {
+                    format!("({} -> {})", lhs.pretty_print(), rhs.pretty_print())
+                } else {
                     format!(
                         "({} -> {} ! {})",
                         lhs.pretty_print(),
                         rhs.pretty_print(),
-                        eff.pretty_print()
+                        eff.iter().map(|e| e.pretty_print()).collect::<Vec<_>>().join(", ")
                     )
-                } else {
-                    format!("({} -> {})", lhs.pretty_print(), rhs.pretty_print())
                 }
             }
             TypeAst::Literal { value, .. } => value.pretty_print(),

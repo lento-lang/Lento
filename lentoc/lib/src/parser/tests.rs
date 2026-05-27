@@ -1170,7 +1170,7 @@ mod tests {
         if let Ast::TypeDecl { body, .. } = result {
             assert!(matches!(body, TypeAst::Lambda { .. }));
             if let TypeAst::Lambda { eff, .. } = body {
-                assert!(eff.is_none());
+                assert!(eff.is_empty());
             }
         } else {
             panic!("Expected type declaration");
@@ -1183,7 +1183,7 @@ mod tests {
         if let Ast::TypeDecl { body, .. } = result {
             assert!(matches!(body, TypeAst::Lambda { .. }));
             if let TypeAst::Lambda { eff, .. } = body {
-                assert!(eff.is_some());
+                assert!(!eff.is_empty());
             }
         } else {
             panic!("Expected type declaration");
