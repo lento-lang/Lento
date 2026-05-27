@@ -711,20 +711,15 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
             Ok(TypeAst::Sum { variants, info })
         }
         Ast::Binary { lhs, op, rhs, info } if op.symbol == FN_ARROW_SYM => {
+            // Effect ascription attaches to the return side:
+            //   `A -> B ! IO`  parses as  `A -> (B ! IO)`
+            // The `!` binds tighter than `->` (prec 750 vs 650), so the
+            // effect is always on the rhs of the arrow; a `!` on the lhs
+            // would be `(A ! IO) -> B`, which is semantically invalid
+            // (input types do not have effects).
             let mut eff = None;
 
-            let lhs = match *lhs {
-                Ast::Binary {
-                    lhs: eff_lhs,
-                    op: eff_op,
-                    rhs: eff_rhs,
-                    ..
-                } if eff_op.symbol == EFFECT_ASCRIPTION_SYM => {
-                    eff = Some(Box::new(into_effect_ast(*eff_rhs)?));
-                    into_type_ast(*eff_lhs)?
-                }
-                lhs => into_type_ast(lhs)?,
-            };
+            let lhs = into_type_ast(*lhs)?;
 
             let rhs = match *rhs {
                 Ast::Binary {
