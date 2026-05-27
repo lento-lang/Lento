@@ -286,26 +286,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "legacy assignment syntax"]
-    fn typed_assignment() {
-        let result = parse_str_one("int x = 1", Some(&stdlib()));
-        let result = result.unwrap();
-
-        assert!(matches!(result, Ast::Let { .. }));
-        if let Ast::Let { target, expr, .. } = &result {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            assert!(matches!(*expr.to_owned(), Ast::Literal { .. }));
-            // if let Some(annotation) = annotation {
-            //     assert!(matches!(annotation, TypeAst::Identifier { .. }));
-            //     let TypeAst::Identifier { name, .. } = &annotation else {
-            //         panic!("Expected identifier");
-            //     };
-            //     assert_eq!(name, "int");
-            // }
-        }
-    }
-
-    #[test]
     fn untyped_assignment() {
         let result = parse_str_one("x = 1", Some(&stdlib()));
         let result = result.unwrap();
@@ -660,25 +640,6 @@ mod tests {
             Some(&stdlib()),
         )
         .unwrap();
-    }
-
-    #[test]
-    #[ignore = "legacy assignment syntax"]
-    fn assignment_with_type() {
-        let result = parse_str_one("int x = 123", Some(&stdlib()));
-        if let Ast::Let { target, expr, .. } = result.unwrap() {
-            assert!(matches!(target, BindPattern::Variable { .. }));
-            if let BindPattern::Variable { name, .. } = target {
-                assert_eq!(name, "x");
-            }
-            // assert!(annotation.is_some());
-            // if let Some(TypeAst::Identifier { name, .. }) = &annotation {
-            //     assert_eq!(name, "int");
-            // }
-            assert!(matches!(*expr, Ast::Literal { .. }));
-        } else {
-            panic!("Expected assignment");
-        }
     }
 
     #[test]
