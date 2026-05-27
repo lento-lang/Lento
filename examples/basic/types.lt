@@ -86,6 +86,9 @@ type ByteToByteMap = Map(u8, u8)
 type Ints = [int]
 type Points = [Point2D]
 
+type X = int
+type MyArr T = [T; 6]
+fn id(x: MyArr int) -> MyArr(X) = x
 
 // ----------------------------
 // Polymorphism (forall / all)
@@ -135,4 +138,3 @@ fn (Eq List T).eq<T: Eq>(xs, ys) = list_eq_by(T.eq, xs, ys)
 // A function signature with a type class constraint.
 fn member<a: Eq> :: a -> List a -> bool
 fn member(x, xs) = intrinsic.todo
-
