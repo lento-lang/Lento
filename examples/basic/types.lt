@@ -28,7 +28,7 @@ type path = Path
 // Refined base types have the form `{ v: B | phi }`.
 // You can also define a bounded integer range as a refinement.
 // `v` names the value being described; `phi` is in an SMT-decidable fragment.
-type Nat = { v: int | 0 <= v }
+type Nat = { v: int | v >= 0 }
 type NonZero = { v: int | v != 0 }
 type Age = { v: int | 0 <= v <= 200 }
 
@@ -97,6 +97,8 @@ fn id(x) = x
 
 fn compose<a, b, c> :: (b -> c) -> (a -> b) -> a -> c
 fn compose(f, g, x) = f(g(x))
+
+fn add_one(x: Nat) -> Nat = x + 1
 
 // Union/sum types at the type level
 type IntOrStr = int | str
