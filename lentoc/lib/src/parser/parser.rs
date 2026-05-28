@@ -149,6 +149,14 @@ pub fn intrinsic_operators() -> Vec<OpInfo> {
             associativity: OpAssoc::Left,
             allow_trailing: false,
         },
+        // Logical AND (used in refinement predicates)
+        OpInfo {
+            symbol: "&&".to_string(),
+            position: OpPos::Infix,
+            precedence: prec::LOGICAL_AND_PREC,
+            associativity: OpAssoc::Left,
+            allow_trailing: false,
+        },
         // Comparison operators (needed for refinement predicates)
         OpInfo {
             symbol: ">".to_string(),
@@ -771,8 +779,9 @@ impl<R: Read> Parser<R> {
         let mut expr = self.parse_term()?;
         // println!("Parsed term: {:?}", expr);
         while let Ok(nt) = self.lexer.peek_token(0) {
+            // Stop on statement-starting keywords so they are not consumed as part of the current expression
             let is_top_level_nl_term = min_prec == 0 && nt.token.is_top_level_terminal(true);
-            if nt.token.is_terminator() || is_top_level_nl_term {
+            if nt.token.is_terminator() || is_top_level_nl_term || nt.token.is_opening_keyword() {
                 break; // Stop parsing on expression terminators
             }
             if let Token::Operator(op) = &nt.token {
@@ -824,7 +833,17 @@ impl<R: Read> Parser<R> {
                     break;
                 }
             }
+            // Before attempting function application, check if the next non-ignored token
+            // is a statement-starting keyword. If so, stop parsing.
+            if let Ok(next_real) = self.lexer.peek_token_not(pred::ignore, 0) {
+                if next_real.token.is_opening_keyword() {
+                    break;
+                }
+            }
             if FUNCTION_APP_PREC > min_prec {
+                if pred::ignore(&nt.token) {
+                    break;
+                }
                 let call_info = expr.info().join(&nt.info);
                 // Allow all definitions in the parser, even if they are not valid in the current context
                 // expr = utils::call(expr, self.parse_term()?, call_info)?;
@@ -859,15 +878,18 @@ impl<R: Read> Parser<R> {
         let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) else {
             return Ok(None);
         };
-        if t.token.is_keyword(&Keyword::Let) {
+        if !t.token.is_opening_keyword() {
+            return Ok(None);
+        }
+        if t.token.eq_keyword(&Keyword::Let) {
             self.lexer.next_token().unwrap(); // consume let
             return self.parse_let_stmt().map(Some);
         }
-        if t.token.is_keyword(&Keyword::Fn) {
+        if t.token.eq_keyword(&Keyword::Fn) {
             self.lexer.next_token().unwrap(); // consume fn
             return self.parse_fn().map(Some);
         }
-        if t.token.is_keyword(&Keyword::Type) {
+        if t.token.eq_keyword(&Keyword::Type) {
             self.lexer.next_token().unwrap(); // consume type
             return self.parse_type_decl().map(Some);
         }
@@ -876,7 +898,9 @@ impl<R: Read> Parser<R> {
 
     /// Parse a `let` statement after the `let` keyword has been consumed.
     fn parse_let_stmt(&mut self) -> ParseResult {
-        let target_expr = self.parse_term()?;
+        // Use parse_expr with a precedence that stops before `=` (ASSIGNMENT_PREC)
+        // but still parses member access (`(Eq int).eq`) and other infix operators
+        let target_expr = self.parse_expr(prec::ASSIGNMENT_PREC + 1)?;
         let mut annotation = None;
 
         // Check for optional type annotation `: type`
@@ -884,8 +908,7 @@ impl<R: Read> Parser<R> {
             if matches!(next.token, Token::Colon) {
                 self.lexer.next_token().unwrap(); // consume ':'
                 let ann_expr = self.parse_expr(prec::COMMA_PREC + 1)?;
-                annotation =
-                    Some(crate::type_checker::specialize::into_type_ast(ann_expr)?);
+                annotation = Some(crate::type_checker::specialize::into_type_ast(ann_expr)?);
             }
         }
 
@@ -968,30 +991,29 @@ impl<R: Read> Parser<R> {
     /// fn name(param1, param2, ...) -> return_type ! { effects } { body }
     /// ```
     fn parse_fn(&mut self) -> ParseResult {
-        // Parse function name
-        let name_t = self
-            .lexer
-            .expect_next_token_not(pred::ignore)
-            .map_err(|err| {
-                ParseError::new(
-                    "Expected function name after fn".to_string(),
-                    err.info().clone(),
-                )
-            })?;
-        let name = match &name_t.token {
-            Token::Identifier(id) => id.clone(),
-            _ => {
-                return Err(ParseError::new(
-                    format!(
-                        "Expected function name, but found {}",
-                        name_t.token.to_string().light_red()
-                    ),
-                    name_t.info.clone(),
-                )
-                .with_label("This should be a function name".to_string(), name_t.info));
+        // Parse function name (supports qualified names like `(Eq List T).eq`)
+        let (name, name_info) = self.parse_fn_name()?;
+
+        // Optional generic type parameters: `<a, b: Eq>`
+        if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if matches!(&next.token, Token::Operator(s) if s == "<") {
+                self.lexer.next_token().unwrap(); // consume <
+                let mut depth = 1usize;
+                while depth > 0 {
+                    let t = self.lexer.next_token().map_err(|_| {
+                        ParseError::new(
+                            "Expected `>` after generic parameters".to_string(),
+                            LineInfo::default(),
+                        )
+                    })?;
+                    match &t.token {
+                        Token::Operator(s) if s == "<" => depth += 1,
+                        Token::Operator(s) if s == ">" => depth -= 1,
+                        _ => {}
+                    }
+                }
             }
-        };
-        let name_info = name_t.info;
+        }
 
         // Peek to distinguish declaration (::) from definition ((...))
         let next = self.lexer.peek_token_not(pred::ignore, 0).map_err(|err| {
@@ -1034,6 +1056,80 @@ impl<R: Read> Parser<R> {
             signature,
             info: name_info.join(&sig_info),
         })
+    }
+
+    fn parse_fn_name(&mut self) -> Result<(String, LineInfo), ParseError> {
+        let name_t = self.lexer.peek_token_not(pred::ignore, 0).map_err(|err| {
+            ParseError::new(
+                "Expected function name after fn".to_string(),
+                err.info().clone(),
+            )
+        })?;
+        if matches!(&name_t.token, Token::LeftParen { .. }) {
+            // Qualified name: `(Type App).field` or `(Type App)`
+            self.lexer.next_token().unwrap(); // consume (
+            let inner = self.parse_expr(prec::COMMA_PREC)?;
+            self.parse_expected_eq(Token::RightParen, ")")?;
+            let mut name_expr: Ast = inner;
+            // Parse optional `.field`
+            if let Ok(nt) = self.lexer.peek_token_not(pred::ignore, 0) {
+                if matches!(&nt.token, Token::Operator(s) if s == MEMBER_ACCESS_SYM) {
+                    self.lexer.next_token().unwrap(); // consume .
+                    let field_t = self
+                        .lexer
+                        .expect_next_token_not(pred::ignore)
+                        .map_err(|_| {
+                            ParseError::new(
+                                "Expected field name after `.`".to_string(),
+                                nt.info.clone(),
+                            )
+                        })?;
+                    let field_key = match &field_t.token {
+                        Token::Identifier(id) => RecordKey::String(id.clone()),
+                        _ => {
+                            return Err(ParseError::new(
+                                format!(
+                                    "Expected field name, found {}",
+                                    field_t.token.to_string().light_red()
+                                ),
+                                field_t.info.clone(),
+                            ));
+                        }
+                    };
+                    let name_info = name_expr.info().clone();
+                    name_expr = Ast::MemberAccess {
+                        expr: Box::new(name_expr),
+                        field: field_key,
+                        info: name_info.join(&field_t.info),
+                    };
+                }
+            }
+            Ok((name_expr.print_expr(), name_expr.info().clone()))
+        } else {
+            let t = self
+                .lexer
+                .expect_next_token_not(pred::ignore)
+                .map_err(|err| {
+                    ParseError::new(
+                        "Expected function name after fn".to_string(),
+                        err.info().clone(),
+                    )
+                })?;
+            let name = match &t.token {
+                Token::Identifier(id) => id.clone(),
+                _ => {
+                    return Err(ParseError::new(
+                        format!(
+                            "Expected function name, but found {}",
+                            t.token.to_string().light_red()
+                        ),
+                        t.info.clone(),
+                    )
+                    .with_label("This should be a function name".to_string(), t.info));
+                }
+            };
+            Ok((name, t.info))
+        }
     }
 
     fn parse_fn_definition(&mut self, name: String, name_info: LineInfo) -> ParseResult {
@@ -1116,14 +1212,14 @@ impl<R: Read> Parser<R> {
         let mut ensures: Option<Ast> = None;
         loop {
             if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-                if t.token.is_keyword(&Keyword::Requires) {
+                if t.token.eq_keyword(&Keyword::Requires) {
                     self.lexer.next_token().unwrap();
                     self.parse_expected_eq(Token::LeftBrace, "{")?;
                     requires = Some(self.parse_top()?);
                     self.parse_expected_eq(Token::RightBrace, "}")?;
                     continue;
                 }
-                if t.token.is_keyword(&Keyword::Ensures) {
+                if t.token.eq_keyword(&Keyword::Ensures) {
                     self.lexer.next_token().unwrap();
                     self.parse_expected_eq(Token::LeftBrace, "{")?;
                     ensures = Some(self.parse_top()?);
@@ -1199,7 +1295,7 @@ impl<R: Read> Parser<R> {
         let name_info = name_token.info;
 
         // Optional type parameters:
-        // - parenthesized: `type Name(T, U) = ...`
+        // - parenthesized: `type Name(T, U) = ...` or `type Name(T: Type, U: Type) = ...`
         // - bare: `type Name T U = ...`
         let params: Vec<Ast> = if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
             if matches!(t.token, Token::LeftParen { .. }) {
@@ -1221,6 +1317,13 @@ impl<R: Read> Parser<R> {
                                 format!("Expected parameter name, found {}", param_name.token),
                                 param_name.info.clone(),
                             ))
+                        }
+                    }
+                    // Optional type annotation `: TypeExpr`
+                    if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if matches!(next.token, Token::Colon) {
+                            self.lexer.next_token().unwrap(); // consume :
+                            self.parse_expr(prec::COMMA_PREC + 1)?; // parse and discard type annotation
                         }
                     }
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
@@ -1263,6 +1366,26 @@ impl<R: Read> Parser<R> {
         } else {
             vec![]
         };
+
+        // Optional constraints after `)`: `: Constraint1, Constraint2`
+        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
+            if matches!(t.token, Token::Colon) {
+                self.lexer.next_token().unwrap(); // consume :
+                                                  // Parse constraint identifiers separated by commas until `=`
+                loop {
+                    self.parse_primary()?;
+                    if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
+                        if matches!(&next.token, Token::Operator(s) if s == ",") {
+                            self.lexer.next_token().unwrap(); // consume ,
+                            continue;
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
 
         // Expect `=`
         if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
