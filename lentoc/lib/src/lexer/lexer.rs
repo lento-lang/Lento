@@ -395,24 +395,21 @@ impl<R: Read> Lexer<R> {
     }
 
     /// Peek the next token from the source code, ignoring tokens that match the predicate.
-    /// Consumes matching tokens from the front of the buffer and skips `skip` non-matching tokens.
+    /// Skips `skip` non-matching tokens (lookahead) without consuming anything.
     pub fn peek_token_not(&mut self, predicate: impl Fn(&Token) -> bool, skip: usize) -> LexResult {
+        let mut idx = 0usize;
         let mut skipped = 0usize;
         loop {
-            let token = self.peek_token(0);
-            if let Err(_err) = &token {
-                return token;
-            }
-            let t = token.as_ref().unwrap();
-            if predicate(&t.token) {
-                self.next_token().unwrap();
+            let token = self.peek_token(idx);
+            if check_token(&token, &predicate) {
+                idx += 1;
                 continue;
             }
             if skipped == skip {
                 return token;
             }
-            self.next_token().unwrap();
             skipped += 1;
+            idx += 1;
         }
     }
 

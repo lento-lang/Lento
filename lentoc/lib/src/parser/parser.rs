@@ -882,15 +882,15 @@ impl<R: Read> Parser<R> {
             return Ok(None);
         }
         if t.token.eq_keyword(&Keyword::Let) {
-            self.lexer.next_token().unwrap(); // consume let
+            self.lexer.expect_next_token_not(pred::ignore).unwrap(); // consume let
             return self.parse_let_stmt().map(Some);
         }
         if t.token.eq_keyword(&Keyword::Fn) {
-            self.lexer.next_token().unwrap(); // consume fn
+            self.lexer.expect_next_token_not(pred::ignore).unwrap(); // consume fn
             return self.parse_fn().map(Some);
         }
         if t.token.eq_keyword(&Keyword::Type) {
-            self.lexer.next_token().unwrap(); // consume type
+            self.lexer.expect_next_token_not(pred::ignore).unwrap(); // consume type
             return self.parse_type_decl().map(Some);
         }
         Ok(None)
