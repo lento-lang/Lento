@@ -920,7 +920,7 @@ pub fn _roll_function_definition(params: Vec<ParamAst>, body: Ast) -> Ast {
 /// ```lento
 /// func(a)(b)(c)
 /// ```
-pub fn roll_function_call(expr: Ast, args: Vec<Ast>, types: &HashSet<String>) -> Ast {
+pub fn roll_function_call(expr: Ast, args: Vec<Ast>, _types: &HashSet<String>) -> Ast {
     let last_info = args
         .last()
         .map(|a| a.info().clone())

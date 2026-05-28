@@ -187,7 +187,7 @@ impl TypeChecker<'_> {
         self.env.add_variable(name, ty);
     }
 
-    fn new_scope(&self) -> TypeChecker {
+    fn new_scope(&self) -> TypeChecker<'_> {
         TypeChecker {
             env: TypeEnv::default(),
             parent: Some(self),
@@ -218,7 +218,7 @@ impl TypeChecker<'_> {
             .or_else(|| self.parent.and_then(|p| p.lookup_type_params(name)))
     }
 
-    fn lookup_identifier(&self, name: &str) -> Option<IdentifierType> {
+    fn lookup_identifier(&self, name: &str) -> Option<IdentifierType<'_>> {
         Some(if let Some(ty) = self.lookup_type(name) {
             IdentifierType::Type(ty)
         } else if let Some(variants) = self.lookup_function(name) {
@@ -230,7 +230,7 @@ impl TypeChecker<'_> {
         })
     }
 
-    fn lookup_local_identifier(&self, name: &str) -> Option<IdentifierType> {
+    fn lookup_local_identifier(&self, name: &str) -> Option<IdentifierType<'_>> {
         Some(if let Some(ty) = self.env.lookup_type(name) {
             IdentifierType::Type(ty)
         } else if let Some(variants) = self.env.lookup_function(name) {
