@@ -609,7 +609,8 @@ pub fn is_type_expr(expr: &Ast, types: &HashSet<String>) -> bool {
         }
         Ast::List { exprs, .. } if exprs.len() == 1 => is_type_expr(&exprs[0], types),
         Ast::Array { elem, len, .. } => {
-            is_type_expr(elem, types) && matches!(**len, Ast::Literal { .. })
+            is_type_expr(elem, types)
+                && (matches!(**len, Ast::Literal { .. }) || matches!(**len, Ast::Identifier { .. }))
         }
         Ast::Literal { .. } => true,
         Ast::FunctionCall { expr, arg, .. } => {
@@ -805,11 +806,13 @@ fn try_into_refinement(
     fields: &[(RecordKey, Ast)],
     info: &LineInfo,
 ) -> Result<Option<TypeAst>, ParseError> {
-    if fields.len() != 1 {
+    if fields.is_empty() {
         return Ok(None);
     }
-    let (binder, field_ty) = &fields[0];
-    let Ast::Binary { lhs, op, rhs, .. } = field_ty else {
+    // Check if the last field has a `|` refinement
+    let last_idx = fields.len() - 1;
+    let (last_binder, last_field_ty) = &fields[last_idx];
+    let Ast::Binary { lhs, op, rhs, .. } = last_field_ty else {
         return Ok(None);
     };
     if op.symbol != SUM_TYPE_SYM {
@@ -821,9 +824,27 @@ fn try_into_refinement(
         return Ok(None);
     }
 
-    let base = into_type_ast((**lhs).clone())?;
+    // Build base type: convert all fields (splitting the last field's `|` part)
+    let mut base_fields: Vec<(RecordKey, TypeAst)> = Vec::new();
+    for (i, (key, field_ast)) in fields.iter().enumerate() {
+        if i == last_idx {
+            base_fields.push((key.clone(), into_type_ast((**lhs).clone())?));
+        } else {
+            base_fields.push((key.clone(), into_type_ast(field_ast.clone())?));
+        }
+    }
+
+    let base = if base_fields.len() == 1 {
+        base_fields.into_iter().next().unwrap().1
+    } else {
+        TypeAst::Record {
+            fields: base_fields,
+            info: info.clone(),
+        }
+    };
+
     Ok(Some(TypeAst::Refinement {
-        binder: binder.clone(),
+        binder: last_binder.clone(),
         base: Box::new(base),
         predicate: Box::new((**rhs).clone()),
         info: info.clone(),
@@ -832,6 +853,10 @@ fn try_into_refinement(
 
 fn array_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
     let info = ast.info().clone();
+    // If the length is an identifier (e.g., a type parameter), use 0 as a placeholder
+    if matches!(&ast, Ast::Identifier { .. }) {
+        return Ok(0);
+    }
     let Ast::Literal { value, .. } = ast else {
         return Err(ParseError::new(
             "Expected array length to be an integer literal".to_string(),
