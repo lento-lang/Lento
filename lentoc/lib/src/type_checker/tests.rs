@@ -167,6 +167,12 @@ mod tests {
     }
 
     #[test]
+    fn symbolic_array_len_type_is_preserved_in_checker() {
+        let result = check_str_one("type Vec(n: int, A: Type) = [A; n]", Some(&stdlib())).unwrap();
+        assert!(matches!(result, CheckedAst::TypeDecl { .. }));
+    }
+
+    #[test]
     fn checked_list_type_decl() {
         let result = check_str_one("type Foo = [int]", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::TypeDecl { .. }));

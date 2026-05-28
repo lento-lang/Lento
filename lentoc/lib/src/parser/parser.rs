@@ -781,7 +781,7 @@ impl<R: Read> Parser<R> {
         while let Ok(nt) = self.lexer.peek_token(0) {
             // Stop on statement-starting keywords so they are not consumed as part of the current expression
             let is_top_level_nl_term = min_prec == 0 && nt.token.is_top_level_terminal(true);
-            if nt.token.is_terminator() || is_top_level_nl_term || nt.token.is_opening_keyword() {
+            if nt.token.is_terminator() || is_top_level_nl_term || nt.token.is_statement_start() {
                 break; // Stop parsing on expression terminators
             }
             if let Token::Operator(op) = &nt.token {
@@ -836,7 +836,7 @@ impl<R: Read> Parser<R> {
             // Before attempting function application, check if the next non-ignored token
             // is a statement-starting keyword. If so, stop parsing.
             if let Ok(next_real) = self.lexer.peek_token_not(pred::ignore, 0) {
-                if next_real.token.is_opening_keyword() {
+                if next_real.token.is_statement_start() {
                     break;
                 }
             }
@@ -878,7 +878,7 @@ impl<R: Read> Parser<R> {
         let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) else {
             return Ok(None);
         };
-        if !t.token.is_opening_keyword() {
+        if !t.token.is_statement_start() {
             return Ok(None);
         }
         if t.token.eq_keyword(&Keyword::Let) {

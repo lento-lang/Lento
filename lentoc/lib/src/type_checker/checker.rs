@@ -1,6 +1,6 @@
 use super::{
-    checked_ast::{CheckedAst, CheckedParam, TypeAst},
-    types::{std_types, FunctionType, GetType, Type, TypeTrait},
+    checked_ast::{ArrayLenAst, CheckedAst, CheckedParam, TypeAst},
+    types::{std_types, ArrayLen, FunctionType, GetType, Type, TypeTrait},
 };
 use crate::{
     interpreter::{
@@ -644,7 +644,13 @@ impl TypeChecker<'_> {
             }
             TypeAst::Array { elem, len, .. } => {
                 let elem_ty = self.check_type_expr(elem)?;
-                Type::Tuple(vec![elem_ty; *len])
+                Type::Array(
+                    Box::new(elem_ty),
+                    match len {
+                        ArrayLenAst::Known(len) => ArrayLen::Known(*len),
+                        ArrayLenAst::Symbol(name) => ArrayLen::Symbol(name.clone().into()),
+                    },
+                )
             }
             TypeAst::List { elem, .. } => {
                 let elem_ty = self.check_type_expr(elem)?;
@@ -938,8 +944,9 @@ impl TypeChecker<'_> {
         info: &LineInfo,
     ) -> TypeCheckerResult<CheckedAst> {
         match target {
-            BindPattern::Variable { name, .. } => {
-                if self.lookup_local_identifier(name).is_some() {
+            BindPattern::Variable { .. } | BindPattern::MemberAccess { .. } => {
+                let name = target.binding_name().expect("binding target name");
+                if self.lookup_local_identifier(&name).is_some() {
                     return Err(TypeError::new(
                         format!("{} is already defined", name.clone().yellow()),
                         info.clone(),
@@ -979,10 +986,7 @@ impl TypeChecker<'_> {
                 }
                 self.add_variable(name.clone(), ty.clone());
                 Ok(CheckedAst::Let {
-                    target: BindPattern::Variable {
-                        name: name.clone(),
-                        info: info.clone(),
-                    },
+                    target: target.clone(),
                     expr: Box::new(expr),
                     info: info.clone(),
                 })
@@ -1323,6 +1327,12 @@ impl TypeChecker<'_> {
                 self.add_variable(name.clone(), expr_ty.clone());
                 Ok(())
             }
+            BindPattern::MemberAccess { .. } => {
+                if let Some(name) = pattern.binding_name() {
+                    self.add_variable(name, expr_ty.clone());
+                }
+                Ok(())
+            }
             BindPattern::Tuple { elements, .. } => {
                 if let Type::Tuple(types) = expr_ty {
                     if elements.len() != types.len() {
@@ -1449,6 +1459,11 @@ fn binding_typed_names(pattern: &BindPattern, ty: &Type) -> HashSet<(String, Typ
         match pattern {
             BindPattern::Variable { name, .. } => {
                 names.insert((name.clone(), ty.clone()));
+            }
+            BindPattern::MemberAccess { .. } => {
+                if let Some(name) = pattern.binding_name() {
+                    names.insert((name, ty.clone()));
+                }
             }
             BindPattern::Tuple { elements, .. } => {
                 if let Type::Tuple(types) = ty {

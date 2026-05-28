@@ -170,24 +170,16 @@ impl Token {
         matches!(self, Token::Keyword(_))
     }
 
-    pub fn is_opening_keyword(&self) -> bool {
+    pub fn is_statement_start(&self) -> bool {
         matches!(
             self,
             Token::Keyword(Keyword::Fn)
                 | Token::Keyword(Keyword::Let)
                 | Token::Keyword(Keyword::Type)
                 | Token::Keyword(Keyword::Use)
-                | Token::Keyword(Keyword::Effect)
                 | Token::Keyword(Keyword::Handle)
                 | Token::Keyword(Keyword::With)
                 | Token::Keyword(Keyword::Infix)
-                | Token::Keyword(Keyword::Ensures)
-                | Token::Keyword(Keyword::Requires)
-                | Token::Keyword(Keyword::Match)
-                | Token::Keyword(Keyword::If)
-                | Token::Keyword(Keyword::Else)
-                | Token::Keyword(Keyword::For)
-                | Token::Keyword(Keyword::While)
         )
     }
 

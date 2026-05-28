@@ -11,7 +11,7 @@ use crate::{
         },
         pattern::BindPattern,
     },
-    type_checker::checked_ast::{Effect, ParamAst, TypeAst},
+    type_checker::checked_ast::{ArrayLenAst, Effect, ParamAst, TypeAst},
     util::error::{BaseErrorExt, LineInfo},
 };
 use colorful::Colorful;
@@ -851,11 +851,10 @@ fn try_into_refinement(
     }))
 }
 
-fn array_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
+fn array_len_from_ast(ast: Ast) -> Result<ArrayLenAst, ParseError> {
     let info = ast.info().clone();
-    // If the length is an identifier (e.g., a type parameter), use 0 as a placeholder
-    if matches!(&ast, Ast::Identifier { .. }) {
-        return Ok(0);
+    if let Ast::Identifier { name, .. } = ast.clone() {
+        return Ok(ArrayLenAst::Symbol(name));
     }
     let Ast::Literal { value, .. } = ast else {
         return Err(ParseError::new(
@@ -869,7 +868,7 @@ fn array_len_from_ast(ast: Ast) -> Result<usize, ParseError> {
             info,
         ));
     };
-    number_to_usize(&n).ok_or_else(|| {
+    number_to_usize(&n).map(ArrayLenAst::Known).ok_or_else(|| {
         ParseError::new(
             "Expected array length to be a non-negative integer".to_string(),
             info,

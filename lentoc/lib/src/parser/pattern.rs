@@ -14,7 +14,7 @@ use std::hash::Hash;
 /// - Function definitions
 /// - Function arguments
 /// - Destructuring assignments
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub enum BindPattern {
     /// A variable binding pattern.
     Variable {
@@ -33,6 +33,12 @@ pub enum BindPattern {
     Record {
         /// The fields of the record.
         fields: Vec<(RecordKey, BindPattern)>,
+        info: LineInfo,
+    },
+    /// A qualified binding target like `(Eq int).eq`.
+    MemberAccess {
+        expr: Box<Ast>,
+        field: RecordKey,
         info: LineInfo,
     },
     /// A list binding pattern.
@@ -64,6 +70,7 @@ impl BindPattern {
             BindPattern::Variable { info, .. } => info,
             BindPattern::Tuple { info, .. } => info,
             BindPattern::Record { info, .. } => info,
+            BindPattern::MemberAccess { info, .. } => info,
             BindPattern::List { info, .. } => info,
             BindPattern::Wildcard => panic!("Wildcard pattern has no line info"),
             BindPattern::Literal { info, .. } => info,
@@ -90,6 +97,11 @@ impl BindPattern {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(BindPattern::Record { fields, info })
             }
+            Ast::MemberAccess { expr, field, info } => Ok(BindPattern::MemberAccess {
+                expr,
+                field,
+                info,
+            }),
             Ast::List { exprs, info } => {
                 let elements = exprs
                     .into_iter()
@@ -104,11 +116,6 @@ impl BindPattern {
                 )?,
                 info,
             }),
-            Ast::MemberAccess { expr, field, info } => {
-                let base = expr.print_expr();
-                let name = format!("{}.{}", base, field.to_string());
-                Ok(BindPattern::Variable { name, info })
-            }
             _ => Err(ParseError::new(
                 format!("Invalid binding pattern: {}", expr.print_expr()),
                 expr.info().clone(),
@@ -129,6 +136,7 @@ impl BindPattern {
                     element.specialize(_judgements, _changed);
                 }
             }
+            BindPattern::MemberAccess { .. } => (),
             BindPattern::List { elements, .. } => {
                 for element in elements {
                     element.specialize(_judgements, _changed);
@@ -160,6 +168,7 @@ impl BindPattern {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            BindPattern::MemberAccess { expr, field, .. } => format!("{}.{}", expr.print_expr(), field),
             BindPattern::List { elements, .. } => format!(
                 "[{}]",
                 elements
@@ -199,6 +208,9 @@ impl BindPattern {
                 result.push_str(" }");
                 result
             }
+            BindPattern::MemberAccess { expr, field, .. } => {
+                format!("{}.{}", expr.print_expr(), field)
+            }
             BindPattern::List { elements, .. } => {
                 let mut result = "[".to_string();
                 for (i, v) in elements.iter().enumerate() {
@@ -219,6 +231,16 @@ impl BindPattern {
     pub fn is_wildcard(&self) -> bool {
         matches!(self, BindPattern::Wildcard)
     }
+
+    pub fn binding_name(&self) -> Option<String> {
+        match self {
+            BindPattern::Variable { name, .. } => Some(name.clone()),
+            BindPattern::MemberAccess { expr, field, .. } => {
+                Some(format!("{}.{}", expr.print_expr(), field))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl PartialEq for BindPattern {
@@ -227,6 +249,10 @@ impl PartialEq for BindPattern {
             (Self::Variable { name: l0, .. }, Self::Variable { name: r0, .. }) => l0 == r0,
             (Self::Tuple { elements: l0, .. }, Self::Tuple { elements: r0, .. }) => l0 == r0,
             (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
+            (
+                Self::MemberAccess { expr: l0, field: l1, .. },
+                Self::MemberAccess { expr: r0, field: r1, .. },
+            ) => l0 == r0 && l1 == r1,
             (Self::List { elements: l0, .. }, Self::List { elements: r0, .. }) => l0 == r0,
             (Self::Wildcard, Self::Wildcard) => true,
             (Self::Literal { value: l0, .. }, Self::Literal { value: r0, .. }) => l0 == r0,
@@ -235,6 +261,8 @@ impl PartialEq for BindPattern {
         }
     }
 }
+
+impl Eq for BindPattern {}
 
 impl Hash for BindPattern {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -250,6 +278,10 @@ impl Hash for BindPattern {
                     key.hash(state);
                     value.hash(state);
                 }
+            }
+            BindPattern::MemberAccess { expr, field, .. } => {
+                expr.print_expr().hash(state);
+                field.hash(state);
             }
             BindPattern::List { elements, .. } => {
                 for element in elements {

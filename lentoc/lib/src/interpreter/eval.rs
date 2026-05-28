@@ -241,6 +241,10 @@ fn eval_assignment(
         BindPattern::Variable { name, .. } => {
             env.add_value(Str::String(name.clone()), value.clone(), pattern.info())?
         }
+        BindPattern::MemberAccess { .. } => {
+            let name = pattern.binding_name().expect("member access binding name");
+            env.add_value(Str::String(name), value.clone(), pattern.info())?
+        }
         BindPattern::Tuple { elements, .. } => {
             let Value::Tuple(values, _) = value else {
                 unreachable!("This should have been checked by the type checker");

@@ -7,7 +7,7 @@ mod tests {
         },
         parser::{ast::Ast, parser::from_string, pattern::BindPattern},
         stdlib::init::{stdlib, Initializer},
-        type_checker::checked_ast::TypeAst,
+        type_checker::checked_ast::{ArrayLenAst, TypeAst},
         util::error::LineInfo,
     };
 
@@ -1268,10 +1268,49 @@ mod tests {
             assert_eq!(params.len(), 1);
             assert!(matches!(body, TypeAst::Array { .. }));
             if let TypeAst::Array { len, .. } = body {
-                assert_eq!(len, 6);
+                assert_eq!(len, ArrayLenAst::Known(6));
             }
         } else {
             panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn type_decl_static_vec_symbolic_len() {
+        let result = parse_str_one("type MyArr(n: int, T: Type) = [T; n]", Some(&stdlib())).unwrap();
+        if let Ast::TypeDecl { body, .. } = result {
+            if let TypeAst::Array { len, .. } = body {
+                assert_eq!(len, ArrayLenAst::Symbol("n".to_string()));
+            } else {
+                panic!("Expected array type declaration body");
+            }
+        } else {
+            panic!("Expected type declaration");
+        }
+    }
+
+    #[test]
+    fn let_member_access_target_parses() {
+        let result = parse_str_one("let (Eq int).eq = prim_int_eq", Some(&stdlib())).unwrap();
+        if let Ast::Let { target, .. } = result {
+            assert!(matches!(target, BindPattern::MemberAccess { .. }));
+        } else {
+            panic!("Expected let binding");
+        }
+    }
+
+    #[test]
+    fn qualified_function_name_parses() {
+        let result = parse_str_one(
+            "fn (Eq List T).eq<T: Eq>(xs, ys) = list_eq_by(T.eq, xs, ys)",
+            Some(&stdlib()),
+        )
+        .unwrap();
+        if let Ast::FunctionDef { name, params, .. } = result {
+            assert!(name.contains(".eq"));
+            assert_eq!(params.len(), 2);
+        } else {
+            panic!("Expected function definition");
         }
     }
 
