@@ -656,7 +656,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -694,7 +694,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -736,7 +736,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_none());
                 // if let BindPattern::Variable { name, .. } = &param.pattern {
                 //     assert_eq!(name, "x");
@@ -771,7 +771,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_none());
                 // if let BindPattern::Variable { name, .. } = &param.pattern {
                 //     assert_eq!(name, "x");
@@ -810,7 +810,7 @@ mod tests {
             //     assert_eq!(name, "int");
             // }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -848,7 +848,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_none());
                 // if let BindPattern::Variable { name, .. } = &param.pattern {
                 //     assert_eq!(name, "x");
@@ -883,7 +883,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -892,7 +892,7 @@ mod tests {
                 //     assert_eq!(name, "x");
                 // }
                 assert!(matches!(*body, Ast::Lambda { .. }));
-                if let Ast::Lambda { param, body, .. } = *body {
+                if let Ast::Lambda {  body, .. } = *body {
                     // assert!(param.ty.is_some());
                     // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                     //     assert_eq!(name, "int");
@@ -937,7 +937,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -946,7 +946,7 @@ mod tests {
                 //     assert_eq!(name, "x");
                 // }
                 assert!(matches!(*body, Ast::Lambda { .. }));
-                if let Ast::Lambda { param, body, .. } = *body {
+                if let Ast::Lambda {  body, .. } = *body {
                     // assert!(param.ty.is_some());
                     // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                     //     assert_eq!(name, "int");
@@ -995,7 +995,7 @@ mod tests {
             //     assert_eq!(name, "int");
             // }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -1004,7 +1004,7 @@ mod tests {
                 //     assert_eq!(name, "x");
                 // }
                 assert!(matches!(*body, Ast::Lambda { .. }));
-                if let Ast::Lambda { param, body, .. } = *body {
+                if let Ast::Lambda {  body, .. } = *body {
                     // assert!(param.ty.is_some());
                     // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                     //     assert_eq!(name, "int");
@@ -1048,7 +1048,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -1057,7 +1057,7 @@ mod tests {
                 //     assert_eq!(name, "x");
                 // }
                 assert!(matches!(*body, Ast::Lambda { .. }));
-                if let Ast::Lambda { param, body, .. } = *body {
+                if let Ast::Lambda {  body, .. } = *body {
                     // assert!(param.ty.is_some());
                     // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                     //     assert_eq!(name, "int");
@@ -1104,7 +1104,7 @@ mod tests {
                 assert_eq!(name, "f");
             }
             assert!(matches!(*expr, Ast::Lambda { .. }));
-            if let Ast::Lambda { param, body, .. } = *expr {
+            if let Ast::Lambda {  body, .. } = *expr {
                 // assert!(param.ty.is_some());
                 // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                 //     assert_eq!(name, "int");
@@ -1113,7 +1113,7 @@ mod tests {
                 //     assert_eq!(name, "x");
                 // }
                 assert!(matches!(*body, Ast::Lambda { .. }));
-                if let Ast::Lambda { param, body, .. } = *body {
+                if let Ast::Lambda {  body, .. } = *body {
                     // assert!(param.ty.is_some());
                     // if let Some(TypeAst::Identifier { name, .. }) = param.ty {
                     //     assert_eq!(name, "int");
