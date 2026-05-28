@@ -395,33 +395,25 @@ impl<R: Read> Lexer<R> {
     }
 
     /// Peek the next token from the source code, ignoring tokens that match the predicate.
-    /// Or return the next peeked token.
+    /// Consumes matching tokens from the front of the buffer and skips `skip` non-matching tokens.
     pub fn peek_token_not(&mut self, predicate: impl Fn(&Token) -> bool, skip: usize) -> LexResult {
-        let mut idx = 0usize;
-        let mut token = self.peek_token(idx);
-        for i in 0..skip {
-            // Find the next non-matching token
-            while check_token(&token, &predicate) {
-                idx += 1;
-                token = self.peek_token(idx);
-
-                // Optimize for EOF
-                if let Err(err) = &token {
-                    if err.is_eof_error() {
-                        return token; // Search no further!
-                    }
-                }
+        let mut skipped = 0usize;
+        loop {
+            let token = self.peek_token(0);
+            if let Err(_err) = &token {
+                return token;
             }
-            // We found a non-matching token!
-            if i < skip - 1 {
-                log::trace!("Skipping token ({}/{}): {:?}", i + 1, skip, token);
-                idx += 1;
-                token = self.peek_token(idx);
-            } else {
-                log::trace!("Found token ({}/{}): {:?}", i + 1, skip, token);
+            let t = token.as_ref().unwrap();
+            if predicate(&t.token) {
+                self.next_token().unwrap();
+                continue;
             }
+            if skipped == skip {
+                return token;
+            }
+            self.next_token().unwrap();
+            skipped += 1;
         }
-        token
     }
 
     /// Get the next token from the source code, ignoring tokens that match the predicate.
