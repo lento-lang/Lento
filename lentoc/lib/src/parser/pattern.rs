@@ -104,6 +104,11 @@ impl BindPattern {
                 )?,
                 info,
             }),
+            Ast::MemberAccess { expr, field, info } => {
+                let base = expr.print_expr();
+                let name = format!("{}.{}", base, field.to_string());
+                Ok(BindPattern::Variable { name, info })
+            }
             _ => Err(ParseError::new(
                 format!("Invalid binding pattern: {}", expr.print_expr()),
                 expr.info().clone(),
