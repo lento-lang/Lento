@@ -841,7 +841,7 @@ impl<R: Read> Parser<R> {
                 }
             }
             if FUNCTION_APP_PREC > min_prec {
-                if pred::ignore(&nt.token) {
+                if pred::ignore(&nt.token) || matches!(nt.token, Token::Colon) {
                     break;
                 }
                 let call_info = expr.info().join(&nt.info);
