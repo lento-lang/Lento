@@ -34,7 +34,7 @@ type Age = { v: int | 0 <= v <= 200 }
 
 type Day = { v: int | 1 <= v <= 31 }
 type Month = { v: int | 1 <= v <= 12 }
-type YearR = { v: int | 0 <= v <= 9999 }
+type Year = { v: int | 0 <= v <= 9999 }
 type Date = { day: Day, month: Month, year: Year }
 
 // Value-parameterized refinements (dependent refinement aliases)
