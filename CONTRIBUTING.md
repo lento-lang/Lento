@@ -9,10 +9,10 @@ The Lento compiler is an open-source project, and contributions are highly appre
 Here are some ways you can contribute to the development of the Lento compiler:
 
 - [Contributing to the Lento compiler](#contributing-to-the-lento-compiler)
-  - [Reporting issues](#reporting-issues)
-  - [Contributing documentation](#contributing-documentation)
-  - [Contributing code](#contributing-code)
-  - [Contributing to the backends](#contributing-to-the-backends)
+	- [Reporting issues](#reporting-issues)
+	- [Contributing documentation](#contributing-documentation)
+	- [Contributing code](#contributing-code)
+	- [Contributing to the backends](#contributing-to-the-backends)
 
 ## Reporting issues
 
@@ -34,10 +34,10 @@ The Lento compiler is written in the Rust programming language. If you are inter
    1. If you are adding new functionality, please add tests to cover the new code.
    2. Run the tests with `cargo test`.
 6. Commit your changes and push them to your fork on GitHub.
-7. Create a pull request from your branch to the `develop` branch of the Lento repository.
+7. Create a pull request from your branch to the `main` branch of the Lento repository.
 8. Wait for the maintainers to review your pull request and provide feedback.
    1. Address any feedback and make any necessary changes to your pull request.
-9. If your pull request is approved, it will be merged into the `develop` branch and will be included in the next release of Lento! 🎉
+9. If your pull request is approved, it will be merged into the `main` branch and will be included in the next release of Lento! 🎉
 
 ## Contributing to the backends
 
