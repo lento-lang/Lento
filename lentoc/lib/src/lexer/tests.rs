@@ -346,4 +346,16 @@ mod tests {
         let token = Token::EndOfFile;
         assert_eq!(lexer.next_token().unwrap().token, token);
     }
+
+    #[test]
+    fn peek_token_not_is_non_consuming_with_skip() {
+        let mut lexer = from_str("a\n b\n c");
+        init(&mut lexer);
+
+        let token = lexer.peek_token_not(|t| matches!(t, Token::Newline), 1).unwrap();
+        assert_eq!(token.token, Token::Identifier("b".to_string()));
+
+        let token = lexer.next_token().unwrap();
+        assert_eq!(token.token, Token::Identifier("a".to_string()));
+    }
 }

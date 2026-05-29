@@ -15,6 +15,21 @@ pub struct Effect {
     pub params: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArrayLenAst {
+    Known(usize),
+    Symbol(String),
+}
+
+impl ArrayLenAst {
+    pub fn print_expr(&self) -> String {
+        match self {
+            ArrayLenAst::Known(len) => len.to_string(),
+            ArrayLenAst::Symbol(name) => name.clone(),
+        }
+    }
+}
+
 impl Effect {
     pub fn print_expr(&self) -> String {
         if self.params.is_empty() {
@@ -58,7 +73,7 @@ pub enum TypeAst {
     },
     Array {
         elem: Box<TypeAst>,
-        len: usize,
+        len: ArrayLenAst,
         info: LineInfo,
     },
     List {
@@ -184,7 +199,7 @@ impl TypeAst {
                 }
             }
             TypeAst::Array { elem, len, .. } => {
-                format!("[{}; {}]", elem.print_expr(), len)
+                format!("[{}; {}]", elem.print_expr(), len.print_expr())
             }
             TypeAst::List { elem, .. } => {
                 format!("[{}]", elem.print_expr())
@@ -266,7 +281,7 @@ impl TypeAst {
                 }
             }
             TypeAst::Array { elem, len, .. } => {
-                format!("[{}; {}]", elem.pretty_print(), len)
+                format!("[{}; {}]", elem.pretty_print(), len.print_expr())
             }
             TypeAst::List { elem, .. } => {
                 format!("[{}]", elem.pretty_print())

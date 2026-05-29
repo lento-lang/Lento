@@ -194,6 +194,21 @@ impl TypeTrait for FunctionType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum ArrayLen {
+    Known(usize),
+    Symbol(Str),
+}
+
+impl ArrayLen {
+    pub fn pretty_print(&self) -> String {
+        match self {
+            ArrayLen::Known(len) => len.to_string(),
+            ArrayLen::Symbol(name) => name.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Type {
     /// Placeholder for unknown types during type inference.
     /// Used when the type is not yet determined.
@@ -230,6 +245,9 @@ pub enum Type {
     /// ! There must be at least one element in the tuple.
     /// A tuple type is a product type.
     Tuple(Vec<Type>),
+
+    /// A fixed-size array type.
+    Array(Box<Type>, ArrayLen),
 
     /// A list type.
     /// The first argument is the type of the elements in the list.
@@ -327,6 +345,7 @@ impl TypeTrait for Type {
                     TypeJudgeResult::fail()
                 }
             }
+            (Type::Array(t1, l1), Type::Array(t2, l2)) => t1.subtype(t2).and((l1 == l2).into()),
             (Type::List(t1), Type::List(t2)) => t1.subtype(t2),
             (Type::Record(fields1), Type::Record(fields2)) => {
                 if fields1.len() == fields2.len() {
@@ -391,6 +410,7 @@ impl TypeTrait for Type {
                 Type::Function(Box::new(ty.simplify()))
             }
             Type::Tuple(types) => Type::Tuple(types.into_iter().map(Type::simplify).collect()),
+            Type::Array(t, len) => Type::Array(Box::new(t.simplify()), len),
             Type::List(t) => Type::List(Box::new(t.simplify())),
             Type::Map(key, value) => {
                 Type::Map(Box::new(key.simplify()), Box::new(value.simplify()))
@@ -445,6 +465,7 @@ impl TypeTrait for Type {
                     .map(|t| t.specialize(judgements, changed))
                     .collect(),
             ),
+            Type::Array(t, len) => Type::Array(Box::new(t.specialize(judgements, changed)), len.clone()),
             Type::List(t) => Type::List(Box::new(t.specialize(judgements, changed))),
             Type::Map(key, value) => Type::Map(
                 Box::new(key.specialize(judgements, changed)),
@@ -495,6 +516,7 @@ impl Display for Type {
                 }
                 write!(f, ")")
             }
+            Type::Array(t, len) => write!(f, "[{}; {}]", t, len.pretty_print()),
             Type::List(t) => write!(f, "[{}]", t),
             Type::Map(key, value) => write!(f, "Map({}, {})", key, value),
             Type::Record(fields) => {
@@ -567,6 +589,7 @@ impl Type {
                     result
                 }
             }
+            Type::Array(t, len) => format!("[{}; {}]", t.pretty_print(), len.pretty_print()),
             Type::List(t) => format!("[{}]", t.pretty_print()),
             Type::Map(key, value) => {
                 format!("Map({}, {})", key.pretty_print(), value.pretty_print())
@@ -653,6 +676,7 @@ impl Type {
                     result
                 }
             }
+            Type::Array(t, len) => format!("[{}; {}]", t.pretty_print_color(), len.pretty_print()),
             Type::List(t) => format!("[{}]", t.pretty_print_color()),
             Type::Map(key, value) => {
                 format!(
