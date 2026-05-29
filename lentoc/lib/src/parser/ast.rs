@@ -89,7 +89,7 @@ pub enum Ast {
         name: String,
         params: Vec<(BindPattern, Option<TypeAst>)>,
         /// Optional return type expression (after `->`, may include `! { effects }`).
-        return_type: Option<Box<Ast>>,
+        return_type: Option<TypeAst>,
         /// Optional pre-condition specification (`requires { ... }`) as code.
         requires: Option<Box<Ast>>,
         /// Optional post-condition specification (`ensures { ... }`) as code.

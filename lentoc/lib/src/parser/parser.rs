@@ -1199,11 +1199,12 @@ impl<R: Read> Parser<R> {
 
         // Parse optional -> return type expression (may include ! effects)
         // Use a min prec just above assignment so `= body` isn't consumed.
-        let mut return_type_expr: Option<Ast> = None;
+        let mut return_type_expr: Option<TypeAst> = None;
         if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
             if matches!(&t.token, Token::Operator(op) if op == FN_ARROW_SYM) {
                 self.lexer.next_token().unwrap(); // consume ->
-                return_type_expr = Some(self.parse_expr(prec::FUNCTION_APP_PREC + 1)?);
+                let return_type = self.parse_expr(prec::FUNCTION_APP_PREC + 1)?;
+                return_type_expr = Some(crate::type_checker::specialize::into_type_ast(return_type)?);
             }
         }
 
@@ -1261,7 +1262,7 @@ impl<R: Read> Parser<R> {
         Ok(Ast::FunctionDef {
             name,
             params,
-            return_type: return_type_expr.map(Box::new),
+            return_type: return_type_expr,
             requires: requires.map(Box::new),
             ensures: ensures.map(Box::new),
             body: Box::new(body),
@@ -1295,7 +1296,7 @@ impl<R: Read> Parser<R> {
         let name_info = name_token.info;
 
         // Optional type parameters:
-        // - parenthesized: `type Name(T, U) = ...` or `type Name(T: Type, U: Type) = ...`
+        // - parenthesized: `type Name(T, U) = ...` or `type Name(T, N: uint) = ...`
         // - bare: `type Name T U = ...`
         let params: Vec<Ast> = if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
             if matches!(t.token, Token::LeftParen { .. }) {
@@ -1319,11 +1320,12 @@ impl<R: Read> Parser<R> {
                             ))
                         }
                     }
-                    // Optional type annotation `: TypeExpr`
+                    // Optional type annotation `: TypeExpr`.
+                    // The parameter name is the only part currently preserved.
                     if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
                         if matches!(next.token, Token::Colon) {
                             self.lexer.next_token().unwrap(); // consume :
-                            self.parse_expr(prec::COMMA_PREC + 1)?; // parse and discard type annotation
+                            self.parse_expr(prec::COMMA_PREC + 1)?; // parse and discard annotation
                         }
                     }
                     if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
@@ -1366,26 +1368,6 @@ impl<R: Read> Parser<R> {
         } else {
             vec![]
         };
-
-        // Optional constraints after `)`: `: Constraint1, Constraint2`
-        if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
-            if matches!(t.token, Token::Colon) {
-                self.lexer.next_token().unwrap(); // consume :
-                                                  // Parse constraint identifiers separated by commas until `=`
-                loop {
-                    self.parse_primary()?;
-                    if let Ok(next) = self.lexer.peek_token_not(pred::ignore, 0) {
-                        if matches!(&next.token, Token::Operator(s) if s == ",") {
-                            self.lexer.next_token().unwrap(); // consume ,
-                            continue;
-                        }
-                        break;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
 
         // Expect `=`
         if let Ok(t) = self.lexer.peek_token_not(pred::ignore, 0) {
