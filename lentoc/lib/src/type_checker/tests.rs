@@ -51,6 +51,53 @@ mod tests {
         }
     }
 
+    fn register_new_op_fn_type(
+        checker: &mut TypeChecker,
+        op_name: &str,
+        op_symbol: &str,
+        param_ty: &Type,
+    ) -> crate::parser::op::OpInfo {
+        let fn_ty = FunctionType::new(
+            CheckedParam::from_str("lhs", param_ty.clone()),
+            Type::Function(Box::new(FunctionType::new(
+                CheckedParam::from_str("rhs", param_ty.clone()),
+                param_ty.clone(),
+            ))),
+        );
+        checker.add_function(op_name, fn_ty.clone());
+        let op = Operator::new_runtime(
+            op_name.into(),
+            op_symbol.into(),
+            OpPos::Infix,
+            prec::ADDITIVE_PREC,
+            OpAssoc::Left,
+            false,
+            OpSignature::from_function(&fn_ty),
+        );
+        let op_info = op.info.clone();
+        checker.add_operator(op);
+        return op_info;
+    }
+
+    fn binary_op_literals(
+        op_info: crate::parser::op::OpInfo,
+        lhs_value: Value,
+        rhs_value: Value,
+    ) -> Ast {
+        Ast::Binary {
+            lhs: Box::new(Ast::Literal {
+                value: lhs_value,
+                info: LineInfo::default(),
+            }),
+            op: op_info,
+            rhs: Box::new(Ast::Literal {
+                value: rhs_value,
+                info: LineInfo::default(),
+            }),
+            info: LineInfo::default(),
+        }
+    }
+
     #[test]
     fn types() {
         let types = [
@@ -136,65 +183,42 @@ mod tests {
     #[test]
     fn binary_operator_selects_most_specific_variant() {
         let mut checker = TypeChecker::default();
-        let broad = FunctionType::new(
-            CheckedParam::from_str("lhs", std_types::NUM()),
-            Type::Function(Box::new(FunctionType::new(
-                CheckedParam::from_str("rhs", std_types::NUM()),
-                std_types::BOOL,
-            ))),
-        );
-        let narrow = FunctionType::new(
-            CheckedParam::from_str("lhs", std_types::UINT8),
-            Type::Function(Box::new(FunctionType::new(
-                CheckedParam::from_str("rhs", std_types::UINT8),
-                std_types::UINT8,
-            ))),
-        );
-        checker.add_function("op", broad.clone());
-        checker.add_function("op", narrow.clone());
-        checker.add_operator(Operator::new_runtime(
-            "op".into(),
-            "%%".into(),
-            OpPos::Infix,
-            prec::ADDITIVE_PREC,
-            OpAssoc::Left,
-            false,
-            OpSignature::from_function(&broad),
-        ));
-        checker.add_operator(Operator::new_runtime(
-            "op".into(),
-            "%%".into(),
-            OpPos::Infix,
-            prec::ADDITIVE_PREC,
-            OpAssoc::Left,
-            false,
-            OpSignature::from_function(&narrow),
-        ));
+        const OP_NAME: &str = "op";
+        const OP_SYMBOL: &str = "%%";
+        let broad_op_info =
+            register_new_op_fn_type(&mut checker, OP_NAME, OP_SYMBOL, &std_types::NUM());
+        let narrow_op_info =
+            register_new_op_fn_type(&mut checker, OP_NAME, OP_SYMBOL, &std_types::UINT8);
+        assert_eq!(broad_op_info, narrow_op_info);
 
-        let ast = Ast::Binary {
-            lhs: Box::new(Ast::Literal {
-                value: Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(2))),
-                info: LineInfo::default(),
-            }),
-            op: Operator::new_runtime(
-                "op".into(),
-                "%%".into(),
-                OpPos::Infix,
-                prec::ADDITIVE_PREC,
-                OpAssoc::Left,
-                false,
-                OpSignature::from_function(&broad),
-            )
-            .info,
-            rhs: Box::new(Ast::Literal {
-                value: Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(3))),
-                info: LineInfo::default(),
-            }),
-            info: LineInfo::default(),
-        };
+        let ast = binary_op_literals(
+            broad_op_info,
+            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(2))),
+            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(3))),
+        );
 
         let result = checker.check_expr(&ast).unwrap();
+        dbg!("{:?}", &result);
         assert!(result.get_type().equals(&std_types::UINT8).success);
+    }
+
+    #[test]
+    fn binary_operator_selects_most_specific_variant_broad() {
+        let mut checker = TypeChecker::default();
+        const OP_NAME: &str = "op";
+        const OP_SYMBOL: &str = "%%";
+        let broad_op_info =
+            register_new_op_fn_type(&mut checker, OP_NAME, OP_SYMBOL, &std_types::NUM());
+
+        let ast = binary_op_literals(
+            broad_op_info,
+            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(2))),
+            Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(3))),
+        );
+
+        let result = checker.check_expr(&ast).unwrap();
+        dbg!("{:?}", &result);
+        assert!(result.get_type().equals(&std_types::NUM()).success);
     }
 
     #[test]
