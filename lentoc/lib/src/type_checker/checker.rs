@@ -993,6 +993,10 @@ impl TypeChecker<'_> {
                 value: Value::Type(ty.clone()),
                 info: info.clone(),
             },
+            // TODO: Do not select the first variant!!!
+            // Instead, select the variant that matches the arguments types
+            // Or infer based on the context of use etc.
+            // This is a very temporary solution...
             Some(IdentifierType::Function(variants)) => {
                 if variants.len() == 1 {
                     let variant = &variants[0];
@@ -1113,6 +1117,9 @@ impl TypeChecker<'_> {
         arg: &Ast,
         info: &LineInfo,
     ) -> TypeCheckerResult<CheckedAst> {
+        // TODO: Add support for multiple function variants.
+        // TODO: This job should be done in the type checker so that the interpreter can just call the function.
+        // TODO: Go through the expression and check if the type is a function.
         let arg = self.check_expr(arg)?;
         if let Ast::Identifier {
             name,
