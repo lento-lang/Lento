@@ -2,9 +2,10 @@
 <em> A safe and efficient programming language designed for modern software development.</em>
 <br/><br/>
 <div>
-<img alt="Github build passinig" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square">
-<img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento?style=flat-square">
-<img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento?style=flat-square">
+  
+  [![Rust](https://github.com/lento-lang/Lento/actions/workflows/rust.yml/badge.svg)](https://github.com/lento-lang/Lento/actions/workflows/rust.yml)
+<img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Lento-Lang/Lento">
+<img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Lento-lang/Lento">
 </div>
 <br/><br/>
 
