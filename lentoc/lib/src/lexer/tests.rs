@@ -352,9 +352,7 @@ mod tests {
         let mut lexer = from_str("a\n b\n c");
         init(&mut lexer);
 
-        let token = lexer
-            .peek_token_not(|t| matches!(t, Token::Newline), 1)
-            .unwrap();
+        let token = lexer.peek_token_not(|t| matches!(t, Token::Newline), 1).unwrap();
         assert_eq!(token.token, Token::Identifier("b".to_string()));
 
         let token = lexer.next_token().unwrap();

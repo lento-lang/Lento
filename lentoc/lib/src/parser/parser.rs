@@ -1204,8 +1204,7 @@ impl<R: Read> Parser<R> {
             if matches!(&t.token, Token::Operator(op) if op == FN_ARROW_SYM) {
                 self.lexer.next_token().unwrap(); // consume ->
                 let return_type = self.parse_expr(prec::FUNCTION_APP_PREC + 1)?;
-                return_type_expr =
-                    Some(crate::type_checker::specialize::into_type_ast(return_type)?);
+                return_type_expr = Some(crate::type_checker::specialize::into_type_ast(return_type)?);
             }
         }
 

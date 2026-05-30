@@ -412,14 +412,10 @@ impl PartialEq for Ast {
             (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
             (
                 Self::MemberAccess {
-                    expr: l0,
-                    field: l1,
-                    ..
+                    expr: l0, field: l1, ..
                 },
                 Self::MemberAccess {
-                    expr: r0,
-                    field: r1,
-                    ..
+                    expr: r0, field: r1, ..
                 },
             ) => l0 == r0 && l1 == r1,
             (Self::Identifier { name: l0, .. }, Self::Identifier { name: r0, .. }) => l0 == r0,
