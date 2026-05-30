@@ -341,34 +341,28 @@ impl TypeChecker<'_> {
                 let BindPattern::Variable { name, .. } = target else {
                     continue;
                 };
-                match expr.borrow() {
-                    Ast::Lambda {
-                        param, body, info, ..
-                    } => {
-                        let checked_param = self.check_param(param)?;
-                        let checked = self.check_lambda(checked_param.clone(), body, info)?;
-                        let return_type = if let CheckedAst::Lambda { return_type, .. } = &checked {
-                            return_type.clone()
-                        } else {
-                            checked.get_type().clone()
-                        };
-                        let variation = FunctionType {
-                            param: checked_param,
-                            return_type,
-                        };
-                        log::debug!(
-                            "Adding function {} with variation {}",
-                            name.clone().yellow(),
-                            variation.pretty_print()
-                        );
-                        self.env.add_function(name.clone(), variation);
-                    }
-                    _ => {
-                        let checked = self.check_expr(expr)?;
-                        self.env
-                            .add_variable(name.clone(), checked.get_type().clone());
-                    }
-                }
+                let Ast::Lambda {
+                    param, body, info, ..
+                } = expr.borrow() else {
+                    continue;
+                };
+                let checked_param = self.check_param(param)?;
+                let checked = self.check_lambda(checked_param.clone(), body, info)?;
+                let return_type = if let CheckedAst::Lambda { return_type, .. } = &checked {
+                    return_type.clone()
+                } else {
+                    checked.get_type().clone()
+                };
+                let variation = FunctionType {
+                    param: checked_param,
+                    return_type,
+                };
+                log::debug!(
+                    "Adding function {} with variation {}",
+                    name.clone().yellow(),
+                    variation.pretty_print()
+                );
+                self.env.add_function(name.clone(), variation);
             }
         }
         Ok(())

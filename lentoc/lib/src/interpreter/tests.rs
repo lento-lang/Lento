@@ -222,13 +222,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "legacy numeric coercion behavior under parser migration"]
     fn module_assign_add() {
         let module = parse_str_all(
             r#"
-			x = 1;
-			y = 2;
-			z = x + y;
+			let x = 1;
+			let y = 2;
+			let z = x + y;
 		"#,
             Some(&stdlib()),
         )
@@ -261,7 +260,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "typed u8 operator resolution still in migration"]
     fn function_decl_typed_signature_oneline() {
         let module = parse_str_all(
             "fn add(x: u8, y: u8, z: u8) -> u8 = x + y + z;",
@@ -269,6 +267,7 @@ mod tests {
         )
         .expect("Failed to parse module");
         let mut checker = TypeChecker::default();
+        stdlib().init_type_checker(&mut checker);
         let module = checker
             .check_top_exprs(&module)
             .expect("Failed to type check module");
