@@ -671,7 +671,8 @@ mod tests {
 
     #[test]
     fn type_decl_static_vec_symbolic_len() {
-        let result = parse_str_one("type MyArr(n: int, T: Type) = [T; n]", Some(&stdlib())).unwrap();
+        let result =
+            parse_str_one("type MyArr(n: int, T: Type) = [T; n]", Some(&stdlib())).unwrap();
         if let Ast::TypeDecl { body, .. } = result {
             if let TypeAst::Array { len, .. } = body {
                 assert_eq!(len, ArrayLenAst::Symbol("n".to_string()));
@@ -759,10 +760,15 @@ mod tests {
     #[test]
     fn let_with_type_annotation() {
         let result = parse_str_one("let x: int = 5", Some(&stdlib())).unwrap();
-        if let Ast::Let { target, annotation, .. } = result {
+        if let Ast::Let {
+            target, annotation, ..
+        } = result
+        {
             assert!(matches!(target, BindPattern::Variable { .. }));
             assert!(annotation.is_some());
-            assert!(matches!(annotation.unwrap(), TypeAst::Identifier { name, .. } if name == "int"));
+            assert!(
+                matches!(annotation.unwrap(), TypeAst::Identifier { name, .. } if name == "int")
+            );
         } else {
             panic!("Expected let binding");
         }
@@ -781,8 +787,7 @@ mod tests {
 
     #[test]
     fn let_with_tuple_type_annotation() {
-        let result =
-            parse_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
+        let result = parse_str_one("let pair: (int, bool) = (1, true)", Some(&stdlib())).unwrap();
         if let Ast::Let { annotation, .. } = result {
             assert!(annotation.is_some());
             assert!(matches!(annotation.unwrap(), TypeAst::Tuple { .. }));
@@ -818,8 +823,12 @@ mod tests {
             assert_eq!(params.len(), 2);
             assert!(matches!(params[0].0, BindPattern::Variable { .. }));
             assert!(matches!(params[1].0, BindPattern::Variable { .. }));
-            assert!(matches!(params[0].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int"));
-            assert!(matches!(params[1].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int"));
+            assert!(
+                matches!(params[0].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int")
+            );
+            assert!(
+                matches!(params[1].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int")
+            );
             assert!(return_type.is_none());
             assert!(matches!(body.as_ref(), Ast::Binary { .. }));
         } else {
@@ -830,11 +839,18 @@ mod tests {
     #[test]
     fn function_def_typed_params_block_parse() {
         let result = parse_str_one("fn add(x: int, y: int) { x + y }", Some(&stdlib())).unwrap();
-        if let Ast::FunctionDef { name, params, body, .. } = result {
+        if let Ast::FunctionDef {
+            name, params, body, ..
+        } = result
+        {
             assert_eq!(name, "add");
             assert_eq!(params.len(), 2);
-            assert!(matches!(params[0].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int"));
-            assert!(matches!(params[1].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int"));
+            assert!(
+                matches!(params[0].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int")
+            );
+            assert!(
+                matches!(params[1].1, Some(TypeAst::Identifier { ref name, .. }) if name == "int")
+            );
             assert!(matches!(body.as_ref(), Ast::Block { .. }));
             if let Ast::Block { exprs, .. } = body.as_ref() {
                 assert_eq!(exprs.len(), 1);
@@ -859,7 +875,9 @@ mod tests {
         {
             assert_eq!(name, "add");
             assert_eq!(params.len(), 2);
-            assert!(matches!(return_type, Some(TypeAst::Identifier { ref name, .. }) if name == "int"));
+            assert!(
+                matches!(return_type, Some(TypeAst::Identifier { ref name, .. }) if name == "int")
+            );
             assert!(matches!(body.as_ref(), Ast::Binary { .. }));
         } else {
             panic!("Expected function definition");
@@ -884,7 +902,8 @@ mod tests {
 
     #[test]
     fn let_with_literal_sum_annotation() {
-        let result = parse_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
+        let result =
+            parse_str_one("let x: \"hello\" | false = \"hello\"", Some(&stdlib())).unwrap();
         if let Ast::Let { annotation, .. } = result {
             let ann = annotation.unwrap();
             assert!(matches!(ann, TypeAst::Sum { .. }));

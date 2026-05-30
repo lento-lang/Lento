@@ -162,9 +162,10 @@ pub fn into_type_ast(expr: Ast) -> Result<TypeAst, ParseError> {
 
 fn into_effect_ast(effect_expr: Ast) -> Result<Vec<Effect>, ParseError> {
     match effect_expr {
-        Ast::Identifier { name, info: _ } => {
-            Ok(vec![Effect { name, params: vec![] }])
-        }
+        Ast::Identifier { name, info: _ } => Ok(vec![Effect {
+            name,
+            params: vec![],
+        }]),
         Ast::Tuple { exprs, info: _ } => {
             let mut effects = Vec::new();
             for expr in exprs {
