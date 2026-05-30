@@ -1,12 +1,12 @@
 [package]
-name = "lentoc"
+name = "lento"
 version = "2.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lentoc_lib = { workspace = true }
+lento_lib = { workspace = true }
 colorful = { workspace = true }
 clap = { version = "4.0.32", features = ["string"] }
 rayon = "1.6.1"

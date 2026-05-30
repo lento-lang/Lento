@@ -1,8 +1,8 @@
 [workspace]
-members = ["lentoc", "lentoc/lib"]
+members = ["lento", "lib"]
 resolver = "2"
 
 [workspace.dependencies]
 colorful = "0.3.2"
-lentoc_lib = { path = "lentoc/lib" }
+lento_lib = { path = "lib" }
 log = "0.4.22"
