@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lentoc_lib = { path = "./lib" }
-colorful = "0.2.2"                                   # Alternative: https://crates.io/crates/colored/2.0.0
+lentoc_lib = { workspace = true }
+colorful = { workspace = true }
 clap = { version = "4.0.32", features = ["string"] }
 rayon = "1.6.1"
 chrono = "0.4.37"
 ctrlc = "3.4.5"
 env_logger = "0.11.5"
-log = "0.4.22"
+log = { workspace = true }
 ariadne = "0.5.0"
