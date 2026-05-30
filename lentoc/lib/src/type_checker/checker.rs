@@ -281,53 +281,11 @@ impl TypeChecker<'_> {
                 info,
             } = e
             {
-                let declared_return = if let Some(ret_ast) = return_type {
-                    let type_ast =
-                        crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
-                    Some(self.check_type_expr(&type_ast)?)
-                } else {
-                    None
-                };
-                let _declared_requires = if let Some(req_ast) = requires {
-                    Some(self.check_expr(req_ast)?)
-                } else {
-                    None
-                };
-                let _declared_ensures = if let Some(ens_ast) = ensures {
-                    Some(self.check_expr(ens_ast)?)
-                } else {
-                    None
-                };
-                let mut checked_params = Vec::new();
-                for (p, ty_ast) in params.iter() {
-                    let ty = if let Some(ty_ast) = ty_ast {
-                        self.check_type_expr(ty_ast)?
-                    } else {
-                        std_types::ANY
-                    };
-                    checked_params.push(CheckedParam::new(p.clone(), ty));
-                }
-                if checked_params
-                    .iter()
-                    .all(|p| p.ty.equals(&std_types::ANY).success)
-                {
-                    if let Some(ret) = &declared_return {
-                        if ret.subtype(&std_types::NUM()).success {
-                            for p in checked_params.iter_mut() {
-                                p.ty = ret.clone();
-                            }
-                        }
-                    }
-                }
-
-                let mut body_scope = self.new_scope();
-                for checked_param in &checked_params {
-                    for (name, ty) in binding_typed_names(&checked_param.pattern, &checked_param.ty)
-                    {
-                        body_scope.add_variable(name, ty);
-                    }
-                }
-                let checked_body = body_scope.check_expr(body)?;
+                let _ = requires;
+                let _ = ensures;
+                let (checked_params, declared_return) =
+                    self.check_function_signature(params, return_type)?;
+                let checked_body = self.check_function_body(&checked_params, body)?;
                 let return_ty = declared_return.unwrap_or_else(|| checked_body.get_type().clone());
 
                 let mut variation: Option<FunctionType> = None;
@@ -361,9 +319,6 @@ impl TypeChecker<'_> {
                 name, params, body, ..
             } = e
             {
-                // Register type name as a variable (type-level binding)
-                self.env.add_variable(name.clone(), std_types::TYPE.clone());
-
                 let mut type_scope = self.new_scope();
                 type_scope.add_type("Self", Type::Variable(name.clone().into()));
                 let mut param_names = Vec::new();
@@ -490,13 +445,8 @@ impl TypeChecker<'_> {
                 body,
                 info,
             } => {
-                let declared_return = if let Some(ret_ast) = return_type {
-                    let type_ast =
-                        crate::type_checker::specialize::into_type_ast((**ret_ast).clone())?;
-                    Some(self.check_type_expr(&type_ast)?)
-                } else {
-                    None
-                };
+                let (checked_params, declared_return) =
+                    self.check_function_signature(params, return_type)?;
                 let declared_requires = if let Some(req_ast) = requires {
                     Some(Box::new(self.check_expr(req_ast)?))
                 } else {
@@ -507,36 +457,7 @@ impl TypeChecker<'_> {
                 } else {
                     None
                 };
-                let mut checked_params = Vec::new();
-                for (p, ty_ast) in params.iter() {
-                    let ty = if let Some(ty_ast) = ty_ast {
-                        self.check_type_expr(ty_ast)?
-                    } else {
-                        std_types::ANY
-                    };
-                    checked_params.push(CheckedParam::new(p.clone(), ty));
-                }
-                if checked_params
-                    .iter()
-                    .all(|p| p.ty.equals(&std_types::ANY).success)
-                {
-                    if let Some(ret) = &declared_return {
-                        if ret.subtype(&std_types::NUM()).success {
-                            for p in checked_params.iter_mut() {
-                                p.ty = ret.clone();
-                            }
-                        }
-                    }
-                }
-
-                let mut body_scope = self.new_scope();
-                for checked_param in &checked_params {
-                    for (name, ty) in binding_typed_names(&checked_param.pattern, &checked_param.ty)
-                    {
-                        body_scope.add_variable(name, ty);
-                    }
-                }
-                let checked_body = body_scope.check_expr(body)?;
+                let checked_body = self.check_function_body(&checked_params, body)?;
                 let ret_type = declared_return.unwrap_or_else(|| checked_body.get_type().clone());
 
                 CheckedAst::FunctionDef {
@@ -735,6 +656,57 @@ impl TypeChecker<'_> {
             return_type,
             info.clone(),
         ))
+    }
+
+    fn check_function_signature(
+        &self,
+        params: &[(BindPattern, Option<TypeAst>)],
+        return_type: &Option<TypeAst>,
+    ) -> TypeCheckerResult<(Vec<CheckedParam>, Option<Type>)> {
+        let declared_return = if let Some(ret_ast) = return_type {
+            Some(self.check_type_expr(ret_ast)?)
+        } else {
+            None
+        };
+
+        let mut checked_params = Vec::new();
+        for (pattern, ty_ast) in params.iter() {
+            let ty = if let Some(ty_ast) = ty_ast {
+                self.check_type_expr(ty_ast)?
+            } else {
+                std_types::ANY
+            };
+            checked_params.push(CheckedParam::new(pattern.clone(), ty));
+        }
+
+        if checked_params
+            .iter()
+            .all(|param| param.ty.equals(&std_types::ANY).success)
+        {
+            if let Some(ret) = &declared_return {
+                if ret.subtype(&std_types::NUM()).success {
+                    for param in &mut checked_params {
+                        param.ty = ret.clone();
+                    }
+                }
+            }
+        }
+
+        Ok((checked_params, declared_return))
+    }
+
+    fn check_function_body(
+        &self,
+        checked_params: &[CheckedParam],
+        body: &Ast,
+    ) -> TypeCheckerResult<CheckedAst> {
+        let mut body_scope = self.new_scope();
+        for checked_param in checked_params {
+            for (name, ty) in binding_typed_names(&checked_param.pattern, &checked_param.ty) {
+                body_scope.add_variable(name, ty);
+            }
+        }
+        body_scope.check_expr(body)
     }
 
     fn check_tuple(&mut self, elems: &[Ast], info: &LineInfo) -> TypeCheckerResult<CheckedAst> {
