@@ -123,10 +123,7 @@ impl Debug for TypeAst {
                 .field("elem", elem)
                 .field("len", len)
                 .finish(),
-            Self::List { elem, .. } => f
-                .debug_struct("List")
-                .field("elem", elem)
-                .finish(),
+            Self::List { elem, .. } => f.debug_struct("List").field("elem", elem).finish(),
             Self::Record { fields, .. } => {
                 f.debug_struct("Record").field("fields", fields).finish()
             }
@@ -245,7 +242,10 @@ impl TypeAst {
                         "({} -> {} ! {})",
                         lhs.print_expr(),
                         rhs.print_expr(),
-                        eff.iter().map(|e| e.print_expr()).collect::<Vec<_>>().join(", ")
+                        eff.iter()
+                            .map(|e| e.print_expr())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     )
                 }
             }
@@ -327,7 +327,10 @@ impl TypeAst {
                         "({} -> {} ! {})",
                         lhs.pretty_print(),
                         rhs.pretty_print(),
-                        eff.iter().map(|e| e.pretty_print()).collect::<Vec<_>>().join(", ")
+                        eff.iter()
+                            .map(|e| e.pretty_print())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     )
                 }
             }
@@ -365,10 +368,7 @@ impl PartialEq for TypeAst {
                     info: _,
                 },
             ) => l0 == r0 && l1 == r1,
-            (
-                Self::List { elem: l0, info: _ },
-                Self::List { elem: r0, info: _ },
-            ) => l0 == r0,
+            (Self::List { elem: l0, info: _ }, Self::List { elem: r0, info: _ }) => l0 == r0,
             (
                 Self::Record {
                     fields: l0,

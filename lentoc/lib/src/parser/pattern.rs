@@ -97,11 +97,9 @@ impl BindPattern {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(BindPattern::Record { fields, info })
             }
-            Ast::MemberAccess { expr, field, info } => Ok(BindPattern::MemberAccess {
-                expr,
-                field,
-                info,
-            }),
+            Ast::MemberAccess { expr, field, info } => {
+                Ok(BindPattern::MemberAccess { expr, field, info })
+            }
             Ast::List { exprs, info } => {
                 let elements = exprs
                     .into_iter()
@@ -168,7 +166,9 @@ impl BindPattern {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            BindPattern::MemberAccess { expr, field, .. } => format!("{}.{}", expr.print_expr(), field),
+            BindPattern::MemberAccess { expr, field, .. } => {
+                format!("{}.{}", expr.print_expr(), field)
+            }
             BindPattern::List { elements, .. } => format!(
                 "[{}]",
                 elements
@@ -250,8 +250,16 @@ impl PartialEq for BindPattern {
             (Self::Tuple { elements: l0, .. }, Self::Tuple { elements: r0, .. }) => l0 == r0,
             (Self::Record { fields: l0, .. }, Self::Record { fields: r0, .. }) => l0 == r0,
             (
-                Self::MemberAccess { expr: l0, field: l1, .. },
-                Self::MemberAccess { expr: r0, field: r1, .. },
+                Self::MemberAccess {
+                    expr: l0,
+                    field: l1,
+                    ..
+                },
+                Self::MemberAccess {
+                    expr: r0,
+                    field: r1,
+                    ..
+                },
             ) => l0 == r0 && l1 == r1,
             (Self::List { elements: l0, .. }, Self::List { elements: r0, .. }) => l0 == r0,
             (Self::Wildcard, Self::Wildcard) => true,
