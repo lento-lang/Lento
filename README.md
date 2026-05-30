@@ -88,8 +88,6 @@ Always verify all tests pass before pushing your code:
 cargo test
 ```
 
-> Currently lots of tests are failing, so don't worry if you see a lot of red text. We are working on it! 🚧
-
 ## License 📜
 
 Lento is licensed under the [MIT License](LICENSE).
