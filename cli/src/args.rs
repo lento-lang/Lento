@@ -2,7 +2,7 @@ use chrono::Datelike;
 use clap::{arg, Command};
 use colorful::{Color, Colorful};
 
-use lentoc_lib::LANG_VERSION;
+use lento_lib::LANG_VERSION;
 
 use crate::CLI_VERSION;
 

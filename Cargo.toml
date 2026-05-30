@@ -4,5 +4,5 @@ resolver = "2"
 
 [workspace.dependencies]
 colorful = "0.3.2"
-lento_lib = { path = "lib" }
+lento_lib = { package = "lento-lib", path = "lib" }
 log = "0.4.22"
