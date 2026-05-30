@@ -3,14 +3,23 @@ mod tests {
     use std::vec;
 
     use crate::{
-        interpreter::value::Value,
-        parser::{parser::from_string, pattern::BindPattern},
+        interpreter::{
+            number::{Number, UnsignedInteger},
+            value::Value,
+        },
+        parser::{
+            ast::Ast,
+            op::{prec, OpAssoc, OpPos, OpSignature, Operator},
+            parser::from_string,
+            pattern::BindPattern,
+        },
         stdlib::init::{stdlib, Initializer},
         type_checker::{
-            checked_ast::CheckedAst,
+            checked_ast::{CheckedAst, CheckedParam},
             checker::{TypeChecker, TypeCheckerResult, TypeErrorVariant},
-            types::{std_types, Type, TypeTrait},
+            types::{std_types, FunctionType, GetType, Type, TypeTrait},
         },
+        util::error::LineInfo,
     };
 
     fn check_str_one(input: &str, init: Option<&Initializer>) -> TypeCheckerResult<CheckedAst> {
@@ -91,6 +100,104 @@ mod tests {
     }
 
     #[test]
+    fn function_call_selects_most_specific_variant() {
+        let mut checker = TypeChecker::default();
+        checker.add_function(
+            "f",
+            FunctionType::new(
+                CheckedParam::from_str("x", std_types::NUM()),
+                std_types::BOOL,
+            ),
+        );
+        checker.add_function(
+            "f",
+            FunctionType::new(
+                CheckedParam::from_str("x", std_types::UINT8),
+                std_types::UINT8,
+            ),
+        );
+
+        let ast = Ast::FunctionCall {
+            expr: Box::new(Ast::Identifier {
+                name: "f".into(),
+                info: LineInfo::default(),
+            }),
+            arg: Box::new(Ast::Literal {
+                value: Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(5))),
+                info: LineInfo::default(),
+            }),
+            info: LineInfo::default(),
+        };
+
+        let result = checker.check_expr(&ast).unwrap();
+        assert!(result.get_type().equals(&std_types::UINT8).success);
+    }
+
+    #[test]
+    fn binary_operator_selects_most_specific_variant() {
+        let mut checker = TypeChecker::default();
+        let broad = FunctionType::new(
+            CheckedParam::from_str("lhs", std_types::NUM()),
+            Type::Function(Box::new(FunctionType::new(
+                CheckedParam::from_str("rhs", std_types::NUM()),
+                std_types::BOOL,
+            ))),
+        );
+        let narrow = FunctionType::new(
+            CheckedParam::from_str("lhs", std_types::UINT8),
+            Type::Function(Box::new(FunctionType::new(
+                CheckedParam::from_str("rhs", std_types::UINT8),
+                std_types::UINT8,
+            ))),
+        );
+        checker.add_function("op", broad.clone());
+        checker.add_function("op", narrow.clone());
+        checker.add_operator(Operator::new_runtime(
+            "op".into(),
+            "%%".into(),
+            OpPos::Infix,
+            prec::ADDITIVE_PREC,
+            OpAssoc::Left,
+            false,
+            OpSignature::from_function(&broad),
+        ));
+        checker.add_operator(Operator::new_runtime(
+            "op".into(),
+            "%%".into(),
+            OpPos::Infix,
+            prec::ADDITIVE_PREC,
+            OpAssoc::Left,
+            false,
+            OpSignature::from_function(&narrow),
+        ));
+
+        let ast = Ast::Binary {
+            lhs: Box::new(Ast::Literal {
+                value: Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(2))),
+                info: LineInfo::default(),
+            }),
+            op: Operator::new_runtime(
+                "op".into(),
+                "%%".into(),
+                OpPos::Infix,
+                prec::ADDITIVE_PREC,
+                OpAssoc::Left,
+                false,
+                OpSignature::from_function(&broad),
+            )
+            .info,
+            rhs: Box::new(Ast::Literal {
+                value: Value::Number(Number::UnsignedInteger(UnsignedInteger::UInt8(3))),
+                info: LineInfo::default(),
+            }),
+            info: LineInfo::default(),
+        };
+
+        let result = checker.check_expr(&ast).unwrap();
+        assert!(result.get_type().equals(&std_types::UINT8).success);
+    }
+
+    #[test]
     fn function_def_with_return_type_single_no_parens_block() {
         let result = check_str_one("fn f(x: int) -> int = x + 5", Some(&stdlib())).unwrap();
         if let CheckedAst::FunctionDef { name, params, .. } = result {
@@ -138,11 +245,8 @@ mod tests {
 
     #[test]
     fn checked_record_type_decl() {
-        let result = check_str_one(
-            "type Eq = { eq: Self -> Self -> bool }",
-            Some(&stdlib()),
-        )
-        .unwrap();
+        let result =
+            check_str_one("type Eq = { eq: Self -> Self -> bool }", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::TypeDecl { .. }));
     }
 
@@ -157,8 +261,7 @@ mod tests {
 
     #[test]
     fn checked_generic_static_vec_alias_and_application() {
-        let program =
-            "type X = int; type MyArr T = [T; 6]; fn id(x: MyArr int) -> MyArr(X) = x";
+        let program = "type X = int; type MyArr T = [T; 6]; fn id(x: MyArr int) -> MyArr(X) = x";
         let checked = check_str_all(program, Some(&stdlib())).unwrap();
         assert_eq!(checked.len(), 3);
         assert!(matches!(checked[0], CheckedAst::TypeDecl { .. }));
@@ -204,8 +307,7 @@ mod tests {
 
     #[test]
     fn checked_let_with_tuple_type_annotation() {
-        let result =
-            check_str_one("let pair: (u1, bool) = (1, true)", Some(&stdlib())).unwrap();
+        let result = check_str_one("let pair: (u1, bool) = (1, true)", Some(&stdlib())).unwrap();
         assert!(matches!(result, CheckedAst::Let { .. }));
     }
 

@@ -21,6 +21,7 @@ pub trait GetType {
 
 pub type TypeJudgements = HashMap<Str, Type>;
 
+#[derive(Clone)]
 pub struct TypeJudgeResult {
     pub success: bool,
     pub judgements: TypeJudgements,
@@ -465,7 +466,9 @@ impl TypeTrait for Type {
                     .map(|t| t.specialize(judgements, changed))
                     .collect(),
             ),
-            Type::Array(t, len) => Type::Array(Box::new(t.specialize(judgements, changed)), len.clone()),
+            Type::Array(t, len) => {
+                Type::Array(Box::new(t.specialize(judgements, changed)), len.clone())
+            }
             Type::List(t) => Type::List(Box::new(t.specialize(judgements, changed))),
             Type::Map(key, value) => Type::Map(
                 Box::new(key.specialize(judgements, changed)),
@@ -850,7 +853,12 @@ pub mod std_types {
             Str::Str("int"),
             Box::new(Type::Sum(vec![
                 UINT(),
-                INT8, INT16, INT32, INT64, INT128, INTBIG,
+                INT8,
+                INT16,
+                INT32,
+                INT64,
+                INT128,
+                INTBIG,
             ])),
         )
     }
