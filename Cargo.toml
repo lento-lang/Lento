@@ -1,5 +1,5 @@
 [workspace]
-members = ["lento", "lib"]
+members = ["cli", "lib"]
 resolver = "2"
 
 [workspace.dependencies]
